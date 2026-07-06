@@ -10,16 +10,17 @@ This directory contains the source references and generated geometry for the Ard
 
 ## Generated Files
 
-- `geometry/regions.json`: mathematical region polygons generated from `source/territory-boundaries.jpeg`.
-- `geometry/territories.json`: mathematical territory polygons generated from `source/territory-boundaries.jpeg` and `territory-key.md`.
-- `previews/territories.svg`: visual preview of the generated territory polygons.
+- `geometry/map.json`: canonical border-first map geometry generated from `source/territory-boundaries.jpeg` and `territory-key.md`. Coordinates are smoothed map units, not raw source-image pixels.
+- `previews/territories.svg`: visual preview generated from the same extracted map model.
 
-Regenerate all map geometry and the territory preview with:
+Regenerate the map geometry and preview with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\extract-map.ps1
 ```
 
-The map extractor validates that the output has exactly 42 territories, the expected count per region, one connected polygon per territory, three background polygons, and exact pixel-area coverage of the full source image.
+The map extractor validates that the output has 6 playable regions plus 1 background region, 42 playable territories plus 3 background territories, one territory assignment for every source pixel, and canonical border objects referenced by exactly two territories.
+
+By default, the extractor simplifies traced borders with a 1.5-pixel source tolerance, scales the source drawing by 10, then smooths the paths before writing geometry. The source image still controls topology; the generated JSON is the mathematical model used by the app.
 
 If borders change in the future, update `source/territory-boundaries.jpeg` and `territory-key.md`, then rerun the single extractor.

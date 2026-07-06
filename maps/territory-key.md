@@ -97,10 +97,10 @@ Mordor is the southeastern region, enclosed by mountain barriers except for the 
 
 | Territory | Position | Land borders | Ship borders | Notes |
 | --- | --- | --- | --- | --- |
-| Udun | Northwestern Mordor, directly south of Dagorlad. | Dagorlad, Barad-dur, Minas Morgul | None | The only Mordor border from Dagorlad. Mountains block Minas Tirith from Udun. |
-| Barad-dur | Northern-central Mordor, east of Udun. | Udun, Minas Morgul, Nurn | None | Does not border Dagorlad. |
-| Minas Morgul | Western Mordor pass through the mountains. | Udun, Barad-dur, Nurn, Minas Tirith | None | The narrow pass connecting Mordor to Minas Tirith. |
-| Nurn | Southern Mordor. | Minas Morgul, Barad-dur | None | Mountains block Minas Tirith from Nurn. |
+| Udun | Northwestern Mordor, directly south of Dagorlad. | Dagorlad, Barad-dur, Minas Morgul, Nurn | None | The only Mordor border from Dagorlad. Mountains block Minas Tirith from Udun. |
+| Barad-dur | Northern-central Mordor, east of Udun. | Udun, Nurn | None | Does not border Dagorlad or Minas Morgul. |
+| Minas Morgul | Western Mordor pass through the mountains. | Udun, Nurn, Minas Tirith | None | The narrow pass connecting Mordor to Minas Tirith. |
+| Nurn | Southern Mordor. | Udun, Minas Morgul, Barad-dur | None | Mountains block Minas Tirith from Nurn. |
 
 ## Region: Gondor
 
@@ -122,7 +122,7 @@ Gondor is the southwestern and south-central region, west of Mordor and south of
 | --- | --- | --- | --- |
 | Andrast | Gondor | Druwaith Iaur, Anfalas | Harlindon, Minhiriath, Enedwaith |
 | Anfalas | Gondor | Druwaith Iaur, Andrast, Lamedon | None |
-| Barad-dur | Mordor | Udun, Minas Morgul, Nurn | None |
+| Barad-dur | Mordor | Udun, Nurn | None |
 | Belfalas | Gondor | Lamedon, Minas Tirith, South Gondor | None |
 | Bree | Eriador | Shire, North Downs, Ettenmoors, Rivendell, Minhiriath, Swanfleet | None |
 | Caradhras | Rhovanion | Greylin, Gladden Fields, Moria, Mirkwood, Rivendell | None |
@@ -148,17 +148,17 @@ Gondor is the southwestern and south-central region, west of Mordor and south of
 | Isengard | Eriador | Swanfleet, Enedwaith, Druwaith Iaur, Westfold | None |
 | Lamedon | Gondor | Anfalas, Belfalas | None |
 | Lorien | Rhovanion | Moria, Dol Guldur | None |
-| Minas Morgul | Mordor | Udun, Barad-dur, Nurn, Minas Tirith | None |
+| Minas Morgul | Mordor | Udun, Nurn, Minas Tirith | None |
 | Minas Tirith | Gondor | Belfalas, South Gondor, Eastfold, Dagorlad, Minas Morgul | None |
 | Minhiriath | Eriador | Shire, Bree, Swanfleet, Enedwaith | Andrast |
 | Mirkwood | Rhovanion | Greylin, Caradhras, Gladden Fields, Dol Guldur, Emyn Muil, Dagorlad, Erebor, Dale | None |
 | Moria | Rhovanion | Caradhras, Gladden Fields, Dol Guldur, Lorien, Swanfleet | None |
 | North Downs | Eriador | Grey Havens, Shire, Bree, Ettenmoors | None |
-| Nurn | Mordor | Minas Morgul, Barad-dur | None |
+| Nurn | Mordor | Udun, Minas Morgul, Barad-dur | None |
 | Rivendell | Eriador | Ettenmoors, Bree, Swanfleet, Caradhras | None |
 | Sea of Rhun | Rhun | Iron Hills, Dor Cuarthol, Dorwinion | None |
 | Shire | Eriador | Grey Havens, North Downs, Bree, Minhiriath | None |
 | South Gondor | Gondor | Belfalas, Minas Tirith | None |
 | Swanfleet | Eriador | Bree, Rivendell, Minhiriath, Enedwaith, Isengard, Moria | None |
-| Udun | Mordor | Dagorlad, Barad-dur, Minas Morgul | None |
+| Udun | Mordor | Dagorlad, Barad-dur, Minas Morgul, Nurn | None |
 | Westfold | Rohan | Isengard, Emnet, Edoras | None |
