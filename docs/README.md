@@ -7,7 +7,7 @@ This directory contains planning and implementation notes for the app. The exist
 - `../GAME_SPEC.md`: overall game rules, modes, setup, combat, and long-term product behavior.
 - `../maps/README.md`: map source drawings, generated geometry, previews, and extraction workflow.
 - `app-architecture.md`: planned PWA directory structure, app data flow, and map rendering architecture.
-- `map-sandbox-v1.md`: first app milestone for pan/zoom, territory selection, and color assignment.
+- `setup-draft-sync-v1.md`: first real gameplay milestone for local/sync setup, territory draft, pause/reconnect, and post-draft review.
 
 ## Documentation Rules
 

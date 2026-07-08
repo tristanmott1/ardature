@@ -105,25 +105,31 @@ The spy is not a troop, has no map location, and cannot be moved or attacked. A 
 Setup has these stages:
 
 1. Create or join game.
-2. Enter players.
+2. Enter and configure players.
 3. Choose host-controlled setup options.
-4. Assign territories.
-5. Allocate starting troops.
-6. Begin the first turn.
+4. Draft or assign territories.
+5. Review the completed territory draft.
+6. Allocate starting troops.
+7. Begin the first turn.
 
 The host determines setup options.
 
+The first gameplay implementation milestone stops after territory draft review. Troop allocation and turn play are documented for the full game but are not part of that milestone.
+
 ### Setup Options
 
-Exact numeric values do not need to be fixed in the first implementation pass, but the setup state should allow:
+The setup state should allow:
 
-- Territory assignment mode: random distribution or snake draft.
-- Player order: ordered, randomized, or manually rearranged before start.
+- Player order: randomized or manually rearranged before start.
+- Player colors: unique `green`, `blue`, `yellow`, `red`, `purple`, or `black`.
+- Draft style: random, round robin, or snake.
+- Draft pick time limit for round robin and snake: none, 5 seconds, 10 seconds, or 15 seconds.
+- Troop allocation time limit: none, 1 minute, 2 minutes, 3 minutes, 4 minutes, or 5 minutes.
 - Starting troop counts by troop class.
 - Reinforcement formula constants.
 - Region bonus definitions.
 
-For early builds, it is acceptable to hard-code balanced defaults and expose fewer controls.
+The first setup/draft milestone exposes player colors, turn order, draft style, draft pick timer, and troop allocation timer. Starting troop counts, reinforcement constants, and region bonuses may remain hard-coded until troop allocation and turn phases are built.
 
 ### Territory Assignment
 
@@ -131,10 +137,13 @@ Every territory must be owned by exactly one player before starting troop alloca
 
 Supported assignment modes:
 
-- Random assignment: the app shuffles territories and distributes them as evenly as possible among players.
+- Random draft: the app simulates a snake draft where each pick chooses a random remaining territory.
+- Round-robin draft: players select territories one at a time in forward turn order, repeating until every territory is owned.
 - Snake draft: players select territories one at a time in forward order, then reverse order, repeating until every territory is owned.
 
-If the territory count does not divide evenly by player count, some players may begin with one additional territory. The distribution method should be deterministic after the random seed or draft choices are known.
+The draft start is based on turn order. The starting drafter is chosen so the final pick belongs to the player who precedes the first-turn player. Random draft still uses snake ordering because that ordering determines which players receive extra territories when 42 territories do not divide evenly by player count.
+
+The draft engine should store progress rather than precomputing one fixed pick queue. Removed players are skipped, and the same round-robin or snake pattern continues until every territory is owned.
 
 ### Initial Troop Allocation
 
@@ -626,12 +635,12 @@ The app should use app pages/views rather than a marketing site.
 Expected top-level views:
 
 1. Home.
-2. Local setup.
-3. Sync setup.
-4. Sync host lobby.
-5. Sync join flow.
-6. Player setup.
-7. Territory assignment.
+2. Map-first setup and configuration.
+3. Sync host lobby.
+4. Sync join flow.
+5. Territory draft.
+6. Sync paused reconnect lobby.
+7. Post-draft review map.
 8. Initial troop allocation.
 9. Main map / turn view.
 10. Spy phase.
@@ -660,27 +669,31 @@ Local mode setup should allow:
 
 - Add players.
 - Edit player names.
-- Choose each player's side.
 - Choose each player's unique color.
 - Remove players.
 - Clear all players.
 - Randomize player order.
 - Rearrange player order.
-- Choose territory assignment mode.
-- Start setup.
+- Choose draft style.
+- Choose draft pick time limit.
+- Choose troop allocation time limit.
+- Start the draft.
 
 The app should validate:
 
-- Minimum player count.
+- Minimum player count of 2.
+- Maximum player count of 6.
 - Non-empty player names.
 - Unique colors.
-- Setup mode selected.
+- Setup options selected.
+
+For the setup/draft milestone, side selection is not exposed. Players only need names and colors.
 
 ### Sync Mode Setup
 
 Sync mode has host and join flows.
 
-The user enters their own player name, side, and color preference before hosting or joining.
+The user enters their own player name and color before hosting or joining.
 
 The host:
 
@@ -690,15 +703,23 @@ The host:
 - Scans each joiner's answer QR to complete connection.
 - Controls setup options.
 - Can rearrange and randomize player order.
-- Starts the game.
+- Can edit any player's name or color.
+- Locks a player name or color when editing that field.
+- Can later unlock a player name or color.
+- Can remove players before the draft starts.
+- Starts the draft only when at least 2 players remain and all players have unique colors.
 
 The joiner:
 
+- Chooses their own name and color before scanning the host QR.
 - Scans the host offer QR.
 - Shows an answer QR.
 - Waits for the host to scan the answer QR.
 - Appears in the host lobby only after the data channel opens.
-- Waits for the host to start setup or play.
+- Can edit their own name and color while those fields are unlocked.
+- Waits for the host to start the draft.
+
+Duplicate colors are allowed in the sync lobby, but the host Start button remains disabled until all remaining players have unique colors.
 
 The QR handshake should follow the same broad requirements as Qwixx:
 
@@ -713,6 +734,59 @@ The QR handshake should follow the same broad requirements as Qwixx:
 - Joiner not considered connected until the data channel opens.
 
 The exact QR prefixes should be project-specific, not Qwixx-specific.
+
+### Draft View
+
+During manual drafts, the active player selects a remaining territory on the map.
+
+Draft selection flow:
+
+1. Select a remaining territory.
+2. Show a confirmation popup with cancel and confirm controls.
+3. Confirming assigns the territory immediately and colors it with the owner's player color.
+4. Show a result popup naming the drafted territory.
+
+In local mode, the result popup includes a next arrow. The next player's timer starts only after that arrow is pressed. Local players cannot quit during draft; ending the local game requires confirmation and returns to home.
+
+In sync mode, the result popup is dismissible but has no next arrow. The next player's turn starts immediately on that player's device.
+
+Timer behavior:
+
+- If a timed pick expires with a confirmation popup open, the pending territory is confirmed.
+- If a timed pick expires with no confirmation popup open, a random remaining territory is chosen for the active player.
+- If the game pauses during an active pick or confirmation popup, the pending pick is discarded and that player's turn starts over on resume.
+
+After all territories are drafted, the app immediately shows a read-only ownership map. The milestone stops there.
+
+### Sync Pause And Reconnect
+
+Pause is a sync-only phase for draft recovery.
+
+The host can manually pause a draft. Any ungraceful disconnect during a sync draft also forces the pause page.
+
+While paused:
+
+- The host sees a lobby-style page with all remaining players and their connection statuses.
+- The host can remove players.
+- The host cannot unpause until every remaining player is connected and at least 2 players remain.
+- If fewer than 2 players remain, the game ends and returns to home.
+
+Graceful quit and ungraceful disconnect are different:
+
+- Graceful quit sends a quit message. The host removes that player, clears their territories, returns those territories to the draft pool, pauses the draft, and shows the pause page without that player.
+- Ungraceful disconnect keeps the player in the game as disconnected, keeps their territories owned, and forces pause.
+
+Disconnected players should automatically attempt to reconnect when possible, following the Qwixx-style reconnect behavior. If automatic reconnect does not work, the QR handshake is the fallback.
+
+Fallback reconnect flow:
+
+1. Host shows a reusable paused-game QR.
+2. The joiner scans it and sees the game information plus disconnected player names.
+3. The joiner chooses their existing disconnected player slot.
+4. The joiner generates an answer QR.
+5. The host scans the answer QR to reconnect that player.
+
+Reconnecting players cannot change the player identity. Names, colors, and host locks remain exactly as the host sees them.
 
 ## Sync Network Model
 
@@ -915,15 +989,21 @@ Persist sync host state where useful:
 
 - Host setup preferences.
 - Host player identity.
-- Connected roster while the page remains open.
+- Full host-owned setup and draft state.
+- Territory ownership.
+- Pause state.
+- Remaining player roster.
+- Name/color locks.
+- Draft settings and progress.
 
-Do not rely on local persistence to recover a live sync session:
+Sync host persistence is conservative:
 
-- If a joiner reloads or closes the app, late reconnect is out of scope for v1.
-- If the host reloads or closes the app, the sync session ends.
-- The host room is runtime shared state, not a recoverable backend session.
+- Host state should be saved after setup starts, draft starts, each pick, pause, removal, and other authoritative changes.
+- If the host reloads during an active sync draft, the game restores into the paused reconnect lobby instead of trying to continue a live timer.
+- The host can close the app while paused, reopen later, reconnect everyone, and unpause.
+- Joiners do not need independent game persistence for the setup/draft milestone.
 
-Because the game can be long, local mode should support refresh recovery. Sync mode can add deeper recovery later if needed.
+Because the game can be long, local mode should support refresh recovery. Local draft refresh restores the draft and restarts the active pick timer fresh.
 
 ## PWA and Deployment
 
@@ -992,30 +1072,34 @@ These should be resolved before or during the relevant implementation pass.
 
 Suggested build order:
 
-1. Scaffold Vite/React/TypeScript PWA using the Qwixx project as structural reference.
-2. Define core TypeScript types for players, map, territories, troops, phases, and attacks.
-3. Create a small placeholder map graph for early rule testing.
-4. Build local setup and pass-and-play flow.
-5. Build map rendering with viewer-specific fog of war.
-6. Implement territory assignment.
-7. Implement initial troop allocation.
-8. Implement turn phases without combat minigames.
-9. Implement attack declaration and battle state.
-10. Implement prediction triangle.
-11. Implement arrow challenge.
-12. Implement effectiveness and weighted dice.
-13. Implement casualty sampling and post-battle reveals.
-14. Implement fortify.
-15. Implement elimination and game over.
-16. Port/adapt Qwixx-style QR/WebRTC sync.
-17. Add PWA manifest, service worker, icons, and GitHub Pages deployment.
-18. Replace placeholder map with final custom LOTR-heavy map.
+1. Replace the sandbox page state with real app phases, shared game types, setup state, draft state, ownership state, and persistence keys.
+2. Convert the current map sandbox components into reusable map modes for read-only, draft picking, and territory focus.
+3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, draft style, pick timer, and troop allocation timer.
+4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, ownership assignment, and post-draft review.
+5. Implement local draft UI and local persistence through setup, draft, end-game confirmation, refresh restore, and review.
+6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardature-specific payload names and prefixes.
+7. Implement sync setup with host/join flows, joiner editable name/color, host edit/lock/unlock, duplicate-color blocking, host roster controls, and setup broadcasts.
+8. Implement sync draft as host-authoritative state: host timers, pick requests, confirmed picks, random fallback picks, broadcasts, and read-only views for inactive devices.
+9. Implement sync pause/reconnect: manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, QR reconnect fallback, and unpause validation.
+10. Update verification to cover local setup/draft/review, sync handshake/setup, sync draft, timeout behavior, pause/reconnect behavior, persistence recovery, and map interaction modes.
+11. Implement initial troop allocation.
+12. Implement turn phases without combat minigames.
+13. Implement attack declaration and battle state.
+14. Implement prediction triangle.
+15. Implement arrow challenge.
+16. Implement effectiveness and weighted dice.
+17. Implement casualty sampling and post-battle reveals.
+18. Implement fortify.
+19. Implement elimination and game over.
 
 ## Verification Checklist
 
 Before considering the first playable version complete:
 
-- Verify local setup supports multiple players, sides, colors, order, and territory assignment mode.
+- Verify local setup supports 2 to 6 players, names, unique colors, turn order, draft style, draft timer, and troop allocation timer.
+- Verify sync setup supports Qwixx-style QR handshake, host lobby, joiner lobby, name/color edits, host locks, duplicate-color blocking, and host-authoritative setup state.
+- Verify local and sync drafts support snake, round-robin, random simulation, timed picks, confirmation timeout, random timeout fallback, and post-draft review.
+- Verify sync pause/reconnect supports manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, QR reconnect fallback, and unpause validation.
 - Verify every territory is assigned to exactly one player before troop allocation.
 - Verify troop allocation requires at least one troop per owned territory.
 - Verify viewer-specific fog of war for owned, adjacent enemy, and distant enemy territories.
@@ -1032,6 +1116,6 @@ Before considering the first playable version complete:
 - Verify eliminated players are skipped and cannot act.
 - Verify game over triggers when one player owns all territories.
 - Verify local refresh recovery.
-- Verify sync QR handshake, host lobby, joiner lobby, and host-authoritative state updates.
+- Verify sync host-authoritative state updates.
 - Verify sync private battle preparation works on separate devices.
 - Verify PWA installability and GitHub Pages build output.

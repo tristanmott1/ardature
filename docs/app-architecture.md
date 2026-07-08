@@ -1,6 +1,6 @@
 # App Architecture
 
-Ardature will be a static GitHub Pages PWA, organized similarly to the sibling `../qwixx` app: Vite, React, TypeScript, a web manifest, and a service worker. The first screen should be the usable game surface, not a landing page.
+Ardature is a static GitHub Pages PWA, organized similarly to the sibling `../qwixx` app: Vite, React, TypeScript, a web manifest, a service worker, and QR/WebRTC sync. The first screen should be the usable game surface, not a landing page.
 
 ## Top-Level Structure
 
@@ -46,7 +46,7 @@ The exact file list can evolve, but the boundaries should stay clear:
 - `maps/` owns the drawing-to-geometry pipeline.
 - `src/map/` owns map rendering and map-specific UI.
 - `src/game/` owns game state, reducers, and rules.
-- `src/sync/` owns eventual local network synchronization.
+- `src/sync/` owns Qwixx-style local network synchronization adapted for Ardature.
 
 ## Map Data Flow
 
@@ -93,6 +93,28 @@ The extractor should preserve the current border-first model:
 - A physical border can exist while `isPlayableConnection` is false because mountains, forests, or other landmarks block gameplay movement.
 
 Source drawings and extraction rules are the only places geometry should be fixed. The app should not contain one-off synthetic dividers, custom geometry patches, or hand-authored territory corrections.
+
+## App Flow
+
+The app should be a map-first shell. The map is normally present, while setup, configuration, draft confirmation, pause state, reconnect state, and review state appear as panels or modals over the shared map.
+
+The first real gameplay milestone is documented in `setup-draft-sync-v1.md`. Its phase order is:
+
+```text
+Home -> Setup and configuration -> Territory draft -> Post-draft review map
+```
+
+Both local and sync modes share the same setup and draft state model:
+
+- 2 to 6 players.
+- Player names.
+- Unique player colors from `green`, `blue`, `yellow`, `red`, `purple`, and `black`.
+- Turn order with Qwixx-style manual reorder and randomize.
+- Draft style: random, round robin, or snake.
+- Optional draft pick timers.
+- Optional troop allocation timer stored for later phases.
+
+The old sandbox interaction is no longer a user-facing app mode. Its useful capabilities remain as reusable map behavior: pan, zoom, selected-territory focus, hit targets, and state-driven territory fills.
 
 ## Map Rendering Model
 
@@ -161,26 +183,44 @@ type TerritoryState = {
 };
 ```
 
-All playable territories start as:
+Before draft ownership is assigned, playable territories render with the background skin:
 
 ```ts
 { skin: "background", status: "unselected" }
 ```
 
-The background component always uses the background skin and is not selectable.
+During draft and review, playable territory fills are derived from ownership. Owned territories use the owner's unique player color, and unowned territories use the background color. The background component always uses the background skin and is not selectable.
+
+## Sync Architecture
+
+Sync mode should be copied and adapted from Qwixx rather than literally reused:
+
+- WebRTC data channels.
+- QR host offers.
+- QR joiner answers.
+- Ardature-specific payload kinds and compact QR prefixes.
+- Host-authoritative setup, draft, timer, ownership, pause, reconnect, and removal state.
+
+The host is always one of the players and owns the canonical game state. Joiners send requests and render the latest host state. Joiners can edit their own unlocked name/color during setup, while the host can edit any name/color and lock or unlock those fields.
+
+During sync draft, graceful quit and ungraceful disconnect are separate:
+
+- Graceful quit removes the player, clears their territories, returns those territories to the draft pool, and pauses the game.
+- Ungraceful disconnect keeps the player and their territories, marks them disconnected, and pauses the game.
+
+Paused sync games are host-persisted. Host refresh during an active draft restores into the paused reconnect lobby. The host can unpause only when at least 2 players remain and every remaining player is connected.
 
 ## Future Game Fit
 
 This structure is meant to support the full game later:
 
-- setup and territory claiming
-- ownership colors
+- setup, territory claiming, and ownership colors
 - fog of war
 - troop visibility rules
 - spy/reinforcement/attack/fortify phases
 - attack target/source selection
 - troop-count markers
 - local pass-and-play
-- WebRTC sync mode
+- WebRTC sync mode with pause/reconnect
 
-The first version should solve map interaction and state flow without forcing game-rule complexity into the map renderer.
+The setup/draft milestone should solve player setup, sync connection, draft ownership, persistence, and map interaction without forcing troop allocation or later turn rules into the map renderer.
