@@ -211,8 +211,7 @@ public static class MapExtractor
     {
         new BackgroundSeed { Id = "background-ocean", Name = "Ocean", X = 85, Y = 1020 },
         new BackgroundSeed { Id = "background-north-east", Name = "North East Background", X = 1510, Y = 45 },
-        new BackgroundSeed { Id = "background-north-bay", Name = "North Bay Background", X = 380, Y = 22 },
-        new BackgroundSeed { Id = "background-ocean", Name = "Ocean", X = 1435, Y = 1050 }
+        new BackgroundSeed { Id = "background-north-bay", Name = "North Bay Background", X = 380, Y = 22 }
     };
 
     static readonly RegionConfig[] RegionConfigs = new RegionConfig[]
@@ -304,7 +303,7 @@ public static class MapExtractor
         new TerritorySeed { Id = "caradhras", Name = "Caradhras", RegionId = "rhovanion", X = 835, Y = 250 },
         new TerritorySeed { Id = "woodland-realm", Name = "Woodland Realm", RegionId = "rhovanion", X = 990, Y = 235 },
         new TerritorySeed { Id = "gladden-fields", Name = "Gladden Fields", RegionId = "rhovanion", X = 985, Y = 320 },
-        new TerritorySeed { Id = "lorien", Name = "Lorien", RegionId = "rhovanion", X = 825, Y = 430 },
+        new TerritorySeed { Id = "lorien", Name = "Lorien", RegionId = "rhovanion", X = 850, Y = 470 },
         new TerritorySeed { Id = "dol-guldur", Name = "Dol Guldur", RegionId = "rhovanion", X = 1035, Y = 420 },
         new TerritorySeed { Id = "emyn-muil", Name = "Emyn Muil", RegionId = "rhovanion", X = 970, Y = 620 },
         new TerritorySeed { Id = "dead-marshes", Name = "Dead Marshes", RegionId = "rhovanion", X = 1000, Y = 735 },
