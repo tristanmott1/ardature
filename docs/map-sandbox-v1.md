@@ -64,7 +64,7 @@ Manual camera gestures are locked while the focus animation runs:
 
 After the animation finishes or is canceled, the user can pan and zoom normally from the current view.
 
-The camera never shows area outside the map. The initial view is the largest screen-shaped rectangle that fits inside the map, so the full map is visible only when the screen has the same aspect ratio as the map.
+The camera can zoom all the way out to the full map. The `viewBox` stays within the map dimensions, and the SVG's tan background fills any extra screen space when the full-map view does not match the screen shape.
 
 ## Skin Picker
 

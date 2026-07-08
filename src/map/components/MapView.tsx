@@ -75,15 +75,20 @@ export function MapView({
       return null;
     }
 
-    const bounds = svg.getBoundingClientRect();
-    if (bounds.width <= 0 || bounds.height <= 0) {
+    const matrix = svg.getScreenCTM();
+
+    if (!matrix) {
       return null;
     }
 
-    const current = viewportRef.current;
+    const point = svg.createSVGPoint();
+    point.x = clientX;
+    point.y = clientY;
+
+    const mapped = point.matrixTransform(matrix.inverse());
     return {
-      x: current.x + ((clientX - bounds.left) / bounds.width) * current.width,
-      y: current.y + ((clientY - bounds.top) / bounds.height) * current.height,
+      x: mapped.x,
+      y: mapped.y,
     };
   }
 
@@ -255,18 +260,7 @@ export function MapView({
   }
 
   useLayoutEffect(() => {
-    const svg = svgRef.current;
-
-    if (!svg) {
-      return;
-    }
-
-    const bounds = svg.getBoundingClientRect();
-    const aspect = bounds.width > 0 && bounds.height > 0
-      ? bounds.width / bounds.height
-      : mapData.width / mapData.height;
-
-    setViewport(fitMapToAspect(mapData.width, mapData.height, aspect));
+    setViewport(fullMapViewport(mapData.width, mapData.height));
   }, [mapData.height, mapData.width]);
 
   useEffect(() => {
@@ -374,24 +368,11 @@ function fitBoundsToAspect(bounds: MapBounds, aspect: number): MapViewport {
   };
 }
 
-function fitMapToAspect(mapWidth: number, mapHeight: number, aspect: number): MapViewport {
-  const mapAspect = mapWidth / mapHeight;
-
-  if (aspect > mapAspect) {
-    const height = mapWidth / aspect;
-    return {
-      x: 0,
-      y: (mapHeight - height) / 2,
-      width: mapWidth,
-      height,
-    };
-  }
-
-  const width = mapHeight * aspect;
+function fullMapViewport(mapWidth: number, mapHeight: number): MapViewport {
   return {
-    x: (mapWidth - width) / 2,
+    x: 0,
     y: 0,
-    width,
+    width: mapWidth,
     height: mapHeight,
   };
 }
@@ -405,11 +386,10 @@ function constrainViewport(viewport: MapViewport, mapWidth: number, mapHeight: n
     viewport.width <= 0 ||
     viewport.height <= 0
   ) {
-    return fitMapToAspect(mapWidth, mapHeight, mapWidth / mapHeight);
+    return fullMapViewport(mapWidth, mapHeight);
   }
 
   const center = viewportCenter(viewport);
-  const maximum = fitMapToAspect(mapWidth, mapHeight, viewport.width / viewport.height);
   const minimumScale = Math.max(
     MIN_VIEWPORT_SIZE / viewport.width,
     MIN_VIEWPORT_SIZE / viewport.height,
@@ -417,10 +397,11 @@ function constrainViewport(viewport: MapViewport, mapWidth: number, mapHeight: n
   );
   let width = viewport.width * minimumScale;
   let height = viewport.height * minimumScale;
-  const maximumScale = Math.min(maximum.width / width, maximum.height / height, 1);
 
-  width *= maximumScale;
-  height *= maximumScale;
+  // Let each dimension reach the map edge so the whole map can be viewed.
+  width = clamp(width, Math.min(MIN_VIEWPORT_SIZE, mapWidth), mapWidth);
+  height = clamp(height, Math.min(MIN_VIEWPORT_SIZE, mapHeight), mapHeight);
+
   return {
     width,
     height,

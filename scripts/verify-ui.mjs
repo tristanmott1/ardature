@@ -217,6 +217,16 @@ function assertViewBoxInside(value, size, message) {
   assert(viewport.y + viewport.height <= size.height + epsilon, message);
 }
 
+function assertFullMapViewBox(value, size, message) {
+  const viewport = parseViewBox(value);
+  const epsilon = 0.001;
+
+  assert(Math.abs(viewport.x) <= epsilon, message);
+  assert(Math.abs(viewport.y) <= epsilon, message);
+  assert(Math.abs(viewport.width - size.width) <= epsilon, message);
+  assert(Math.abs(viewport.height - size.height) <= epsilon, message);
+}
+
 async function waitForTerritoryState(page, territoryId, state) {
   await page.waitForFunction(
     ({ id, expectedState }) =>
@@ -251,6 +261,18 @@ async function runMapChecks(page) {
   console.log("Checking selection");
   const initialViewBox = await viewBox(page);
   assertViewBoxInside(initialViewBox, size, "Initial viewBox stays inside the map.");
+  assertFullMapViewBox(initialViewBox, size, "Initial viewBox shows the full map.");
+  const initialViewportSize = page.viewportSize();
+
+  if (initialViewportSize) {
+    await page.setViewportSize({ width: initialViewportSize.height, height: initialViewportSize.width });
+    await page.waitForTimeout(80);
+    assertFullMapViewBox(await viewBox(page), size, "Full-map view survives orientation changes.");
+    await page.setViewportSize(initialViewportSize);
+    await page.waitForTimeout(80);
+    assertFullMapViewBox(await viewBox(page), size, "Full-map view restores after orientation changes.");
+  }
+
   await clickTerritory(page, "shire");
   await waitForTerritoryState(page, "shire", "selected");
   await page.waitForSelector('.map-svg[data-map-animating="true"]');
@@ -329,6 +351,35 @@ async function runMapChecks(page) {
   const afterDrag = await viewBox(page);
   assert(beforeDrag !== afterDrag, "Drag pan changes the map viewBox.");
   assertViewBoxInside(afterDrag, size, "Drag pan keeps the viewBox inside the map.");
+
+  for (let step = 0; step < 10; step += 1) {
+    await page.locator(".map-svg").dispatchEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: box.x + box.width / 2,
+      clientY: box.y + box.height / 2,
+      deltaY: 900,
+    });
+  }
+
+  await page.waitForFunction(
+    ({ width, height }) => {
+      const value = document.querySelector(".map-svg")?.getAttribute("viewBox");
+
+      if (!value) {
+        return false;
+      }
+
+      const parts = value.trim().split(/\s+/).map(Number);
+      return parts.length === 4 &&
+        Math.abs(parts[0]) <= 0.001 &&
+        Math.abs(parts[1]) <= 0.001 &&
+        Math.abs(parts[2] - width) <= 0.001 &&
+        Math.abs(parts[3] - height) <= 0.001;
+    },
+    size,
+  );
+  assertFullMapViewBox(await viewBox(page), size, "Wheel zoom out can show the full map.");
 }
 
 async function main() {
