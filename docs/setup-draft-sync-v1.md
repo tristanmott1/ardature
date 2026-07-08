@@ -19,6 +19,25 @@ Home has two modes:
 
 The old color-selection sandbox is no longer a user-facing mode. Its map features remain important and should be reused throughout the real app: pan, zoom, selected-territory focus, hit targets, and map-layer rendering.
 
+## Visual Style
+
+The setup/draft UI should be sleek, minimal, and icon-forward like Qwixx. The map should remain the visual center, with controls presented as compact panels, sheets, or popups.
+
+Use familiar icons instead of text-heavy buttons wherever possible:
+
+- `X` for cancel, dismiss, remove, quit, and close.
+- check mark for confirm, ready, and start-valid actions.
+- arrow for next-player handoff in local draft.
+- shuffle for randomizing turn order.
+- drag handle for manual ordering.
+- lock and unlock for host-controlled player fields.
+- scan/QR icons for sync scanning.
+- pause and play/resume for local and host-only sync pause controls.
+
+Use text labels only where the choice itself needs words, such as Local/Sync, player names, draft style, timer values, territory names, and short confirmation messages. Every icon-only button must still have an `aria-label`.
+
+Player colors should use swatches rather than word buttons. Connection state, host identity, locked fields, active picker, and timer state should use small icons or compact chips instead of large explanatory text.
+
 ## Players And Setup
 
 Both modes use the same setup state and validation:
@@ -61,7 +80,7 @@ Setup options controlled by the host/local device:
 
 Troop allocation is configured now so the setting is present in state, but the milestone stops before troop allocation begins.
 
-Once setup advances into the draft, names, colors, turn order, and configuration are frozen except for sync pause/removal behavior described below.
+Once setup advances into the draft, names, colors, turn order, and configuration are frozen except for pause/removal behavior described below.
 
 ## Draft Rules
 
@@ -89,13 +108,43 @@ Manual draft interaction:
 - In sync mode, the next player's turn starts immediately on their device; the result popup is dismissible and has no next arrow.
 - If a timed pick expires with a confirmation popup open, the selected territory is treated as confirmed.
 - If a timed pick expires with no confirmation popup open, the host/local device randomly chooses one remaining territory for the active player.
-- If the host pauses during an active pick or confirmation popup, the pending choice is discarded and that turn starts over when the game resumes.
+- If local mode pauses during an active pick or confirmation popup, the timer and pending choice are preserved.
+- If sync mode pauses during an active pick or confirmation popup, the pending choice is discarded and that player's turn starts over when the game resumes.
 
 Post-draft review:
 
 - The app immediately shows a read-only map with all owned territories in player colors.
 - There is no territory selection, color picker, or troop marker behavior yet.
 - Pan and zoom remain available.
+
+## Pause And Player Removal
+
+Local and sync modes should use the same pause button placement and icon.
+
+- In local mode, the pause button is always visible during draft.
+- In sync mode, only the host sees the pause button.
+- In sync mode, pause is also forced by ungraceful disconnects.
+
+Local pause is a true pause of the single-device draft:
+
+- If the pick timer is running, it freezes with the remaining time preserved.
+- If a confirmation popup is open, the pending selected territory stays pending.
+- If the result/next-player popup is open, no timer is running and the same popup remains.
+- On resume, the same player continues from the same state.
+- Local pause has no disconnected or reconnecting state.
+- Local pause has no QR/reconnect controls.
+- Local players can be removed while paused.
+
+Sync host pause is a synchronization reset:
+
+- The active pick timer is not preserved.
+- Any pending selected territory or confirmation popup is discarded.
+- On unpause, the current player's turn starts over with a fresh timer.
+- Sync pause includes connected, disconnected, and reconnecting player status.
+- Sync pause includes QR reconnect controls when needed.
+- The host can remove players while paused.
+
+In both modes, removing a player during draft clears that player's territories and returns them to the remaining territory pool. If fewer than 2 players remain, the game ends and returns to home.
 
 ## Sync Model
 
@@ -126,7 +175,6 @@ The sync transport should be copied and adapted from Qwixx:
 
 Sync reconnect and pause:
 
-- Pause is a sync-only game phase.
 - The host can manually pause a draft.
 - Any ungraceful disconnect during draft forces pause.
 - Host refresh during an unpaused sync draft restores into paused mode.
@@ -151,15 +199,14 @@ If a sync player is removed during pause:
 - The player's color becomes irrelevant for the current draft.
 - The draft order pattern remains the same, but that player's future picks are skipped.
 
-If fewer than 2 players remain during sync draft, the game ends and returns to home.
-
 ## Local Mode During Draft
 
-Local mode has no player quit during draft. The available escape hatch is ending the entire game and returning to home.
+Local mode uses the same draft engine as sync mode, but without network messages, disconnected status, or reconnect state.
 
 - Ending the local game requires confirmation.
 - Local refresh during draft restores the draft and restarts the active pick timer fresh.
-- Local mode uses the same draft engine as sync mode, but without network messages or pause/reconnect state.
+- Local manual pause preserves the active timer, pending confirmation, or result popup exactly as-is.
+- Local player removal is only available while paused.
 
 ## Map Behavior
 
@@ -183,11 +230,11 @@ Build this milestone in this order:
 2. Convert the current map sandbox components into reusable map modes for read-only, draft picking, and territory focus.
 3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, draft style, pick timer, and troop allocation timer.
 4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, ownership assignment, and post-draft review.
-5. Implement local draft UI and local persistence through setup, draft, end-game confirmation, refresh restore, and review.
+5. Implement local draft UI and local persistence through setup, draft, manual pause, player removal, end-game confirmation, refresh restore, and review.
 6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardature-specific payload names and prefixes.
 7. Implement sync setup with host/join flows, joiner editable name/color, host edit/lock/unlock, duplicate-color blocking, host roster controls, and setup broadcasts.
 8. Implement sync draft as host-authoritative state: host timers, pick requests, confirmed picks, random fallback picks, broadcasts, and read-only views for inactive devices.
-9. Implement sync pause/reconnect: manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, QR reconnect fallback, and unpause validation.
-10. Update verification to cover local setup/draft/review, sync handshake/setup, sync draft, timeout behavior, pause/reconnect behavior, persistence recovery, and map interaction modes.
+9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, QR reconnect fallback, and unpause validation.
+10. Update verification to cover local setup/draft/pause/review, sync handshake/setup, sync draft, timeout behavior, pause/reconnect behavior, persistence recovery, and map interaction modes.
 
 Do not build troop allocation, spy, reinforcements, attacks, fortify, or fog of war in this milestone.

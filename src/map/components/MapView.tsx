@@ -43,7 +43,7 @@ export function MapView({
   territoryStates,
 }: {
   mapData: GeneratedMapData;
-  onTerritoryPress: (territoryId: string) => void;
+  onTerritoryPress?: (territoryId: string) => void;
   selectedTerritoryId: string | null;
   territoryStates: Record<string, TerritoryState>;
 }) {
@@ -330,12 +330,14 @@ export function MapView({
           <TerritoryFillLayer mapData={mapData} territoryStates={territoryStates} />
           <StaticMapInk ink={mapData.staticInk} />
           <TroopMarkerLayer />
-          <HitTargetLayer
-            isClickSuppressed={() => suppressClickRef.current}
-            isImmediatePress={() => isAnimatingRef.current}
-            mapData={mapData}
-            onTerritoryPress={onTerritoryPress}
-          />
+          {onTerritoryPress ? (
+            <HitTargetLayer
+              isClickSuppressed={() => suppressClickRef.current}
+              isImmediatePress={() => isAnimatingRef.current}
+              mapData={mapData}
+              onTerritoryPress={onTerritoryPress}
+            />
+          ) : null}
         </g>
       </svg>
     </div>

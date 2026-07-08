@@ -30,7 +30,6 @@ src/
     components/
       HitTargetLayer.tsx
       MapView.tsx
-      SkinPicker.tsx
       StaticMapInk.tsx
       TerritoryFillLayer.tsx
       TroopMarkerLayer.tsx
@@ -38,6 +37,7 @@ src/
       mapData.ts
     mapTypes.ts
   sync/
+    syncMessages.ts
     syncTransport.ts
 ```
 
@@ -115,6 +115,35 @@ Both local and sync modes share the same setup and draft state model:
 - Optional troop allocation timer stored for later phases.
 
 The old sandbox interaction is no longer a user-facing app mode. Its useful capabilities remain as reusable map behavior: pan, zoom, selected-territory focus, hit targets, and state-driven territory fills.
+
+## UI Style
+
+The app should stay visually sleek, minimal, and mobile-first. The map is the primary visual surface; controls should feel like compact tactical overlays rather than form-heavy pages.
+
+Use icon buttons for common actions whenever the icon is familiar:
+
+- add
+- remove
+- edit
+- lock and unlock
+- shuffle
+- drag/reorder
+- confirm
+- cancel
+- next
+- pause and resume
+- scan
+- host and join
+- exit
+
+Use text where it prevents ambiguity: mode names, player names, draft-style options, timer options, territory names, and important confirmation copy. Icon-only buttons must have clear accessible labels for screen readers and tests.
+
+Prefer compact controls:
+
+- color swatches for player colors
+- drag handles for turn order
+- small status icons or chips for host, connected, disconnected, locked, active picker, and timer state
+- confirmation dialogs for destructive actions that remove players, quit sync games, or end local games
 
 ## Map Rendering Model
 
@@ -209,6 +238,12 @@ During sync draft, graceful quit and ungraceful disconnect are separate:
 - Ungraceful disconnect keeps the player and their territories, marks them disconnected, and pauses the game.
 
 Paused sync games are host-persisted. Host refresh during an active draft restores into the paused reconnect lobby. The host can unpause only when at least 2 players remain and every remaining player is connected.
+
+Local and sync modes use the same pause icon/button placement during draft. In local mode, the pause button is always visible because the device owns the whole game. In sync mode, only the host sees the pause button.
+
+Local pause preserves the current draft state exactly: running timer time remaining, pending confirmation, or result popup. Sync pause resets the active pick for consistency across devices: pending confirmations are discarded, the active pick timer restarts on unpause, and reconnect state is shown when needed.
+
+Both modes allow player removal while paused. Removed players' territories are cleared and returned to the draft pool. Local pause has no disconnected/reconnecting state or QR tools.
 
 ## Future Game Fit
 

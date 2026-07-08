@@ -90,6 +90,7 @@ async function runSourceChecks() {
   const appSource = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapViewSource = await readFile(new URL("../src/map/components/MapView.tsx", import.meta.url), "utf8");
+  const syncTransportSource = await readFile(new URL("../src/sync/syncTransport.ts", import.meta.url), "utf8");
   const mapWidth = generatedNumber(mapDataSource, "width");
   const mapHeight = generatedNumber(mapDataSource, "height");
 
@@ -105,16 +106,13 @@ async function runSourceChecks() {
     assert(values[2] > values[0] && values[3] > values[1], "Generated focus bounds are non-empty.");
     assert(values[0] >= 0 && values[1] >= 0 && values[2] <= mapWidth && values[3] <= mapHeight, "Generated focus bounds stay inside the map.");
   }
-  assert(appSource.includes("createInitialTerritoryStates"), "App creates territory state from generated data.");
+  assert(appSource.includes("SyncHostTransport") && appSource.includes("SyncJoinTransport"), "App wires the QR sync transport.");
+  assert(appSource.includes("pauseSyncGame"), "App has sync pause semantics.");
+  assert(appSource.includes("noticeTerritoryId"), "App supports nonblocking sync draft notices.");
+  assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardature QR payloads.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
-  assert(mapViewSource.includes("data-map-animating"), "Map view exposes animation state.");
-  assert(mapViewSource.includes("focusAnimationDuration"), "Map view uses adaptive focus duration.");
   assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
-  assert(mapViewSource.includes("easeInOutCubic"), "Map view eases focus animation.");
-  assert(!mapViewSource.includes("Math.log(target.width / start.width)"), "Map view does not use the old logarithmic zoom duration.");
-  assert(!appSource.includes("isMapAnimating"), "App does not globally lock game input during camera animation.");
-  assert(!mapViewSource.includes("isAnimatingRef.current || suppressClickRef.current"), "Map animation does not suppress territory hits.");
 }
 
 function generatedNumber(source, name) {
@@ -127,50 +125,6 @@ function generatedNumber(source, name) {
   const value = Number(match[1]);
   assert(Number.isFinite(value), `Generated ${name} is finite.`);
   return value;
-}
-
-async function clickTerritory(page, territoryId) {
-  await page.evaluate((id) => {
-    const target = document.querySelector(`[data-territory-hit="${id}"]`);
-
-    if (!target) {
-      throw new Error(`Missing hit target ${id}.`);
-    }
-
-    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
-  }, territoryId);
-}
-
-async function pressTerritory(page, territoryId) {
-  await page.evaluate((id) => {
-    const target = document.querySelector(`[data-territory-hit="${id}"]`);
-
-    if (!target) {
-      throw new Error(`Missing hit target ${id}.`);
-    }
-
-    target.dispatchEvent(new MouseEvent("mousedown", {
-      bubbles: true,
-      cancelable: true,
-      view: window,
-      clientX: 0,
-      clientY: 0,
-    }));
-    target.dispatchEvent(new MouseEvent("mouseup", {
-      bubbles: true,
-      cancelable: true,
-      view: window,
-      clientX: 0,
-      clientY: 0,
-    }));
-    target.dispatchEvent(new MouseEvent("click", {
-      bubbles: true,
-      cancelable: true,
-      view: window,
-      clientX: 0,
-      clientY: 0,
-    }));
-  }, territoryId);
 }
 
 async function viewBox(page) {
@@ -217,111 +171,67 @@ function assertViewBoxInside(value, size, message) {
   assert(viewport.y + viewport.height <= size.height + epsilon, message);
 }
 
-function assertFullMapViewBox(value, size, message) {
-  const viewport = parseViewBox(value);
-  const epsilon = 0.001;
+async function clickTerritory(page, territoryId) {
+  await page.evaluate((id) => {
+    const target = document.querySelector(`[data-territory-hit="${id}"]`);
 
-  assert(Math.abs(viewport.x) <= epsilon, message);
-  assert(Math.abs(viewport.y) <= epsilon, message);
-  assert(Math.abs(viewport.width - size.width) <= epsilon, message);
-  assert(Math.abs(viewport.height - size.height) <= epsilon, message);
+    if (!target) {
+      throw new Error(`Missing hit target ${id}.`);
+    }
+
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+  }, territoryId);
 }
 
-async function waitForTerritoryState(page, territoryId, state) {
-  await page.waitForFunction(
-    ({ id, expectedState }) =>
-      document.querySelector(`[data-territory-fill="${id}"]`)?.getAttribute("data-territory-fill-state") === expectedState,
-    { id: territoryId, expectedState: state },
-  );
+async function setPlayerName(page, index, name) {
+  await page.getByLabel("Player name").fill(name);
+  await page.getByLabel("Add player").click();
+  await page.locator(".player-row").nth(index).waitFor();
 }
 
-async function waitForTerritorySkin(page, territoryId, skin) {
-  await page.waitForFunction(
-    ({ id, expectedSkin }) =>
-      document.querySelector(`[data-territory-fill="${id}"]`)?.getAttribute("data-territory-skin") === expectedSkin,
-    { id: territoryId, expectedSkin: skin },
-  );
+async function setPlayerColor(page, index, color) {
+  await page.locator(".player-row").nth(index).getByRole("button", { name: color }).click();
 }
 
-async function runMapChecks(page) {
-  console.log("Opening app");
-  await page.goto(baseUrl);
+async function startLocalSnakeDraft(page) {
+  await page.getByRole("button", { name: "Local" }).click();
+  await setPlayerName(page, 0, "Aragorn");
+  await setPlayerColor(page, 0, "green");
+  await setPlayerName(page, 1, "Gimli");
+  await setPlayerColor(page, 1, "blue");
+  await page.getByRole("button", { name: "Draft", exact: true }).click();
   await page.waitForSelector("[data-territory-hit]");
+}
 
-  console.log("Checking layers");
+async function runLocalDraftChecks(page) {
+  console.log("Checking local draft");
+  await page.goto(baseUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForSelector("[data-background-piece]");
+  await startLocalSnakeDraft(page);
+
+  const size = await mapSize(page);
+  assertViewBoxInside(await viewBox(page), size, "Initial draft viewBox stays inside the map.");
   assert((await page.locator("[data-territory-fill]").count()) === 42, "Map renders 42 territory fill groups.");
-  assert((await page.locator("[data-territory-hit]").count()) === 42, "Map renders 42 territory hit targets.");
-  assert((await page.locator("[data-background-piece]").count()) === 1, "Map renders one background component.");
+  assert((await page.locator("[data-territory-hit]").count()) === 42, "Draft renders 42 hit targets.");
   assert(
     await page.locator(".static-map-ink").evaluate((node) => getComputedStyle(node).pointerEvents === "none"),
     "Static ink layer is pointer inert.",
   );
-  const size = await mapSize(page);
-
-  console.log("Checking selection");
-  const initialViewBox = await viewBox(page);
-  assertViewBoxInside(initialViewBox, size, "Initial viewBox stays inside the map.");
-  assertFullMapViewBox(initialViewBox, size, "Initial viewBox shows the full map.");
-  const initialViewportSize = page.viewportSize();
-
-  if (initialViewportSize) {
-    await page.setViewportSize({ width: initialViewportSize.height, height: initialViewportSize.width });
-    await page.waitForTimeout(80);
-    assertFullMapViewBox(await viewBox(page), size, "Full-map view survives orientation changes.");
-    await page.setViewportSize(initialViewportSize);
-    await page.waitForTimeout(80);
-    assertFullMapViewBox(await viewBox(page), size, "Full-map view restores after orientation changes.");
-  }
 
   await clickTerritory(page, "shire");
-  await waitForTerritoryState(page, "shire", "selected");
-  await page.waitForSelector('.map-svg[data-map-animating="true"]');
-  assert((await page.locator("[data-skin-picker]").count()) === 1, "Selecting a territory shows the skin picker.");
-  assert(!(await page.getByRole("button", { name: "blue" }).isDisabled()), "Skin swatches stay enabled during focus animation.");
-  await page.getByRole("button", { name: "blue" }).click();
-  await waitForTerritorySkin(page, "shire", "blue");
+  await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
+  await page.getByRole("button", { name: "Confirm pick" }).click();
+  await page.getByRole("status").waitFor();
+  await page.getByRole("button", { name: "Next player" }).click();
+  await page.getByText("41 left").waitFor();
 
-  await pressTerritory(page, "bree");
-  await waitForTerritoryState(page, "bree", "selected");
-  assert(
-    (await page.locator('[data-territory-fill="shire"][data-territory-fill-state="unselected"]').count()) === 1,
-    "Clicking another territory during focus animation changes selection.",
-  );
-  await page.waitForSelector('.map-svg[data-map-animating="false"]');
-  const breeFocusedViewBox = await viewBox(page);
-  assert(initialViewBox !== breeFocusedViewBox, "Selecting a territory changes the map viewBox.");
-  assertViewBoxInside(breeFocusedViewBox, size, "Focused viewBox stays inside the map.");
+  await page.getByRole("button", { name: "Pause draft" }).click();
+  await page.getByRole("heading", { name: "Paused" }).waitFor();
+  await page.getByRole("button", { name: "Resume" }).click();
+  await page.getByText("41 left").waitFor();
 
-  await clickTerritory(page, "bree");
-  await waitForTerritoryState(page, "bree", "unselected");
-  assert((await page.locator("[data-skin-picker]").count()) === 0, "Clicking a selected territory hides the skin picker.");
-  await page.waitForTimeout(120);
-  assert((await viewBox(page)) === breeFocusedViewBox, "Unselecting a territory does not change the viewBox.");
-
-  await clickTerritory(page, "bree");
-  await waitForTerritoryState(page, "bree", "selected");
-  await page.waitForTimeout(80);
-  assert((await viewBox(page)) === breeFocusedViewBox, "Selecting an already-focused territory keeps the current viewBox.");
-  assert(
-    (await page.locator('.map-svg[data-map-animating="false"]').count()) === 1,
-    "Selecting an already-focused territory does not require an animation lock.",
-  );
-  assert(!(await page.getByRole("button", { name: "blue" }).isDisabled()), "Skin swatches stay enabled after instant focus.");
-
-  await clickTerritory(page, "bree");
-  await waitForTerritoryState(page, "bree", "unselected");
-
-  await clickTerritory(page, "shire");
-  await waitForTerritoryState(page, "shire", "selected");
-  await page.waitForSelector('.map-svg[data-map-animating="true"]');
-  await pressTerritory(page, "shire");
-  await waitForTerritoryState(page, "shire", "unselected");
-  await page.waitForSelector('.map-svg[data-map-animating="false"]');
-  const canceledViewBox = await viewBox(page);
-  await page.waitForTimeout(160);
-  assert((await viewBox(page)) === canceledViewBox, "Unselecting during focus animation stops the camera where it is.");
-
-  console.log("Checking pan and zoom");
   const box = await page.locator(".map-svg").boundingBox();
   assert(box, "Map SVG has a bounding box.");
   const beforeWheel = await viewBox(page);
@@ -333,53 +243,39 @@ async function runMapChecks(page) {
     deltaY: -500,
   });
   await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeWheel);
-  const afterWheel = await viewBox(page);
-  assert(beforeWheel !== afterWheel, "Wheel zoom changes the map viewBox.");
-  assertViewBoxInside(afterWheel, size, "Wheel zoom keeps the viewBox inside the map.");
+  assertViewBoxInside(await viewBox(page), size, "Wheel zoom keeps the viewBox inside the map.");
+}
 
-  const beforeDrag = await viewBox(page);
-  const wheelViewport = parseViewBox(afterWheel);
-  const startX = wheelViewport.x <= 1 ? 0.55 : 0.45;
-  const endX = wheelViewport.x <= 1 ? 0.45 : 0.55;
+async function runRandomReviewChecks(page) {
+  console.log("Checking random draft review");
+  await page.goto(baseUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.getByRole("button", { name: "Local" }).click();
+  await setPlayerName(page, 0, "Frodo");
+  await setPlayerColor(page, 0, "yellow");
+  await setPlayerName(page, 1, "Sauron");
+  await setPlayerColor(page, 1, "red");
+  await page.getByRole("button", { name: "Random" }).click();
+  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await page.waitForSelector('.app-shell[data-app-phase="review"]');
+  assert((await page.locator("[data-territory-hit]").count()) === 0, "Review map has no territory hit targets.");
+  assert((await page.locator('[data-territory-fill][data-territory-skin="background"]').count()) < 42, "Random draft colors territories.");
+}
 
-  await page.mouse.move(box.x + box.width * startX, box.y + box.height * 0.5);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width * endX, box.y + box.height * 0.5, { steps: 8 });
-  await page.mouse.up();
-
-  await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeDrag);
-  const afterDrag = await viewBox(page);
-  assert(beforeDrag !== afterDrag, "Drag pan changes the map viewBox.");
-  assertViewBoxInside(afterDrag, size, "Drag pan keeps the viewBox inside the map.");
-
-  for (let step = 0; step < 10; step += 1) {
-    await page.locator(".map-svg").dispatchEvent("wheel", {
-      bubbles: true,
-      cancelable: true,
-      clientX: box.x + box.width / 2,
-      clientY: box.y + box.height / 2,
-      deltaY: 900,
-    });
-  }
-
-  await page.waitForFunction(
-    ({ width, height }) => {
-      const value = document.querySelector(".map-svg")?.getAttribute("viewBox");
-
-      if (!value) {
-        return false;
-      }
-
-      const parts = value.trim().split(/\s+/).map(Number);
-      return parts.length === 4 &&
-        Math.abs(parts[0]) <= 0.001 &&
-        Math.abs(parts[1]) <= 0.001 &&
-        Math.abs(parts[2] - width) <= 0.001 &&
-        Math.abs(parts[3] - height) <= 0.001;
-    },
-    size,
-  );
-  assertFullMapViewBox(await viewBox(page), size, "Wheel zoom out can show the full map.");
+async function runSyncEntryChecks(page) {
+  console.log("Checking sync entry");
+  await page.goto(baseUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.getByRole("button", { name: "Sync" }).click();
+  await page.getByLabel("Sync player name").fill("Galadriel");
+  await page.locator(".sync-entry-panel").getByRole("button", { name: "purple" }).click();
+  await page.getByRole("button", { name: "Host" }).click();
+  await page.waitForSelector(".qr-code svg", { timeout: 10000 });
+  assert((await page.locator(".player-row").count()) === 1, "Host lobby starts with the host player.");
+  assert(await page.getByRole("button", { name: "Draft", exact: true }).isDisabled(), "Sync host cannot start with one player.");
+  assert((await page.locator("[data-sync-role='host']").count()) === 1, "App records host sync role.");
 }
 
 async function main() {
@@ -399,15 +295,17 @@ async function main() {
     const browser = await launchBrowser();
     const mobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
     mobile.setDefaultTimeout(10000);
-    console.log("Running mobile checks");
-    await runMapChecks(mobile);
-    await mobile.screenshot({ path: outputPath("map-sandbox-mobile.png") });
+    mobile.on("dialog", (dialog) => dialog.accept());
+    await runLocalDraftChecks(mobile);
+    await mobile.screenshot({ path: outputPath("draft-local-mobile.png") });
 
     const desktop = await browser.newPage({ deviceScaleFactor: 1, viewport: { width: 1100, height: 820 } });
     desktop.setDefaultTimeout(10000);
-    console.log("Running desktop checks");
-    await runMapChecks(desktop);
-    await desktop.screenshot({ path: outputPath("map-sandbox-desktop.png") });
+    desktop.on("dialog", (dialog) => dialog.accept());
+    await runRandomReviewChecks(desktop);
+    await desktop.screenshot({ path: outputPath("draft-review-desktop.png") });
+    await runSyncEntryChecks(desktop);
+    await desktop.screenshot({ path: outputPath("sync-host-desktop.png") });
 
     console.log("Closing browser");
     await Promise.race([

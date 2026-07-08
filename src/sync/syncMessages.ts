@@ -1,0 +1,36 @@
+import type { GameState, PlayerColor } from "../game/gameTypes";
+
+export type ArdatureSyncMessage =
+  | {
+      type: "gameState";
+      game: GameState;
+    }
+  | {
+      type: "profileUpdate";
+      name?: string;
+      color?: PlayerColor | null;
+    }
+  | {
+      type: "draftPending";
+      territoryId: string | null;
+    }
+  | {
+      type: "draftConfirm";
+      territoryId: string;
+    }
+  | {
+      type: "quit";
+    };
+
+export function isArdatureSyncMessage(value: unknown): value is ArdatureSyncMessage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const message = value as Partial<ArdatureSyncMessage>;
+  return message.type === "gameState" ||
+    message.type === "profileUpdate" ||
+    message.type === "draftPending" ||
+    message.type === "draftConfirm" ||
+    message.type === "quit";
+}
