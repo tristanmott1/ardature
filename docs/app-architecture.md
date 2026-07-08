@@ -111,7 +111,7 @@ Renders all playable territory fills and the background component. Each playable
 - current skin
 - current visual state
 
-The fill layer is also where selected and disabled fill styling should happen. The static ink stays unchanged above it.
+The fill layer is also where selected fill styling should happen. The static ink stays unchanged above it.
 
 ### StaticMapInk
 
@@ -148,7 +148,7 @@ type MapSkin =
   | "black"
   | "purple";
 
-type TerritoryStatus = "regular" | "selected" | "disabled";
+type TerritoryStatus = "unselected" | "selected";
 
 type TerritoryState = {
   skin: MapSkin;
@@ -159,7 +159,7 @@ type TerritoryState = {
 All playable territories start as:
 
 ```ts
-{ skin: "background", status: "regular" }
+{ skin: "background", status: "unselected" }
 ```
 
 The background component always uses the background skin and is not selectable.

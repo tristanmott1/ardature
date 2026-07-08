@@ -30,7 +30,7 @@ These features should fit the architecture later, but they are not part of the f
 Every playable territory starts as:
 
 ```ts
-{ skin: "background", status: "regular" }
+{ skin: "background", status: "unselected" }
 ```
 
 The background component renders in the background color and is never selectable.
@@ -39,11 +39,10 @@ The background component renders in the background color and is never selectable
 
 When a playable territory is pressed:
 
-- If it is `regular`, it becomes `selected` and all other playable territories become `regular`.
-- If it is `selected`, it becomes `disabled`.
-- If it is `disabled`, it becomes `regular`.
+- If it is `unselected`, it becomes `selected` and all other playable territories become `unselected`.
+- If it is `selected`, it becomes `unselected`.
 
-Selecting a regular territory clears disabled states. This keeps the first version deterministic and focused on single-territory selection.
+This keeps the first version deterministic and focused on single-territory selection.
 
 ## Skin Picker
 
@@ -63,11 +62,10 @@ The skin picker should be compact and mobile-friendly. Color swatches are prefer
 
 ## Visual States
 
-Each playable territory fill has three visual states:
+Each playable territory fill has two visual states:
 
-- `regular`: base skin fill.
-- `selected`: brighter or glowing version of the base fill.
-- `disabled`: muted, desaturated, or gray-shifted version of the base fill.
+- `unselected`: base skin fill.
+- `selected`: brighter, whiter version of the base fill.
 
 These states affect only the fill layer. The static map ink layer remains unchanged.
 
@@ -111,9 +109,8 @@ The app does not reconstruct territory loops from raw borders at runtime.
 
 After implementation, verify:
 
-- the app map visually matches the generated preview SVG/PNG for regular background state
+- the app map visually matches the generated preview SVG/PNG for unselected background state
 - territory taps work over landmark-covered areas
 - pan and zoom feel usable on desktop and mobile viewport sizes
 - selecting a territory visibly changes its fill underneath the static ink
 - choosing a skin updates the selected territory and keeps it selected
-- disabled territories are visually muted

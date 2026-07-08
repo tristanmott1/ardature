@@ -21,11 +21,6 @@ export function TerritoryFillLayer({
             data-territory-skin={state.skin}
             key={territory.id}
           >
-            {state.status === "selected"
-              ? territory.fillPaths.map((path, index) => (
-                  <path className="territory-selected-glow" d={path} key={`glow-${index}`} />
-                ))
-              : null}
             {territory.fillPaths.map((path, index) => (
               <path
                 className={`territory-fill ${state.status}`}
@@ -36,6 +31,11 @@ export function TerritoryFillLayer({
                 stroke={color}
               />
             ))}
+            {state.status === "selected"
+              ? territory.fillPaths.map((path, index) => (
+                  <path className="territory-selected-wash" d={path} key={`wash-${index}`} />
+                ))
+              : null}
           </g>
         );
       })}

@@ -134,7 +134,8 @@ async function runMapChecks(page) {
   await page.waitForSelector('[data-territory-fill="shire"][data-territory-skin="blue"][data-territory-fill-state="selected"]');
 
   await clickTerritory(page, "shire");
-  await page.waitForSelector('[data-territory-fill="shire"][data-territory-fill-state="disabled"]');
+  await page.waitForSelector('[data-territory-fill="shire"][data-territory-fill-state="unselected"]');
+  assert((await page.locator("[data-skin-picker]").count()) === 0, "Clicking a selected territory hides the skin picker.");
 
   console.log("Checking pan and zoom");
   const box = await page.locator(".map-svg").boundingBox();

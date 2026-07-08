@@ -78,20 +78,12 @@ button:focus-visible,
 }
 
 .territory-fill.selected {
-  filter: brightness(1.13) saturate(1.1);
+  filter: brightness(1.14) saturate(0.82);
 }
 
-.territory-fill.disabled {
-  filter: grayscale(0.66) saturate(0.34) brightness(1.04);
-  opacity: 0.66;
-}
-
-.territory-selected-glow {
-  fill: rgba(255, 255, 255, 0.18);
-  stroke: rgba(255, 255, 255, 0.72);
-  stroke-width: 42;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.territory-selected-wash {
+  fill: rgba(255, 255, 255, 0.24);
+  stroke: none;
   pointer-events: none;
 }
 

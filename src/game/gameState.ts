@@ -9,7 +9,7 @@ export function createInitialTerritoryStates(): TerritoryStates {
       territory.id,
       {
         skin: "background",
-        status: "regular",
+        status: "unselected",
       },
     ]),
   );
@@ -27,17 +27,7 @@ export function pressTerritory(states: TerritoryStates, territoryId: string): Te
       ...states,
       [territoryId]: {
         ...current,
-        status: "disabled",
-      },
-    };
-  }
-
-  if (current.status === "disabled") {
-    return {
-      ...states,
-      [territoryId]: {
-        ...current,
-        status: "regular",
+        status: "unselected",
       },
     };
   }
@@ -47,7 +37,7 @@ export function pressTerritory(states: TerritoryStates, territoryId: string): Te
       id,
       {
         ...state,
-        status: id === territoryId ? "selected" : "regular",
+        status: id === territoryId ? "selected" : "unselected",
       },
     ]),
   );
