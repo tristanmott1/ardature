@@ -46,7 +46,7 @@ This keeps the first version deterministic and focused on single-territory selec
 
 Selecting a territory also moves the map camera to that territory. The generated app data contains a `focusBounds` rectangle for each playable territory, built from the territory's fill loops with 500 map units of padding. If the territory touches the outer map edge on a side, that side gets no padding. The camera fits that rectangle to the current screen shape, fills the screen in one direction, centers in the other direction, and then clamps the result inside the map.
 
-Focus movement is distance-based. If the current view is already nearly identical to the selected territory's focus view, the camera updates instantly. Otherwise, the camera uses a short ease-in-out animation, with larger moves taking longer than small moves.
+Focus movement is distance-based. If the current view is already nearly identical to the selected territory's focus view, the camera updates instantly. Otherwise, the camera uses a short ease-in-out animation. Duration scales with both center movement and zoom difference, normalized against the halfway viewport size.
 
 Unselecting a territory does not move the camera.
 

@@ -110,7 +110,9 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
   assert(mapViewSource.includes("data-map-animating"), "Map view exposes animation state.");
   assert(mapViewSource.includes("focusAnimationDuration"), "Map view uses adaptive focus duration.");
+  assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
   assert(mapViewSource.includes("easeInOutCubic"), "Map view eases focus animation.");
+  assert(!mapViewSource.includes("Math.log(target.width / start.width)"), "Map view does not use the old logarithmic zoom duration.");
   assert(!appSource.includes("isMapAnimating"), "App does not globally lock game input during camera animation.");
   assert(!mapViewSource.includes("isAnimatingRef.current || suppressClickRef.current"), "Map animation does not suppress territory hits.");
 }

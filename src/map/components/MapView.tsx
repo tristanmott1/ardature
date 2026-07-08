@@ -30,9 +30,9 @@ type ViewportPoint = {
   y: number;
 };
 
-const MIN_FOCUS_ANIMATION_MS = 120;
-const MAX_FOCUS_ANIMATION_MS = 600;
-const FOCUS_DURATION_PER_SCORE = 260;
+const MIN_FOCUS_ANIMATION_MS = 180;
+const MAX_FOCUS_ANIMATION_MS = 850;
+const FOCUS_DURATION_PER_DISTANCE = 900;
 const FOCUS_SKIP_THRESHOLD = 0.01;
 const MIN_VIEWPORT_SIZE = 400;
 
@@ -434,20 +434,40 @@ function clamp(value: number, minimum: number, maximum: number) {
 }
 
 function focusAnimationDuration(start: MapViewport, target: MapViewport) {
-  const startCenter = viewportCenter(start);
-  const targetCenter = viewportCenter(target);
-  const centerDistanceRatio = Math.hypot(targetCenter.x - startCenter.x, targetCenter.y - startCenter.y) / viewportDiagonal(start);
-  const zoomDistance = Math.abs(Math.log(target.width / start.width));
-  const motionScore = Math.max(centerDistanceRatio, zoomDistance);
+  const distance = viewportTransitionDistance(start, target);
 
-  if (motionScore < FOCUS_SKIP_THRESHOLD) {
+  if (distance < FOCUS_SKIP_THRESHOLD) {
     return 0;
   }
 
   return Math.max(
     MIN_FOCUS_ANIMATION_MS,
-    Math.min(MAX_FOCUS_ANIMATION_MS, motionScore * FOCUS_DURATION_PER_SCORE),
+    Math.min(MAX_FOCUS_ANIMATION_MS, distance * FOCUS_DURATION_PER_DISTANCE),
   );
+}
+
+function viewportTransitionDistance(start: MapViewport, target: MapViewport) {
+  const halfwayWidth = (start.width + target.width) / 2;
+  const halfwayHeight = (start.height + target.height) / 2;
+  const halfwayDiagonal = Math.hypot(halfwayWidth, halfwayHeight);
+
+  if (halfwayDiagonal <= 0) {
+    return 0;
+  }
+
+  // Normalize pan and zoom against the same halfway viewport diagonal.
+  const startCenter = viewportCenter(start);
+  const targetCenter = viewportCenter(target);
+  const zoomValue = Math.hypot(
+    Math.abs(start.width - target.width) / 2,
+    Math.abs(start.height - target.height) / 2,
+  ) / halfwayDiagonal;
+  const panValue = Math.hypot(
+    targetCenter.x - startCenter.x,
+    targetCenter.y - startCenter.y,
+  ) / halfwayDiagonal;
+
+  return Math.hypot(zoomValue, panValue);
 }
 
 function viewportCenter(viewport: MapViewport): ViewportPoint {
@@ -455,10 +475,6 @@ function viewportCenter(viewport: MapViewport): ViewportPoint {
     x: viewport.x + viewport.width / 2,
     y: viewport.y + viewport.height / 2,
   };
-}
-
-function viewportDiagonal(viewport: MapViewport) {
-  return Math.hypot(viewport.width, viewport.height);
 }
 
 function lerpViewport(start: MapViewport, end: MapViewport, progress: number): MapViewport {
