@@ -38,13 +38,11 @@ const MIN_VIEWPORT_SIZE = 400;
 
 export function MapView({
   mapData,
-  onAnimationChange,
   onTerritoryPress,
   selectedTerritoryId,
   territoryStates,
 }: {
   mapData: GeneratedMapData;
-  onAnimationChange: (isAnimating: boolean) => void;
   onTerritoryPress: (territoryId: string) => void;
   selectedTerritoryId: string | null;
   territoryStates: Record<string, TerritoryState>;
@@ -68,7 +66,6 @@ export function MapView({
   function setIsAnimating(nextIsAnimating: boolean) {
     isAnimatingRef.current = nextIsAnimating;
     setIsAnimatingState(nextIsAnimating);
-    onAnimationChange(nextIsAnimating);
   }
 
   function viewportPoint(clientX: number, clientY: number) {
@@ -192,24 +189,17 @@ export function MapView({
   }
 
   function startFocusAnimation(targetViewport: MapViewport) {
-    if (animationFrameRef.current !== null) {
-      window.cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
+    stopFocusAnimation();
 
     const startViewport = viewportRef.current;
     const duration = focusAnimationDuration(startViewport, targetViewport);
-    pointersRef.current.clear();
 
     if (duration === 0) {
-      suppressClickRef.current = false;
       setViewport(targetViewport);
-      setIsAnimating(false);
       return;
     }
 
     const startTime = performance.now();
-    suppressClickRef.current = true;
     setIsAnimating(true);
 
     // Ease the visible viewBox into the selected territory bounds.
@@ -229,6 +219,17 @@ export function MapView({
     }
 
     animationFrameRef.current = window.requestAnimationFrame(step);
+  }
+
+  function stopFocusAnimation() {
+    if (animationFrameRef.current !== null) {
+      window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    pointersRef.current.clear();
+    suppressClickRef.current = false;
+    setIsAnimating(false);
   }
 
   function orderedPointers() {
@@ -271,7 +272,15 @@ export function MapView({
     const previousSelectedTerritoryId = previousSelectedTerritoryIdRef.current;
     previousSelectedTerritoryIdRef.current = selectedTerritoryId;
 
-    if (!selectedTerritoryId || selectedTerritoryId === previousSelectedTerritoryId) {
+    if (!selectedTerritoryId) {
+      if (previousSelectedTerritoryId || isAnimatingRef.current) {
+        stopFocusAnimation();
+      }
+
+      return;
+    }
+
+    if (selectedTerritoryId === previousSelectedTerritoryId) {
       return;
     }
 
@@ -296,9 +305,8 @@ export function MapView({
         window.cancelAnimationFrame(animationFrameRef.current);
       }
 
-      onAnimationChange(false);
     };
-  }, [onAnimationChange]);
+  }, []);
 
   return (
     <div className="map-shell">
@@ -328,7 +336,8 @@ export function MapView({
           <StaticMapInk ink={mapData.staticInk} />
           <TroopMarkerLayer />
           <HitTargetLayer
-            isClickSuppressed={() => isAnimatingRef.current || suppressClickRef.current}
+            isClickSuppressed={() => suppressClickRef.current}
+            isImmediatePress={() => isAnimatingRef.current}
             mapData={mapData}
             onTerritoryPress={onTerritoryPress}
           />

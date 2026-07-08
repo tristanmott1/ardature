@@ -13,7 +13,6 @@ import type { MapSkin } from "./map/mapTypes";
 
 function App() {
   const [territoryStates, setTerritoryStates] = useState<TerritoryStates>(() => createInitialTerritoryStates());
-  const [isMapAnimating, setIsMapAnimating] = useState(false);
   const selectedId = selectedTerritoryId(territoryStates);
   const selectedState = selectedId ? territoryStates[selectedId] : null;
   const selectedTerritory = useMemo(
@@ -22,18 +21,10 @@ function App() {
   );
 
   function handleTerritoryPress(territoryId: string) {
-    if (isMapAnimating) {
-      return;
-    }
-
     setTerritoryStates((current) => pressTerritory(current, territoryId));
   }
 
   function handleSkinSelect(skin: MapSkin) {
-    if (isMapAnimating) {
-      return;
-    }
-
     setTerritoryStates((current) => setSelectedTerritorySkin(current, skin));
   }
 
@@ -41,14 +32,12 @@ function App() {
     <main className="app-shell" data-selected-territory={selectedId ?? ""}>
       <SkinPicker
         mapData={generatedMapData}
-        disabled={isMapAnimating}
         onSelectSkin={handleSkinSelect}
         selectedState={selectedState}
         selectedTerritory={selectedTerritory}
       />
       <MapView
         mapData={generatedMapData}
-        onAnimationChange={setIsMapAnimating}
         onTerritoryPress={handleTerritoryPress}
         selectedTerritoryId={selectedId}
         territoryStates={territoryStates}

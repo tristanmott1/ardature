@@ -107,6 +107,8 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("data-map-animating"), "Map view exposes animation state.");
   assert(mapViewSource.includes("focusAnimationDuration"), "Map view uses adaptive focus duration.");
   assert(mapViewSource.includes("easeInOutCubic"), "Map view eases focus animation.");
+  assert(!appSource.includes("isMapAnimating"), "App does not globally lock game input during camera animation.");
+  assert(!mapViewSource.includes("isAnimatingRef.current || suppressClickRef.current"), "Map animation does not suppress territory hits.");
 }
 
 async function clickTerritory(page, territoryId) {
@@ -121,6 +123,23 @@ async function clickTerritory(page, territoryId) {
   }, territoryId);
 }
 
+async function pressTerritory(page, territoryId) {
+  await page.evaluate((id) => {
+    const target = document.querySelector(`[data-territory-hit="${id}"]`);
+
+    if (!target) {
+      throw new Error(`Missing hit target ${id}.`);
+    }
+
+    target.dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 0,
+      clientY: 0,
+    }));
+  }, territoryId);
+}
+
 async function viewBox(page) {
   const value = await page.locator(".map-svg").getAttribute("viewBox");
 
@@ -129,6 +148,22 @@ async function viewBox(page) {
   }
 
   return value;
+}
+
+async function waitForTerritoryState(page, territoryId, state) {
+  await page.waitForFunction(
+    ({ id, expectedState }) =>
+      document.querySelector(`[data-territory-fill="${id}"]`)?.getAttribute("data-territory-fill-state") === expectedState,
+    { id: territoryId, expectedState: state },
+  );
+}
+
+async function waitForTerritorySkin(page, territoryId, skin) {
+  await page.waitForFunction(
+    ({ id, expectedSkin }) =>
+      document.querySelector(`[data-territory-fill="${id}"]`)?.getAttribute("data-territory-skin") === expectedSkin,
+    { id: territoryId, expectedSkin: skin },
+  );
 }
 
 async function runMapChecks(page) {
@@ -148,54 +183,51 @@ async function runMapChecks(page) {
   console.log("Checking selection");
   const initialViewBox = await viewBox(page);
   await clickTerritory(page, "shire");
-  await page.waitForSelector('[data-territory-fill="shire"][data-territory-fill-state="selected"]');
+  await waitForTerritoryState(page, "shire", "selected");
   await page.waitForSelector('.map-svg[data-map-animating="true"]');
   assert((await page.locator("[data-skin-picker]").count()) === 1, "Selecting a territory shows the skin picker.");
-  await page.waitForFunction(() => document.querySelector('[data-skin-option="blue"]')?.disabled === true);
-  assert(await page.getByRole("button", { name: "blue" }).isDisabled(), "Skin swatches are disabled during focus animation.");
-  await clickTerritory(page, "bree");
-  assert(
-    (await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1,
-    "Clicking another territory during focus animation is ignored.",
-  );
-  await page.evaluate(() => {
-    const swatch = document.querySelector('[data-skin-option="blue"]');
+  assert(!(await page.getByRole("button", { name: "blue" }).isDisabled()), "Skin swatches stay enabled during focus animation.");
+  await page.getByRole("button", { name: "blue" }).click();
+  await waitForTerritorySkin(page, "shire", "blue");
 
-    if (!swatch) {
-      throw new Error("Missing blue skin swatch.");
-    }
-
-    swatch.click();
-  });
+  await pressTerritory(page, "bree");
+  await waitForTerritoryState(page, "bree", "selected");
   assert(
-    (await page.locator('[data-territory-fill="shire"][data-territory-skin="background"][data-territory-fill-state="selected"]').count()) === 1,
-    "Skin picker clicks during focus animation are ignored.",
+    (await page.locator('[data-territory-fill="shire"][data-territory-fill-state="unselected"]').count()) === 1,
+    "Clicking another territory during focus animation changes selection.",
   );
   await page.waitForSelector('.map-svg[data-map-animating="false"]');
-  const focusedViewBox = await viewBox(page);
-  assert(initialViewBox !== focusedViewBox, "Selecting a territory changes the map viewBox.");
+  const breeFocusedViewBox = await viewBox(page);
+  assert(initialViewBox !== breeFocusedViewBox, "Selecting a territory changes the map viewBox.");
 
-  await page.getByRole("button", { name: "blue" }).click();
-  await page.waitForSelector('[data-territory-fill="shire"][data-territory-skin="blue"][data-territory-fill-state="selected"]');
-
-  await clickTerritory(page, "shire");
-  await page.waitForSelector('[data-territory-fill="shire"][data-territory-fill-state="unselected"]');
+  await clickTerritory(page, "bree");
+  await waitForTerritoryState(page, "bree", "unselected");
   assert((await page.locator("[data-skin-picker]").count()) === 0, "Clicking a selected territory hides the skin picker.");
   await page.waitForTimeout(120);
-  assert((await viewBox(page)) === focusedViewBox, "Unselecting a territory does not change the viewBox.");
+  assert((await viewBox(page)) === breeFocusedViewBox, "Unselecting a territory does not change the viewBox.");
 
-  await clickTerritory(page, "shire");
-  await page.waitForSelector('[data-territory-fill="shire"][data-territory-fill-state="selected"]');
+  await clickTerritory(page, "bree");
+  await waitForTerritoryState(page, "bree", "selected");
   await page.waitForTimeout(80);
-  assert((await viewBox(page)) === focusedViewBox, "Selecting an already-focused territory keeps the current viewBox.");
+  assert((await viewBox(page)) === breeFocusedViewBox, "Selecting an already-focused territory keeps the current viewBox.");
   assert(
     (await page.locator('.map-svg[data-map-animating="false"]').count()) === 1,
     "Selecting an already-focused territory does not require an animation lock.",
   );
   assert(!(await page.getByRole("button", { name: "blue" }).isDisabled()), "Skin swatches stay enabled after instant focus.");
 
+  await clickTerritory(page, "bree");
+  await waitForTerritoryState(page, "bree", "unselected");
+
   await clickTerritory(page, "shire");
-  await page.waitForSelector('[data-territory-fill="shire"][data-territory-fill-state="unselected"]');
+  await waitForTerritoryState(page, "shire", "selected");
+  await page.waitForSelector('.map-svg[data-map-animating="true"]');
+  await pressTerritory(page, "shire");
+  await waitForTerritoryState(page, "shire", "unselected");
+  await page.waitForSelector('.map-svg[data-map-animating="false"]');
+  const canceledViewBox = await viewBox(page);
+  await page.waitForTimeout(160);
+  assert((await viewBox(page)) === canceledViewBox, "Unselecting during focus animation stops the camera where it is.");
 
   console.log("Checking pan and zoom");
   const box = await page.locator(".map-svg").boundingBox();

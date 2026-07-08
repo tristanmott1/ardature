@@ -50,15 +50,19 @@ Focus movement is distance-based. If the current view is already nearly identica
 
 Unselecting a territory does not move the camera.
 
-During a focus animation, all app input is locked:
+During a focus animation, territory and skin interactions remain active:
 
-- territory presses are ignored
-- skin swatches are disabled
+- pressing a different territory redirects the focus animation to that territory
+- pressing the selected territory unselects it and stops the focus animation where it is
+- choosing a skin updates the selected territory without interrupting the focus animation
+
+Manual camera gestures are locked while the focus animation runs:
+
 - pointer panning is ignored
 - pinch zooming is ignored
 - wheel or trackpad zooming is ignored
 
-After the animation finishes, the user can pan and zoom normally from the focused view.
+After the animation finishes or is canceled, the user can pan and zoom normally from the current view.
 
 ## Skin Picker
 
