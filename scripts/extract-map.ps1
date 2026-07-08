@@ -1,19 +1,26 @@
 param(
-  [string]$InputImage = "maps/source/territory-boundaries.jpeg",
+  [string]$InputImage = "maps/source/territories-drawing.jpeg",
   [string]$TerritoryKey = "maps/territory-key.md",
   [string]$OutputJson = "maps/geometry/map.json",
-  [string]$PreviewBaseImage = "maps/source/middle-earth-reference.jpg",
-  [string]$PreviewSvg = "maps/previews/territories.svg",
+  [string]$PreviewDirectory = "maps/previews",
+  [string]$PreviewBackgroundColor = "#EFE9D9",
+  [string]$LandmarkImage = "maps/source/landmark-drawing.jpeg",
+  [string]$LandmarkOutlineImage = "maps/source/landmark-outline-drawing.jpeg",
+  [string]$LandmarkSvg = "maps/previews/landmarks.svg",
   [int]$MinRed = 150,
   [int]$RedDominance = 45,
   [int]$MinBlue = 120,
   [int]$BlueDominance = 35,
-  [int]$RegionBarrierDilateRadius = 1,
+  [int]$RegionBarrierDilateRadius = 3,
   [int]$TerritoryBarrierDilateRadius = 2,
   [int]$MinComponentArea = 100,
   [int]$MapScale = 10,
-  [int]$SmoothPasses = 2,
-  [double]$SimplifyTolerance = 1.5
+  [int]$SmoothPasses = 1,
+  [double]$SimplifyTolerance = 1.0,
+  [int]$LandmarkMaxBrightness = 190,
+  [int]$LandmarkMinComponentArea = 4,
+  [double]$LandmarkSimplifyTolerance = 0.75,
+  [int]$LandmarkOutlineDilateRadius = 2
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,11 +28,14 @@ $ErrorActionPreference = "Stop"
 $inputPath = (Resolve-Path $InputImage).Path
 $territoryKeyPath = (Resolve-Path $TerritoryKey).Path
 $jsonPath = Join-Path (Get-Location) $OutputJson
-$previewBasePath = (Resolve-Path $PreviewBaseImage).Path
-$previewSvgPath = Join-Path (Get-Location) $PreviewSvg
+$previewDirectoryPath = Join-Path (Get-Location) $PreviewDirectory
+$landmarkPath = (Resolve-Path $LandmarkImage).Path
+$landmarkOutlinePath = (Resolve-Path $LandmarkOutlineImage).Path
+$landmarkSvgPath = Join-Path (Get-Location) $LandmarkSvg
 
 New-Item -ItemType Directory -Force -Path (Split-Path $jsonPath) | Out-Null
-New-Item -ItemType Directory -Force -Path (Split-Path $previewSvgPath) | Out-Null
+New-Item -ItemType Directory -Force -Path $previewDirectoryPath | Out-Null
+New-Item -ItemType Directory -Force -Path (Split-Path $landmarkSvgPath) | Out-Null
 
 $code = @'
 using System;
@@ -105,7 +115,6 @@ public static class MapExtractor
     {
         public string Id;
         public string Name;
-        public string Color;
         public string[] TerritoryIds;
     }
 
@@ -144,6 +153,25 @@ public static class MapExtractor
         public List<Segment> Segments = new List<Segment>();
     }
 
+    class LandmarkLayer
+    {
+        public string Id;
+        public string Name;
+        public string Fill;
+        public bool[] Mask;
+        public List<List<PointD>> Paths;
+    }
+
+    class PreviewTheme
+    {
+        public string Id;
+        public string SolidColor;
+        public double Hue;
+        public double Saturation;
+        public double Lightest;
+        public double Darkest;
+    }
+
     class PathPiece
     {
         public string BorderId;
@@ -171,19 +199,20 @@ public static class MapExtractor
 
     static readonly RegionSeed[] RegionSeeds = new RegionSeed[]
     {
-        new RegionSeed { Id = "eriador", Name = "Eriador", X = 365, Y = 335 },
-        new RegionSeed { Id = "rhovanion", Name = "Rhovanion", X = 640, Y = 360 },
-        new RegionSeed { Id = "rhun", Name = "Rhun", X = 1015, Y = 315 },
-        new RegionSeed { Id = "rohan", Name = "Rohan", X = 675, Y = 620 },
-        new RegionSeed { Id = "mordor", Name = "Mordor", X = 1010, Y = 700 },
-        new RegionSeed { Id = "gondor", Name = "Gondor", X = 610, Y = 675 }
+        new RegionSeed { Id = "eriador", Name = "Eriador", X = 440, Y = 410 },
+        new RegionSeed { Id = "rhovanion", Name = "Rhovanion", X = 890, Y = 390 },
+        new RegionSeed { Id = "rhun", Name = "Rhun", X = 1280, Y = 420 },
+        new RegionSeed { Id = "rohan", Name = "Rohan", X = 820, Y = 715 },
+        new RegionSeed { Id = "mordor", Name = "Mordor", X = 1270, Y = 900 },
+        new RegionSeed { Id = "gondor", Name = "Gondor", X = 710, Y = 900 }
     };
 
     static readonly BackgroundSeed[] BackgroundSeeds = new BackgroundSeed[]
     {
-        new BackgroundSeed { Id = "background-ocean", Name = "Ocean", X = 202, Y = 563 },
-        new BackgroundSeed { Id = "background-north-east", Name = "North East Background", X = 954, Y = 56 },
-        new BackgroundSeed { Id = "background-north-bay", Name = "North Bay Background", X = 281, Y = 21 }
+        new BackgroundSeed { Id = "background-ocean", Name = "Ocean", X = 85, Y = 1020 },
+        new BackgroundSeed { Id = "background-north-east", Name = "North East Background", X = 1510, Y = 45 },
+        new BackgroundSeed { Id = "background-north-bay", Name = "North Bay Background", X = 380, Y = 22 },
+        new BackgroundSeed { Id = "background-ocean", Name = "Ocean", X = 1435, Y = 1050 }
     };
 
     static readonly RegionConfig[] RegionConfigs = new RegionConfig[]
@@ -192,7 +221,6 @@ public static class MapExtractor
         {
             Id = "eriador",
             Name = "Eriador",
-            Color = "#88c37c",
             TerritoryIds = new string[]
             {
                 "forlond", "harlindon", "grey-havens", "shire", "north-downs", "ettenmoors",
@@ -203,39 +231,34 @@ public static class MapExtractor
         {
             Id = "rhovanion",
             Name = "Rhovanion",
-            Color = "#d8b365",
             TerritoryIds = new string[]
             {
                 "greylin", "caradhras", "moria", "lorien", "gladden-fields",
-                "dol-guldur", "mirkwood", "emyn-muil", "dagorlad"
+                "dol-guldur", "woodland-realm", "emyn-muil", "dead-marshes"
             }
         },
         new RegionConfig
         {
             Id = "rhun",
             Name = "Rhun",
-            Color = "#d77a7a",
-            TerritoryIds = new string[] { "erebor", "dale", "iron-hills", "dor-cuarthol", "sea-of-rhun", "dorwinion" }
+            TerritoryIds = new string[] { "erebor", "iron-hills", "sea-of-rhun", "dorwinion", "brown-lands", "dagorlad" }
         },
         new RegionConfig
         {
             Id = "rohan",
             Name = "Rohan",
-            Color = "#c8c25d",
             TerritoryIds = new string[] { "westfold", "edoras", "emnet", "eastfold" }
         },
         new RegionConfig
         {
             Id = "mordor",
             Name = "Mordor",
-            Color = "#9b7bbd",
-            TerritoryIds = new string[] { "udun", "barad-dur", "minas-morgul", "nurn" }
+            TerritoryIds = new string[] { "udun", "lithlad", "minas-morgul", "nurn" }
         },
         new RegionConfig
         {
             Id = "gondor",
             Name = "Gondor",
-            Color = "#7da9d6",
             TerritoryIds = new string[]
             {
                 "druwaith-iaur", "andrast", "anfalas", "lamedon",
@@ -244,63 +267,84 @@ public static class MapExtractor
         }
     };
 
+    const double ShadeEastWeight = 0.65;
+    const double ShadeSouthWeight = 0.35;
+    const double ShadeJitterAmount = 0.12;
+    const double ShadeContrastThreshold = 0.01;
+    const double ShadeUniquenessThreshold = 0.0105;
+    const double TerritoryFillBleedStrokeWidth = 12;
+
+    static readonly PreviewTheme[] PreviewThemes = new PreviewTheme[]
+    {
+        new PreviewTheme { Id = "blue", Hue = 184, Saturation = 0.42, Lightest = 0.88, Darkest = 0.50 },
+        new PreviewTheme { Id = "green", Hue = 132, Saturation = 0.40, Lightest = 0.84, Darkest = 0.48 },
+        new PreviewTheme { Id = "red", Hue = 356, Saturation = 0.55, Lightest = 0.80, Darkest = 0.42 },
+        new PreviewTheme { Id = "yellow", Hue = 48, Saturation = 0.55, Lightest = 0.92, Darkest = 0.58 },
+        new PreviewTheme { Id = "black", Hue = 0, Saturation = 0, Lightest = 0.84, Darkest = 0.42 },
+        new PreviewTheme { Id = "purple", Hue = 276, Saturation = 0.55, Lightest = 0.87, Darkest = 0.48 },
+        new PreviewTheme { Id = "background", SolidColor = "#EFE9D9" }
+    };
+
     static readonly TerritorySeed[] TerritorySeeds = new TerritorySeed[]
     {
-        new TerritorySeed { Id = "forlond", Name = "Forlond", RegionId = "eriador", X = 105, Y = 145 },
-        new TerritorySeed { Id = "harlindon", Name = "Harlindon", RegionId = "eriador", X = 155, Y = 310 },
-        new TerritorySeed { Id = "grey-havens", Name = "Grey Havens", RegionId = "eriador", X = 245, Y = 175 },
-        new TerritorySeed { Id = "shire", Name = "Shire", RegionId = "eriador", X = 285, Y = 305 },
-        new TerritorySeed { Id = "north-downs", Name = "North Downs", RegionId = "eriador", X = 366, Y = 74 },
-        new TerritorySeed { Id = "ettenmoors", Name = "Ettenmoors", RegionId = "eriador", X = 529, Y = 92 },
-        new TerritorySeed { Id = "bree", Name = "Bree", RegionId = "eriador", X = 415, Y = 280 },
-        new TerritorySeed { Id = "rivendell", Name = "Rivendell", RegionId = "eriador", X = 545, Y = 220 },
-        new TerritorySeed { Id = "minhiriath", Name = "Minhiriath", RegionId = "eriador", X = 330, Y = 420 },
-        new TerritorySeed { Id = "swanfleet", Name = "Swanfleet", RegionId = "eriador", X = 505, Y = 385 },
-        new TerritorySeed { Id = "enedwaith", Name = "Enedwaith", RegionId = "eriador", X = 445, Y = 515 },
-        new TerritorySeed { Id = "isengard", Name = "Isengard", RegionId = "eriador", X = 565, Y = 510 },
+        new TerritorySeed { Id = "forlond", Name = "Forlond", RegionId = "eriador", X = 165, Y = 150 },
+        new TerritorySeed { Id = "grey-havens", Name = "Grey Havens", RegionId = "eriador", X = 270, Y = 225 },
+        new TerritorySeed { Id = "harlindon", Name = "Harlindon", RegionId = "eriador", X = 170, Y = 435 },
+        new TerritorySeed { Id = "shire", Name = "Shire", RegionId = "eriador", X = 335, Y = 405 },
+        new TerritorySeed { Id = "bree", Name = "Bree", RegionId = "eriador", X = 500, Y = 310 },
+        new TerritorySeed { Id = "north-downs", Name = "North Downs", RegionId = "eriador", X = 430, Y = 135 },
+        new TerritorySeed { Id = "ettenmoors", Name = "Ettenmoors", RegionId = "eriador", X = 610, Y = 155 },
+        new TerritorySeed { Id = "rivendell", Name = "Rivendell", RegionId = "eriador", X = 760, Y = 255 },
+        new TerritorySeed { Id = "minhiriath", Name = "Minhiriath", RegionId = "eriador", X = 410, Y = 540 },
+        new TerritorySeed { Id = "swanfleet", Name = "Swanfleet", RegionId = "eriador", X = 705, Y = 430 },
+        new TerritorySeed { Id = "enedwaith", Name = "Enedwaith", RegionId = "eriador", X = 505, Y = 650 },
+        new TerritorySeed { Id = "isengard", Name = "Isengard", RegionId = "eriador", X = 665, Y = 660 },
 
-        new TerritorySeed { Id = "greylin", Name = "Greylin", RegionId = "rhovanion", X = 675, Y = 95 },
-        new TerritorySeed { Id = "caradhras", Name = "Caradhras", RegionId = "rhovanion", X = 675, Y = 215 },
-        new TerritorySeed { Id = "moria", Name = "Moria", RegionId = "rhovanion", X = 655, Y = 325 },
-        new TerritorySeed { Id = "lorien", Name = "Lorien", RegionId = "rhovanion", X = 625, Y = 445 },
-        new TerritorySeed { Id = "gladden-fields", Name = "Gladden Fields", RegionId = "rhovanion", X = 735, Y = 265 },
-        new TerritorySeed { Id = "dol-guldur", Name = "Dol Guldur", RegionId = "rhovanion", X = 725, Y = 375 },
-        new TerritorySeed { Id = "mirkwood", Name = "Mirkwood", RegionId = "rhovanion", X = 825, Y = 260 },
-        new TerritorySeed { Id = "emyn-muil", Name = "Emyn Muil", RegionId = "rhovanion", X = 760, Y = 475 },
-        new TerritorySeed { Id = "dagorlad", Name = "Dagorlad", RegionId = "rhovanion", X = 845, Y = 475 },
+        new TerritorySeed { Id = "greylin", Name = "Greylin", RegionId = "rhovanion", X = 845, Y = 160 },
+        new TerritorySeed { Id = "caradhras", Name = "Caradhras", RegionId = "rhovanion", X = 835, Y = 250 },
+        new TerritorySeed { Id = "woodland-realm", Name = "Woodland Realm", RegionId = "rhovanion", X = 990, Y = 235 },
+        new TerritorySeed { Id = "gladden-fields", Name = "Gladden Fields", RegionId = "rhovanion", X = 985, Y = 320 },
+        new TerritorySeed { Id = "lorien", Name = "Lorien", RegionId = "rhovanion", X = 825, Y = 430 },
+        new TerritorySeed { Id = "dol-guldur", Name = "Dol Guldur", RegionId = "rhovanion", X = 1035, Y = 420 },
+        new TerritorySeed { Id = "emyn-muil", Name = "Emyn Muil", RegionId = "rhovanion", X = 970, Y = 620 },
+        new TerritorySeed { Id = "dead-marshes", Name = "Dead Marshes", RegionId = "rhovanion", X = 1000, Y = 735 },
+        new TerritorySeed { Id = "moria", Name = "Moria", RegionId = "rhovanion", X = 770, Y = 440 },
 
-        new TerritorySeed { Id = "erebor", Name = "Erebor", RegionId = "rhun", X = 925, Y = 155 },
-        new TerritorySeed { Id = "dale", Name = "Dale", RegionId = "rhun", X = 950, Y = 275 },
-        new TerritorySeed { Id = "iron-hills", Name = "Iron Hills", RegionId = "rhun", X = 1100, Y = 180 },
-        new TerritorySeed { Id = "dor-cuarthol", Name = "Dor Cuarthol", RegionId = "rhun", X = 1060, Y = 365 },
-        new TerritorySeed { Id = "sea-of-rhun", Name = "Sea of Rhun", RegionId = "rhun", X = 1135, Y = 430 },
-        new TerritorySeed { Id = "dorwinion", Name = "Dorwinion", RegionId = "rhun", X = 965, Y = 440 },
+        new TerritorySeed { Id = "erebor", Name = "Erebor", RegionId = "rhun", X = 1135, Y = 210 },
+        new TerritorySeed { Id = "iron-hills", Name = "Iron Hills", RegionId = "rhun", X = 1325, Y = 260 },
+        new TerritorySeed { Id = "sea-of-rhun", Name = "Sea of Rhun", RegionId = "rhun", X = 1420, Y = 520 },
+        new TerritorySeed { Id = "dorwinion", Name = "Dorwinion", RegionId = "rhun", X = 1340, Y = 520 },
+        new TerritorySeed { Id = "brown-lands", Name = "Brown Lands", RegionId = "rhun", X = 1130, Y = 330 },
+        new TerritorySeed { Id = "dagorlad", Name = "Dagorlad", RegionId = "rhun", X = 1285, Y = 675 },
 
-        new TerritorySeed { Id = "westfold", Name = "Westfold", RegionId = "rohan", X = 590, Y = 490 },
-        new TerritorySeed { Id = "edoras", Name = "Edoras", RegionId = "rohan", X = 618, Y = 557 },
-        new TerritorySeed { Id = "emnet", Name = "Emnet", RegionId = "rohan", X = 695, Y = 502 },
-        new TerritorySeed { Id = "eastfold", Name = "Eastfold", RegionId = "rohan", X = 722, Y = 596 },
+        new TerritorySeed { Id = "westfold", Name = "Westfold", RegionId = "rohan", X = 735, Y = 650 },
+        new TerritorySeed { Id = "emnet", Name = "Emnet", RegionId = "rohan", X = 900, Y = 680 },
+        new TerritorySeed { Id = "edoras", Name = "Edoras", RegionId = "rohan", X = 690, Y = 830 },
+        new TerritorySeed { Id = "eastfold", Name = "Eastfold", RegionId = "rohan", X = 900, Y = 785 },
 
-        new TerritorySeed { Id = "udun", Name = "Udun", RegionId = "mordor", X = 910, Y = 620 },
-        new TerritorySeed { Id = "barad-dur", Name = "Barad-dur", RegionId = "mordor", X = 1080, Y = 620 },
-        new TerritorySeed { Id = "minas-morgul", Name = "Minas Morgul", RegionId = "mordor", X = 935, Y = 715 },
-        new TerritorySeed { Id = "nurn", Name = "Nurn", RegionId = "mordor", X = 1110, Y = 725 },
+        new TerritorySeed { Id = "udun", Name = "Udun", RegionId = "mordor", X = 1110, Y = 770 },
+        new TerritorySeed { Id = "lithlad", Name = "Lithlad", RegionId = "mordor", X = 1450, Y = 825 },
+        new TerritorySeed { Id = "minas-morgul", Name = "Minas Morgul", RegionId = "mordor", X = 1115, Y = 910 },
+        new TerritorySeed { Id = "nurn", Name = "Nurn", RegionId = "mordor", X = 1320, Y = 940 },
 
-        new TerritorySeed { Id = "druwaith-iaur", Name = "Druwaith Iaur", RegionId = "gondor", X = 441, Y = 570 },
-        new TerritorySeed { Id = "andrast", Name = "Andrast", RegionId = "gondor", X = 374, Y = 668 },
-        new TerritorySeed { Id = "anfalas", Name = "Anfalas", RegionId = "gondor", X = 465, Y = 646 },
-        new TerritorySeed { Id = "lamedon", Name = "Lamedon", RegionId = "gondor", X = 573, Y = 631 },
-        new TerritorySeed { Id = "belfalas", Name = "Belfalas", RegionId = "gondor", X = 679, Y = 683 },
-        new TerritorySeed { Id = "south-gondor", Name = "South Gondor", RegionId = "gondor", X = 781, Y = 761 },
-        new TerritorySeed { Id = "minas-tirith", Name = "Minas Tirith", RegionId = "gondor", X = 809, Y = 648 }
+        new TerritorySeed { Id = "druwaith-iaur", Name = "Druwaith Iaur", RegionId = "gondor", X = 560, Y = 765 },
+        new TerritorySeed { Id = "andrast", Name = "Andrast", RegionId = "gondor", X = 445, Y = 850 },
+        new TerritorySeed { Id = "anfalas", Name = "Anfalas", RegionId = "gondor", X = 615, Y = 850 },
+        new TerritorySeed { Id = "lamedon", Name = "Lamedon", RegionId = "gondor", X = 755, Y = 880 },
+        new TerritorySeed { Id = "belfalas", Name = "Belfalas", RegionId = "gondor", X = 865, Y = 910 },
+        new TerritorySeed { Id = "minas-tirith", Name = "Minas Tirith", RegionId = "gondor", X = 1045, Y = 895 },
+        new TerritorySeed { Id = "south-gondor", Name = "South Gondor", RegionId = "gondor", X = 1035, Y = 1065 }
     };
 
     public static void Extract(
         string inputImage,
         string territoryKey,
         string outputJson,
-        string previewBaseImage,
-        string previewSvg,
+        string previewDirectory,
+        string previewBackgroundColor,
+        string landmarkImage,
+        string landmarkOutlineImage,
+        string landmarkSvg,
         int minRed,
         int redDominance,
         int minBlue,
@@ -310,7 +354,11 @@ public static class MapExtractor
         int minComponentArea,
         int mapScale,
         int smoothPasses,
-        double simplifyTolerance)
+        double simplifyTolerance,
+        int landmarkMaxBrightness,
+        int landmarkMinComponentArea,
+        double landmarkSimplifyTolerance,
+        int landmarkOutlineDilateRadius)
     {
         if (mapScale <= 0)
         {
@@ -325,6 +373,35 @@ public static class MapExtractor
         if (simplifyTolerance < 0)
         {
             throw new InvalidOperationException("Simplify tolerance cannot be negative.");
+        }
+
+        if (landmarkMaxBrightness < 0 || landmarkMaxBrightness > 255)
+        {
+            throw new InvalidOperationException("Landmark max brightness must be between 0 and 255.");
+        }
+
+        if (landmarkMinComponentArea < 0)
+        {
+            throw new InvalidOperationException("Landmark minimum component area cannot be negative.");
+        }
+
+        if (landmarkSimplifyTolerance < 0)
+        {
+            throw new InvalidOperationException("Landmark simplify tolerance cannot be negative.");
+        }
+
+        if (landmarkOutlineDilateRadius < 0)
+        {
+            throw new InvalidOperationException("Landmark outline dilate radius cannot be negative.");
+        }
+
+        try
+        {
+            ColorTranslator.FromHtml(previewBackgroundColor);
+        }
+        catch
+        {
+            throw new InvalidOperationException("Preview background color must be a valid HTML color.");
         }
 
         Dictionary<string, TerritoryKeyEntry> keyEntries = ReadTerritoryKey(territoryKey);
@@ -366,8 +443,23 @@ public static class MapExtractor
             AttachBorderIds(territories, borders);
             ValidateBorders(territories, borders, keyEntries, width * mapScale, height * mapScale);
 
-            WriteMapJson(outputJson, inputImage, territoryKey, width, height, mapScale, territories, borders);
-            WriteTerritoriesSvg(previewSvg, previewBaseImage, width, height, mapScale, territories, borders);
+            LandmarkLayer landmarks = ExtractLandmarks(
+                landmarkImage,
+                landmarkOutlineImage,
+                width,
+                height,
+                mapScale,
+                minBlue,
+                blueDominance,
+                landmarkOutlineDilateRadius,
+                landmarkMaxBrightness,
+                landmarkMinComponentArea,
+                landmarkSimplifyTolerance);
+            ValidateLandmarks(landmarks, width * mapScale, height * mapScale);
+
+            WriteMapJson(outputJson, inputImage, territoryKey, landmarkImage, landmarkOutlineImage, width, height, mapScale, territories, borders, landmarks);
+            WriteLandmarkSvg(landmarkSvg, width, height, mapScale, landmarks);
+            WriteTerritoryThemeSvgs(previewDirectory, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks);
 
             Console.WriteLine("Image: " + width.ToString(CultureInfo.InvariantCulture) + "x" + height.ToString(CultureInfo.InvariantCulture));
             Console.WriteLine("Map units: " + (width * mapScale).ToString(CultureInfo.InvariantCulture) + "x" + (height * mapScale).ToString(CultureInfo.InvariantCulture));
@@ -377,7 +469,8 @@ public static class MapExtractor
             Console.WriteLine("Background territories: " + territories.Values.Count(t => !t.Playable).ToString(CultureInfo.InvariantCulture));
             Console.WriteLine("Borders: " + borders.Count.ToString(CultureInfo.InvariantCulture));
             Console.WriteLine("Map JSON: " + outputJson);
-            Console.WriteLine("Territories preview: " + previewSvg);
+            Console.WriteLine("Landmarks overlay: " + landmarkSvg);
+            Console.WriteLine("Territory previews: " + previewDirectory);
         }
     }
 
@@ -475,6 +568,12 @@ public static class MapExtractor
         ComponentResult components = RelabelFromLabels(initialComponents.Labels, width, height);
         if (components.Areas.Count != BackgroundSeeds.Length)
         {
+            List<ComponentStats> stats = CalculateComponentStats(components.Labels, components.Areas, width);
+            foreach (ComponentStats component in stats.OrderBy(s => s.CentroidY).ThenBy(s => s.CentroidX))
+            {
+                Console.WriteLine("Background component " + component.Label.ToString(CultureInfo.InvariantCulture) + " area " + component.Area.ToString(CultureInfo.InvariantCulture) + " centroid " + component.CentroidX.ToString("0.0", CultureInfo.InvariantCulture) + "," + component.CentroidY.ToString("0.0", CultureInfo.InvariantCulture));
+            }
+
             throw new InvalidOperationException("Expected " + BackgroundSeeds.Length.ToString(CultureInfo.InvariantCulture) + " background components but found " + components.Areas.Count.ToString(CultureInfo.InvariantCulture) + ".");
         }
 
@@ -530,6 +629,7 @@ public static class MapExtractor
     {
         Dictionary<int, string> result = new Dictionary<int, string>();
         HashSet<int> usedLabels = new HashSet<int>();
+        Dictionary<int, string> labelOwners = new Dictionary<int, string>();
         HashSet<string> expected = new HashSet<string>(region.TerritoryIds);
         List<TerritorySeed> regionSeeds = TerritorySeeds.Where(s => s.RegionId == region.Id).ToList();
 
@@ -548,10 +648,13 @@ public static class MapExtractor
 
             if (usedLabels.Contains(label))
             {
-                throw new InvalidOperationException("Territory seed " + seed.Id + " maps to a component already used by another territory.");
+                ComponentStats component = stats.First(s => s.Label == label);
+                string centroid = component.CentroidX.ToString("0.0", CultureInfo.InvariantCulture) + "," + component.CentroidY.ToString("0.0", CultureInfo.InvariantCulture);
+                throw new InvalidOperationException("Territory seed " + seed.Id + " maps to a component already used by " + labelOwners[label] + " at " + centroid + ".");
             }
 
             usedLabels.Add(label);
+            labelOwners[label] = seed.Id;
             result[label] = seed.Id;
         }
 
@@ -1268,6 +1371,45 @@ public static class MapExtractor
         return result;
     }
 
+    static bool[] DetectBlue(Bitmap bitmap, int minBlue, int blueDominance)
+    {
+        int width = bitmap.Width;
+        int height = bitmap.Height;
+        bool[] result = new bool[width * height];
+
+        BitmapData data = bitmap.LockBits(
+            new Rectangle(0, 0, width, height),
+            ImageLockMode.ReadOnly,
+            PixelFormat.Format24bppRgb);
+
+        try
+        {
+            int stride = data.Stride;
+            int byteCount = Math.Abs(stride) * height;
+            byte[] bytes = new byte[byteCount];
+            System.Runtime.InteropServices.Marshal.Copy(data.Scan0, bytes, 0, byteCount);
+
+            for (int y = 0; y < height; y++)
+            {
+                int row = y * stride;
+                for (int x = 0; x < width; x++)
+                {
+                    int offset = row + x * 3;
+                    int b = bytes[offset];
+                    int g = bytes[offset + 1];
+                    int r = bytes[offset + 2];
+                    result[y * width + x] = IsBlue(r, g, b, minBlue, blueDominance);
+                }
+            }
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
+
+        return result;
+    }
+
     static bool[] DetectRedOrBlue(Bitmap bitmap, int minRed, int redDominance, int minBlue, int blueDominance)
     {
         int width = bitmap.Width;
@@ -1880,6 +2022,40 @@ public static class MapExtractor
         }
     }
 
+    static void ValidateLandmarks(LandmarkLayer landmarks, int mapWidth, int mapHeight)
+    {
+        ValidateLandmarkLayer(landmarks, mapWidth, mapHeight);
+    }
+
+    static void ValidateLandmarkLayer(LandmarkLayer layer, int mapWidth, int mapHeight)
+    {
+        if (layer.Paths.Count == 0)
+        {
+            throw new InvalidOperationException("Landmark layer has no paths: " + layer.Id + ".");
+        }
+
+        foreach (List<PointD> path in layer.Paths)
+        {
+            if (path.Count < 3)
+            {
+                throw new InvalidOperationException("Landmark path is too short: " + layer.Id + ".");
+            }
+
+            foreach (PointD point in path)
+            {
+                if (Double.IsNaN(point.X) || Double.IsNaN(point.Y) || Double.IsInfinity(point.X) || Double.IsInfinity(point.Y))
+                {
+                    throw new InvalidOperationException("Landmark has an invalid coordinate: " + layer.Id + ".");
+                }
+
+                if (point.X < 0 || point.Y < 0 || point.X > mapWidth || point.Y > mapHeight)
+                {
+                    throw new InvalidOperationException("Landmark coordinate is outside the map: " + layer.Id + ".");
+                }
+            }
+        }
+    }
+
     static int RegionSortKey(string id)
     {
         switch (id)
@@ -1916,7 +2092,7 @@ public static class MapExtractor
         return 2000;
     }
 
-    static void WriteMapJson(string outputJson, string inputImage, string territoryKey, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders)
+    static void WriteMapJson(string outputJson, string inputImage, string territoryKey, string landmarkImage, string landmarkOutlineImage, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks)
     {
         int mapWidth = width * mapScale;
         int mapHeight = height * mapScale;
@@ -1925,7 +2101,9 @@ public static class MapExtractor
         builder.AppendLine("  \"schema\": \"ardature.map.v1\",");
         builder.AppendLine("  \"source\": {");
         builder.AppendLine("    \"boundaryDrawing\": " + JsonString(RepoPath(inputImage)) + ",");
-        builder.AppendLine("    \"territoryKey\": " + JsonString(RepoPath(territoryKey)));
+        builder.AppendLine("    \"territoryKey\": " + JsonString(RepoPath(territoryKey)) + ",");
+        builder.AppendLine("    \"landmarkDrawing\": " + JsonString(RepoPath(landmarkImage)) + ",");
+        builder.AppendLine("    \"landmarkOutlineDrawing\": " + JsonString(RepoPath(landmarkOutlineImage)));
         builder.AppendLine("  },");
         builder.AppendLine("  \"coordinateSystem\": {");
         builder.AppendLine("    \"origin\": \"top-left\",");
@@ -1945,7 +2123,7 @@ public static class MapExtractor
             WriteRegionJson(builder, region.Id, region.Name, true, region.TerritoryIds, territories, false);
         }
 
-        WriteRegionJson(builder, "background", "Background", false, BackgroundSeeds.Select(s => s.Id).ToArray(), territories, true);
+        WriteRegionJson(builder, "background", "Background", false, BackgroundSeeds.Select(s => s.Id).Distinct().ToArray(), territories, true);
         builder.AppendLine("  ],");
         builder.AppendLine("  \"borders\": [");
 
@@ -1954,7 +2132,12 @@ public static class MapExtractor
             WriteBorderJson(builder, borders[i], i == borders.Count - 1);
         }
 
-        builder.AppendLine("  ]");
+        builder.AppendLine("  ],");
+        builder.AppendLine("  \"landmarks\": {");
+        builder.AppendLine("    \"name\": " + JsonString(landmarks.Name) + ",");
+        builder.AppendLine("    \"fill\": " + JsonString(landmarks.Fill) + ",");
+        builder.AppendLine("    \"paths\": " + PathsJson(landmarks.Paths));
+        builder.AppendLine("  }");
         builder.AppendLine("}");
 
         File.WriteAllText(outputJson, builder.ToString(), new UTF8Encoding(false));
@@ -2034,41 +2217,532 @@ public static class MapExtractor
         return builder.ToString();
     }
 
-    static void WriteTerritoriesSvg(string outputSvg, string previewBaseImage, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders)
+    static LandmarkLayer ExtractLandmarks(
+        string landmarkImage,
+        string landmarkOutlineImage,
+        int width,
+        int height,
+        int mapScale,
+        int minBlue,
+        int blueDominance,
+        int outlineDilateRadius,
+        int maxBrightness,
+        int minComponentArea,
+        double simplifyTolerance)
+    {
+        using (var landmarkBitmap = new Bitmap(landmarkImage))
+        using (var outlineBitmap = new Bitmap(landmarkOutlineImage))
+        {
+            if (landmarkBitmap.Width != width || landmarkBitmap.Height != height)
+            {
+                throw new InvalidOperationException("Landmark image size must match the territory boundary image.");
+            }
+
+            if (outlineBitmap.Width != width || outlineBitmap.Height != height)
+            {
+                throw new InvalidOperationException("Landmark outline image size must match the territory boundary image.");
+            }
+
+            // The outline drawing defines masks; the landmark drawing defines the ink.
+            bool[] ink = DetectDark(landmarkBitmap, maxBrightness);
+            bool[] outline = DetectBlue(outlineBitmap, minBlue, blueDominance);
+            bool[] mask = BuildOutlineMask(outline, width, height, outlineDilateRadius, "landmark");
+            return ExtractLandmarkLayer("landmarks", "Landmarks", "#111111", ink, mask, width, height, mapScale, minComponentArea, simplifyTolerance);
+        }
+    }
+
+    static LandmarkLayer ExtractLandmarkLayer(string id, string name, string fill, bool[] ink, bool[] mask, int width, int height, int mapScale, int minComponentArea, double simplifyTolerance)
+    {
+        bool[] maskedInk = new bool[ink.Length];
+        for (int i = 0; i < maskedInk.Length; i++)
+        {
+            maskedInk[i] = ink[i] && mask[i];
+        }
+
+        // Clean the clipped ink and trace only the remaining landmark shapes.
+        bool[] cleanedInk = RemoveTinyInkComponents(maskedInk, width, height, minComponentArea);
+        List<List<PointI>> rawPaths = TraceInkPaths(cleanedInk, width, height);
+        List<List<PointD>> paths = FinalizePaths(rawPaths, mapScale, 0, simplifyTolerance);
+
+        if (paths.Count == 0)
+        {
+            throw new InvalidOperationException("No " + id + " ink paths were found.");
+        }
+
+        return new LandmarkLayer
+        {
+            Id = id,
+            Name = name,
+            Fill = fill,
+            Mask = mask,
+            Paths = paths
+        };
+    }
+
+    static bool[] BuildOutlineMask(bool[] outline, int width, int height, int dilateRadius, string name)
+    {
+        bool[] barrier = Dilate(outline, width, height, dilateRadius);
+        bool[] outside = new bool[outline.Length];
+        Queue<int> queue = new Queue<int>();
+
+        // Flood from the page edge; anything not reached is inside an outline.
+        for (int x = 0; x < width; x++)
+        {
+            EnqueueOutside(x, barrier, outside, queue);
+            EnqueueOutside((height - 1) * width + x, barrier, outside, queue);
+        }
+
+        for (int y = 0; y < height; y++)
+        {
+            EnqueueOutside(y * width, barrier, outside, queue);
+            EnqueueOutside(y * width + width - 1, barrier, outside, queue);
+        }
+
+        while (queue.Count > 0)
+        {
+            int index = queue.Dequeue();
+            int x = index % width;
+            int y = index / width;
+
+            for (int i = 0; i < 4; i++)
+            {
+                int nx = x + DirX[i];
+                int ny = y + DirY[i];
+                if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+                {
+                    continue;
+                }
+
+                EnqueueOutside(ny * width + nx, barrier, outside, queue);
+            }
+        }
+
+        bool[] mask = new bool[outline.Length];
+        int area = 0;
+        for (int i = 0; i < mask.Length; i++)
+        {
+            mask[i] = !outside[i];
+            if (mask[i])
+            {
+                area++;
+            }
+        }
+
+        if (area == 0)
+        {
+            throw new InvalidOperationException("No " + name + " landmark mask was found.");
+        }
+
+        if (area > width * height * 0.65)
+        {
+            throw new InvalidOperationException("The " + name + " landmark mask appears to leak outside its outline.");
+        }
+
+        return mask;
+    }
+
+    static void EnqueueOutside(int index, bool[] barrier, bool[] outside, Queue<int> queue)
+    {
+        if (barrier[index] || outside[index])
+        {
+            return;
+        }
+
+        outside[index] = true;
+        queue.Enqueue(index);
+    }
+
+    static void WriteLandmarkSvg(string outputSvg, int width, int height, int mapScale, LandmarkLayer layer)
     {
         int mapWidth = width * mapScale;
         int mapHeight = height * mapScale;
-        string href = RelativePath(Path.GetDirectoryName(outputSvg), previewBaseImage).Replace('\\', '/');
+        StringBuilder builder = new StringBuilder();
+
+        builder.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        builder.AppendLine("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + width.ToString(CultureInfo.InvariantCulture) + "\" height=\"" + height.ToString(CultureInfo.InvariantCulture) + "\" viewBox=\"0 0 " + mapWidth.ToString(CultureInfo.InvariantCulture) + " " + mapHeight.ToString(CultureInfo.InvariantCulture) + "\">");
+        builder.AppendLine("  <path d=\"" + SvgCompoundPath(layer.Paths) + "\" fill=\"" + layer.Fill + "\" fill-opacity=\"0.82\" fill-rule=\"evenodd\"/>");
+        builder.AppendLine("</svg>");
+
+        File.WriteAllText(outputSvg, builder.ToString(), new UTF8Encoding(false));
+    }
+
+    static bool[] DetectDark(Bitmap bitmap, int maxBrightness)
+    {
+        int width = bitmap.Width;
+        int height = bitmap.Height;
+        bool[] result = new bool[width * height];
+
+        BitmapData data = bitmap.LockBits(
+            new Rectangle(0, 0, width, height),
+            ImageLockMode.ReadOnly,
+            PixelFormat.Format24bppRgb);
+
+        try
+        {
+            int stride = data.Stride;
+            int byteCount = Math.Abs(stride) * height;
+            byte[] bytes = new byte[byteCount];
+            System.Runtime.InteropServices.Marshal.Copy(data.Scan0, bytes, 0, byteCount);
+
+            for (int y = 0; y < height; y++)
+            {
+                int row = y * stride;
+                for (int x = 0; x < width; x++)
+                {
+                    int offset = row + x * 3;
+                    int b = bytes[offset];
+                    int g = bytes[offset + 1];
+                    int r = bytes[offset + 2];
+                    result[y * width + x] = ((r + g + b) / 3) <= maxBrightness;
+                }
+            }
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
+
+        return result;
+    }
+
+    static bool[] RemoveTinyInkComponents(bool[] ink, int width, int height, int minComponentArea)
+    {
+        bool[] barrier = new bool[ink.Length];
+        for (int i = 0; i < ink.Length; i++)
+        {
+            barrier[i] = !ink[i];
+        }
+
+        ComponentResult components = LabelComponents(barrier, width, height);
+        RemoveTinyComponents(components.Labels, components.Areas, minComponentArea);
+
+        bool[] result = new bool[ink.Length];
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = components.Labels[i] >= 0;
+        }
+
+        return result;
+    }
+
+    static List<List<PointI>> TraceInkPaths(bool[] ink, int width, int height)
+    {
+        List<Segment> segments = new List<Segment>();
+
+        // Add the outside edge of every final ink pixel.
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (!ink[y * width + x])
+                {
+                    continue;
+                }
+
+                if (x == 0 || !ink[y * width + x - 1])
+                {
+                    segments.Add(new Segment(new PointI(x, y), new PointI(x, y + 1)));
+                }
+
+                if (x == width - 1 || !ink[y * width + x + 1])
+                {
+                    segments.Add(new Segment(new PointI(x + 1, y), new PointI(x + 1, y + 1)));
+                }
+
+                if (y == 0 || !ink[(y - 1) * width + x])
+                {
+                    segments.Add(new Segment(new PointI(x, y), new PointI(x + 1, y)));
+                }
+
+                if (y == height - 1 || !ink[(y + 1) * width + x])
+                {
+                    segments.Add(new Segment(new PointI(x, y + 1), new PointI(x + 1, y + 1)));
+                }
+            }
+        }
+
+        return TraceBorderPaths(segments);
+    }
+
+    static void WriteTerritoryThemeSvgs(string previewDirectory, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks)
+    {
+        Dictionary<string, double> shadeValues = BuildTerritoryShadeValues(territories, borders, width, height);
+        DeleteStaleTerritoriesPreview(previewDirectory);
+
+        foreach (PreviewTheme theme in PreviewThemes)
+        {
+            string outputSvg = Path.Combine(previewDirectory, "territories-" + theme.Id + ".svg");
+            WriteTerritoriesSvg(outputSvg, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks, theme, shadeValues);
+        }
+    }
+
+    static void DeleteStaleTerritoriesPreview(string previewDirectory)
+    {
+        string oldPreview = Path.Combine(previewDirectory, "territories.svg");
+        if (File.Exists(oldPreview))
+        {
+            File.Delete(oldPreview);
+        }
+    }
+
+    static void WriteTerritoriesSvg(string outputSvg, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks, PreviewTheme theme, Dictionary<string, double> shadeValues)
+    {
+        int mapWidth = width * mapScale;
+        int mapHeight = height * mapScale;
         Dictionary<string, BorderInfo> borderById = borders.ToDictionary(border => border.Id);
         StringBuilder builder = new StringBuilder();
 
         builder.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
         builder.AppendLine("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + width.ToString(CultureInfo.InvariantCulture) + "\" height=\"" + height.ToString(CultureInfo.InvariantCulture) + "\" viewBox=\"0 0 " + mapWidth.ToString(CultureInfo.InvariantCulture) + " " + mapHeight.ToString(CultureInfo.InvariantCulture) + "\">");
-        builder.AppendLine("  <rect x=\"0\" y=\"0\" width=\"" + mapWidth.ToString(CultureInfo.InvariantCulture) + "\" height=\"" + mapHeight.ToString(CultureInfo.InvariantCulture) + "\" fill=\"#f8f6ec\"/>");
-        builder.AppendLine("  <image href=\"" + href + "\" x=\"0\" y=\"0\" width=\"" + mapWidth.ToString(CultureInfo.InvariantCulture) + "\" height=\"" + mapHeight.ToString(CultureInfo.InvariantCulture) + "\" opacity=\"0.36\"/>");
+        builder.AppendLine("  <rect x=\"0\" y=\"0\" width=\"" + mapWidth.ToString(CultureInfo.InvariantCulture) + "\" height=\"" + mapHeight.ToString(CultureInfo.InvariantCulture) + "\" fill=\"" + previewBackgroundColor + "\"/>");
 
         foreach (TerritoryInfo territory in territories.Values.Where(t => t.Playable).OrderBy(t => TerritorySortKey(t.Id)))
         {
-            string color = ColorForTerritory(territory);
+            string color = ColorForTheme(theme, shadeValues[territory.Id]);
             foreach (List<PointD> loop in BuildTerritoryLoops(territory, borderById))
             {
                 if (loop.Count >= 3)
                 {
-                    builder.AppendLine("  <path d=\"" + SvgPath(loop, true) + "\" fill=\"" + color + "\" fill-opacity=\"0.46\" stroke=\"none\"/>");
+                    builder.AppendLine("  <path d=\"" + SvgPath(loop, true) + "\" fill=\"" + color + "\" stroke=\"" + color + "\" stroke-width=\"" + PointNumber(TerritoryFillBleedStrokeWidth) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
                 }
             }
         }
 
-        foreach (BorderInfo border in borders)
+        WritePreviewBorderStrokes(builder, territories, borders, landmarks.Mask, width, height, mapScale);
+        builder.AppendLine("  <path d=\"" + SvgCompoundPath(landmarks.Paths) + "\" fill=\"" + landmarks.Fill + "\" fill-opacity=\"0.82\" fill-rule=\"evenodd\"/>");
+        builder.AppendLine("</svg>");
+        File.WriteAllText(outputSvg, builder.ToString(), new UTF8Encoding(false));
+    }
+
+    static Dictionary<string, double> BuildTerritoryShadeValues(Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, int width, int height)
+    {
+        Dictionary<string, double> baseValues = new Dictionary<string, double>();
+        Dictionary<string, double> values = new Dictionary<string, double>();
+
+        // Build the first pass from west-to-east first, then north-to-south.
+        foreach (TerritoryInfo territory in territories.Values.Where(t => t.Playable))
         {
-            foreach (List<PointD> path in border.Paths)
+            TerritorySeed seed = TerritorySeeds.First(s => s.Id == territory.Id);
+            double east = seed.X / (double)Math.Max(1, width - 1);
+            double south = seed.Y / (double)Math.Max(1, height - 1);
+            double jitter = (DeterministicUnit(territory.Id) - 0.5) * ShadeJitterAmount;
+            double value = Clamp01((east * ShadeEastWeight) + (south * ShadeSouthWeight) + jitter);
+            baseValues[territory.Id] = value;
+            values[territory.Id] = value;
+        }
+
+        List<BorderInfo> playableBorders = borders
+            .Where(border => territories[border.TerritoryIds[0]].Playable && territories[border.TerritoryIds[1]].Playable)
+            .OrderBy(border => border.Id, StringComparer.Ordinal)
+            .ToList();
+
+        ApplyShadeContrast(values, baseValues, playableBorders);
+        EnforceUniqueShadeValues(values);
+        ApplyShadeContrast(values, baseValues, playableBorders);
+        EnforceUniqueShadeValues(values);
+        ValidateShadeContrast(values, playableBorders);
+        ValidateUniqueShadeValues(values);
+        return values;
+    }
+
+    static void ApplyShadeContrast(Dictionary<string, double> values, Dictionary<string, double> baseValues, List<BorderInfo> playableBorders)
+    {
+        // Push adjacent territory shades apart while preserving the broad map gradient.
+        for (int pass = 0; pass < 300; pass++)
+        {
+            bool changed = false;
+            foreach (BorderInfo border in playableBorders)
             {
-                builder.AppendLine("  <path d=\"" + SvgPath(path, false) + "\" fill=\"none\" stroke=\"#1f2933\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\" vector-effect=\"non-scaling-stroke\"/>");
+                string first = border.TerritoryIds[0];
+                string second = border.TerritoryIds[1];
+                double diff = Math.Abs(values[first] - values[second]);
+                if (diff >= ShadeContrastThreshold)
+                {
+                    continue;
+                }
+
+                bool firstIsLighter = values[first] < values[second] ||
+                    (values[first] == values[second] && baseValues[first] <= baseValues[second]);
+                double push = ((ShadeContrastThreshold - diff) / 2.0) + 0.002;
+                if (firstIsLighter)
+                {
+                    values[first] = Clamp01(values[first] - push);
+                    values[second] = Clamp01(values[second] + push);
+                }
+                else
+                {
+                    values[first] = Clamp01(values[first] + push);
+                    values[second] = Clamp01(values[second] - push);
+                }
+
+                changed = true;
+            }
+
+            if (!changed)
+            {
+                break;
+            }
+        }
+    }
+
+    static void ValidateShadeContrast(Dictionary<string, double> shadeValues, List<BorderInfo> playableBorders)
+    {
+        List<string> failures = new List<string>();
+        foreach (BorderInfo border in playableBorders)
+        {
+            double diff = Math.Abs(shadeValues[border.TerritoryIds[0]] - shadeValues[border.TerritoryIds[1]]);
+            if (diff + 0.000001 < ShadeContrastThreshold)
+            {
+                failures.Add(border.Id + " (" + PointNumber(diff) + ")");
             }
         }
 
-        builder.AppendLine("</svg>");
-        File.WriteAllText(outputSvg, builder.ToString(), new UTF8Encoding(false));
+        if (failures.Count > 0)
+        {
+            throw new InvalidOperationException("Adjacent territory shades are too similar: " + String.Join(", ", failures.ToArray()) + ".");
+        }
+    }
+
+    static void EnforceUniqueShadeValues(Dictionary<string, double> shadeValues)
+    {
+        List<string> ids = shadeValues.Keys
+            .OrderBy(id => shadeValues[id])
+            .ThenBy(id => id, StringComparer.Ordinal)
+            .ToList();
+
+        for (int i = 0; i < ids.Count; i++)
+        {
+            string id = ids[i];
+            double minimum = i == 0 ? 0 : shadeValues[ids[i - 1]] + ShadeUniquenessThreshold;
+            double maximum = 1.0 - ((ids.Count - 1 - i) * ShadeUniquenessThreshold);
+            shadeValues[id] = ClampRange(shadeValues[id], minimum, maximum);
+        }
+    }
+
+    static void ValidateUniqueShadeValues(Dictionary<string, double> shadeValues)
+    {
+        List<string> ids = shadeValues.Keys
+            .OrderBy(id => shadeValues[id])
+            .ThenBy(id => id, StringComparer.Ordinal)
+            .ToList();
+
+        for (int i = 1; i < ids.Count; i++)
+        {
+            double diff = shadeValues[ids[i]] - shadeValues[ids[i - 1]];
+            if (diff + 0.000001 < ShadeUniquenessThreshold)
+            {
+                throw new InvalidOperationException("Territory shades are not unique enough: " + ids[i - 1] + " and " + ids[i] + ".");
+            }
+        }
+    }
+
+    static void WritePreviewBorderStrokes(StringBuilder builder, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, bool[] hiddenMask, int width, int height, int mapScale)
+    {
+        foreach (BorderInfo border in borders.OrderBy(border => border.Id, StringComparer.Ordinal))
+        {
+            if (!ShouldDrawPreviewBorder(border, territories))
+            {
+                continue;
+            }
+
+            foreach (List<PointD> path in SplitVisibleBorderPaths(border.Paths, hiddenMask, width, height, mapScale))
+            {
+                if (path.Count >= 2)
+                {
+                    builder.AppendLine("  <path d=\"" + SvgPath(path, false) + "\" fill=\"none\" stroke=\"#111111\" stroke-opacity=\"0.72\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+                }
+            }
+        }
+    }
+
+    static bool ShouldDrawPreviewBorder(BorderInfo border, Dictionary<string, TerritoryInfo> territories)
+    {
+        TerritoryInfo first = territories[border.TerritoryIds[0]];
+        TerritoryInfo second = territories[border.TerritoryIds[1]];
+        if (first.Playable != second.Playable)
+        {
+            return true;
+        }
+
+        return border.IsPlayableConnection;
+    }
+
+    static List<List<PointD>> SplitVisibleBorderPaths(List<List<PointD>> paths, bool[] hiddenMask, int width, int height, int mapScale)
+    {
+        List<List<PointD>> result = new List<List<PointD>>();
+
+        // Sample smoothed paths so preview strokes can stop inside landmark masks.
+        foreach (List<PointD> path in paths)
+        {
+            List<PointD> current = null;
+            for (int i = 0; i < path.Count - 1; i++)
+            {
+                PointD a = path[i];
+                PointD b = path[i + 1];
+                double distance = Math.Sqrt(DistanceSquared(a.X, a.Y, b.X, b.Y));
+                int steps = Math.Max(1, (int)Math.Ceiling(distance / Math.Max(1.0, mapScale / 2.0)));
+
+                for (int step = 0; step <= steps; step++)
+                {
+                    if (i > 0 && step == 0)
+                    {
+                        continue;
+                    }
+
+                    double t = (double)step / steps;
+                    PointD point = new PointD(a.X + ((b.X - a.X) * t), a.Y + ((b.Y - a.Y) * t));
+                    if (IsPointHidden(point, hiddenMask, width, height, mapScale))
+                    {
+                        AddVisibleBorderPath(result, current);
+                        current = null;
+                        continue;
+                    }
+
+                    if (current == null)
+                    {
+                        current = new List<PointD>();
+                    }
+
+                    current.Add(point);
+                }
+            }
+
+            AddVisibleBorderPath(result, current);
+        }
+
+        return result;
+    }
+
+    static void AddVisibleBorderPath(List<List<PointD>> paths, List<PointD> path)
+    {
+        if (path == null || path.Count < 2)
+        {
+            return;
+        }
+
+        paths.Add(path);
+    }
+
+    static bool IsPointHidden(PointD point, bool[] hiddenMask, int width, int height, int mapScale)
+    {
+        int x = ClampIndex((int)Math.Floor(point.X / mapScale), width);
+        int y = ClampIndex((int)Math.Floor(point.Y / mapScale), height);
+        return hiddenMask[y * width + x];
+    }
+
+    static int ClampIndex(int value, int length)
+    {
+        if (value < 0)
+        {
+            return 0;
+        }
+
+        if (value >= length)
+        {
+            return length - 1;
+        }
+
+        return value;
     }
 
     static List<List<PointD>> BuildTerritoryLoops(TerritoryInfo territory, Dictionary<string, BorderInfo> borderById)
@@ -2193,6 +2867,23 @@ public static class MapExtractor
         return result;
     }
 
+    static string SvgCompoundPath(List<List<PointD>> paths)
+    {
+        StringBuilder builder = new StringBuilder();
+
+        for (int i = 0; i < paths.Count; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(" ");
+            }
+
+            builder.Append(SvgPath(paths[i], true));
+        }
+
+        return builder.ToString();
+    }
+
     static string SvgPath(List<PointD> points, bool close)
     {
         StringBuilder builder = new StringBuilder();
@@ -2212,16 +2903,121 @@ public static class MapExtractor
         return builder.ToString();
     }
 
-    static string ColorForTerritory(TerritoryInfo territory)
+    static string ColorForTheme(PreviewTheme theme, double shadeValue)
     {
-        RegionConfig region = RegionConfigs.First(config => config.Id == territory.RegionId);
-        Color baseColor = ColorTranslator.FromHtml(region.Color);
-        int order = TerritorySortKey(territory.Id);
-        double factor = 0.86 + ((order % 5) * 0.07);
-        int red = ClampColor(baseColor.R * factor);
-        int green = ClampColor(baseColor.G * factor);
-        int blue = ClampColor(baseColor.B * factor);
-        return ColorTranslator.ToHtml(Color.FromArgb(red, green, blue));
+        if (!String.IsNullOrEmpty(theme.SolidColor))
+        {
+            return theme.SolidColor;
+        }
+
+        double lightness = theme.Lightest - (Clamp01(shadeValue) * (theme.Lightest - theme.Darkest));
+        Color color = ColorFromHsl(theme.Hue, theme.Saturation, lightness);
+        return ColorTranslator.ToHtml(color);
+    }
+
+    static Color ColorFromHsl(double hue, double saturation, double lightness)
+    {
+        double h = ((hue % 360) + 360) % 360 / 360.0;
+        double r;
+        double g;
+        double b;
+
+        if (saturation == 0)
+        {
+            r = lightness;
+            g = lightness;
+            b = lightness;
+        }
+        else
+        {
+            double q = lightness < 0.5
+                ? lightness * (1.0 + saturation)
+                : lightness + saturation - (lightness * saturation);
+            double p = (2.0 * lightness) - q;
+            r = HueToRgb(p, q, h + (1.0 / 3.0));
+            g = HueToRgb(p, q, h);
+            b = HueToRgb(p, q, h - (1.0 / 3.0));
+        }
+
+        int red = ClampColor(r * 255.0);
+        int green = ClampColor(g * 255.0);
+        int blue = ClampColor(b * 255.0);
+        return Color.FromArgb(red, green, blue);
+    }
+
+    static double HueToRgb(double p, double q, double t)
+    {
+        if (t < 0)
+        {
+            t += 1;
+        }
+
+        if (t > 1)
+        {
+            t -= 1;
+        }
+
+        if (t < 1.0 / 6.0)
+        {
+            return p + ((q - p) * 6.0 * t);
+        }
+
+        if (t < 1.0 / 2.0)
+        {
+            return q;
+        }
+
+        if (t < 2.0 / 3.0)
+        {
+            return p + ((q - p) * ((2.0 / 3.0) - t) * 6.0);
+        }
+
+        return p;
+    }
+
+    static double DeterministicUnit(string value)
+    {
+        unchecked
+        {
+            uint hash = 2166136261;
+            foreach (char character in value)
+            {
+                hash ^= character;
+                hash *= 16777619;
+            }
+
+            return (hash % 10000) / 9999.0;
+        }
+    }
+
+    static double Clamp01(double value)
+    {
+        if (value < 0)
+        {
+            return 0;
+        }
+
+        if (value > 1)
+        {
+            return 1;
+        }
+
+        return value;
+    }
+
+    static double ClampRange(double value, double minimum, double maximum)
+    {
+        if (value < minimum)
+        {
+            return minimum;
+        }
+
+        if (value > maximum)
+        {
+            return maximum;
+        }
+
+        return value;
     }
 
     static string PointNumber(double value)
@@ -2300,8 +3096,11 @@ Add-Type -TypeDefinition $code -ReferencedAssemblies "System.Drawing.dll"
   $inputPath,
   $territoryKeyPath,
   $jsonPath,
-  $previewBasePath,
-  $previewSvgPath,
+  $previewDirectoryPath,
+  $PreviewBackgroundColor,
+  $landmarkPath,
+  $landmarkOutlinePath,
+  $landmarkSvgPath,
   $MinRed,
   $RedDominance,
   $MinBlue,
@@ -2311,4 +3110,8 @@ Add-Type -TypeDefinition $code -ReferencedAssemblies "System.Drawing.dll"
   $MinComponentArea,
   $MapScale,
   $SmoothPasses,
-  $SimplifyTolerance)
+  $SimplifyTolerance,
+  $LandmarkMaxBrightness,
+  $LandmarkMinComponentArea,
+  $LandmarkSimplifyTolerance,
+  $LandmarkOutlineDilateRadius)
