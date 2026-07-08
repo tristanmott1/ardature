@@ -19,11 +19,19 @@ export type MapPoint = {
   y: number;
 };
 
+export type MapBounds = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
 export type GeneratedTerritoryData = {
   id: string;
   name: string;
   regionId: string;
   center: MapPoint;
+  focusBounds: MapBounds;
   fillPaths: readonly string[];
   hitPaths: readonly string[];
   skins: Record<MapSkin, string>;

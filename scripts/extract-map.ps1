@@ -165,6 +165,14 @@ public static class MapExtractor
         public List<List<PointD>> Paths;
     }
 
+    class BoundsD
+    {
+        public double MinX;
+        public double MinY;
+        public double MaxX;
+        public double MaxY;
+    }
+
     class PreviewTheme
     {
         public string Id;
@@ -276,6 +284,7 @@ public static class MapExtractor
     const double ShadeContrastThreshold = 0.01;
     const double ShadeUniquenessThreshold = 0.0105;
     const double TerritoryFillBleedStrokeWidth = 12;
+    const double AppFocusPadding = 100;
 
     static readonly PreviewTheme[] PreviewThemes = new PreviewTheme[]
     {
@@ -2540,21 +2549,27 @@ public static class MapExtractor
     static void WriteAppTerritoryData(StringBuilder builder, TerritoryInfo territory, Dictionary<string, BorderInfo> borderById, Dictionary<string, double> shadeValues, int mapScale, bool last)
     {
         TerritorySeed seed = TerritorySeeds.First(s => s.Id == territory.Id);
-        List<string> fillPaths = BuildTerritoryLoops(territory, borderById)
+        List<List<PointD>> loops = BuildTerritoryLoops(territory, borderById)
             .Where(loop => loop.Count >= 3)
+            .ToList();
+        List<string> fillPaths = loops
             .Select(loop => SvgPath(loop, true))
             .ToList();
+        BoundsD focusBounds = BuildFocusBounds(loops, AppFocusPadding);
 
         if (fillPaths.Count == 0)
         {
             throw new InvalidOperationException("Territory " + territory.Id + " has no fill paths for app data.");
         }
 
+        ValidateFocusBounds(territory, focusBounds);
+
         builder.AppendLine("    {");
         builder.AppendLine("      id: " + JsonString(territory.Id) + ",");
         builder.AppendLine("      name: " + JsonString(territory.Name) + ",");
         builder.AppendLine("      regionId: " + JsonString(territory.RegionId) + ",");
         builder.AppendLine("      center: { x: " + (seed.X * mapScale).ToString(CultureInfo.InvariantCulture) + ", y: " + (seed.Y * mapScale).ToString(CultureInfo.InvariantCulture) + " },");
+        builder.AppendLine("      focusBounds: " + BoundsTs(focusBounds) + ",");
         builder.AppendLine("      fillPaths: " + StringArrayTs(fillPaths.ToArray(), "        ", "      ") + ",");
         builder.AppendLine("      hitPaths: " + StringArrayTs(fillPaths.ToArray(), "        ", "      ") + ",");
         builder.AppendLine("      skins: {");
@@ -2568,6 +2583,62 @@ public static class MapExtractor
 
         builder.AppendLine("      }");
         builder.AppendLine("    }" + (last ? "" : ","));
+    }
+
+    static BoundsD BuildFocusBounds(List<List<PointD>> loops, double padding)
+    {
+        BoundsD bounds = new BoundsD
+        {
+            MinX = Double.PositiveInfinity,
+            MinY = Double.PositiveInfinity,
+            MaxX = Double.NegativeInfinity,
+            MaxY = Double.NegativeInfinity
+        };
+
+        // Measure the canonical fill loops, then add a small focus margin.
+        foreach (List<PointD> loop in loops)
+        {
+            foreach (PointD point in loop)
+            {
+                bounds.MinX = Math.Min(bounds.MinX, point.X);
+                bounds.MinY = Math.Min(bounds.MinY, point.Y);
+                bounds.MaxX = Math.Max(bounds.MaxX, point.X);
+                bounds.MaxY = Math.Max(bounds.MaxY, point.Y);
+            }
+        }
+
+        bounds.MinX -= padding;
+        bounds.MinY -= padding;
+        bounds.MaxX += padding;
+        bounds.MaxY += padding;
+        return bounds;
+    }
+
+    static void ValidateFocusBounds(TerritoryInfo territory, BoundsD bounds)
+    {
+        if (
+            Double.IsNaN(bounds.MinX) ||
+            Double.IsNaN(bounds.MinY) ||
+            Double.IsNaN(bounds.MaxX) ||
+            Double.IsNaN(bounds.MaxY) ||
+            Double.IsInfinity(bounds.MinX) ||
+            Double.IsInfinity(bounds.MinY) ||
+            Double.IsInfinity(bounds.MaxX) ||
+            Double.IsInfinity(bounds.MaxY) ||
+            bounds.MaxX <= bounds.MinX ||
+            bounds.MaxY <= bounds.MinY)
+        {
+            throw new InvalidOperationException("Territory " + territory.Id + " has invalid focus bounds.");
+        }
+    }
+
+    static string BoundsTs(BoundsD bounds)
+    {
+        return "{ minX: " + PointNumber(bounds.MinX) +
+            ", minY: " + PointNumber(bounds.MinY) +
+            ", maxX: " + PointNumber(bounds.MaxX) +
+            ", maxY: " + PointNumber(bounds.MaxY) +
+            " }";
     }
 
     static List<string> BuildPreviewBorderPathStrings(Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, bool[] hiddenMask, int width, int height, int mapScale)

@@ -22,6 +22,10 @@ export function HitTargetLayer({
             }
           }}
           onKeyDown={(event) => {
+            if (isClickSuppressed?.()) {
+              return;
+            }
+
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
               onTerritoryPress(territory.id);

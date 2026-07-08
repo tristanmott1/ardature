@@ -23,7 +23,7 @@ All source drawings currently use the same `1600x1131` coordinate space.
 - `previews/territories-black.svg`: gray-to-charcoal territory preview generated from the extracted map model.
 - `previews/territories-purple.svg`: softened electric-purple territory preview generated from the extracted map model.
 - `previews/territories-background.svg`: flat background-color territory preview generated from the extracted map model.
-- `../src/map/generated/mapData.ts`: app-ready TypeScript map data generated from the same extracted map model.
+- `../src/map/generated/mapData.ts`: app-ready TypeScript map data generated from the same extracted map model, including territory centers and selected-camera focus bounds.
 
 The territory previews use a flat `#EFE9D9` background, solid territory fills, masked physical border strokes, and the landmark overlay.
 
@@ -35,7 +35,7 @@ powershell -ExecutionPolicy Bypass -File scripts\extract-map.ps1
 
 The map extractor validates that the output has 6 playable regions plus 1 background region, 42 playable territories plus 3 background territories, one territory assignment for every source pixel, canonical border objects referenced by exactly two territories, and non-empty landmark geometry.
 
-The extractor also writes `src/map/generated/mapData.ts` for the PWA. That file is generated and should not be manually edited.
+The extractor also writes `src/map/generated/mapData.ts` for the PWA. That file includes territory focus bounds generated from canonical fill loops with 100 map units of padding. It is generated and should not be manually edited.
 
 By default, the extractor simplifies traced borders with a 1.0-pixel source tolerance, scales the source drawing by 10, then applies one smoothing pass before writing geometry. The source image still controls topology; the generated JSON is the mathematical model used by the app.
 

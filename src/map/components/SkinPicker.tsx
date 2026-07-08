@@ -2,11 +2,13 @@ import type { CSSProperties } from "react";
 import type { GeneratedMapData, GeneratedTerritoryData, MapSkin, TerritoryState } from "../mapTypes";
 
 export function SkinPicker({
+  disabled,
   mapData,
   onSelectSkin,
   selectedState,
   selectedTerritory,
 }: {
+  disabled?: boolean;
   mapData: GeneratedMapData;
   onSelectSkin: (skin: MapSkin) => void;
   selectedState: TerritoryState | null;
@@ -17,7 +19,7 @@ export function SkinPicker({
   }
 
   return (
-    <div className="skin-picker" data-skin-picker="true">
+    <div className="skin-picker" data-skin-picker="true" data-skin-picker-disabled={disabled ? "true" : "false"}>
       {mapData.skins.map((skin) => {
         const color = selectedTerritory.skins[skin];
 
@@ -26,6 +28,7 @@ export function SkinPicker({
             aria-label={skin}
             className={selectedState.skin === skin ? "skin-swatch selected" : "skin-swatch"}
             data-skin-option={skin}
+            disabled={disabled}
             key={skin}
             onClick={() => onSelectSkin(skin)}
             style={{ "--skin-color": color } as CSSProperties}

@@ -95,8 +95,16 @@ async function runSourceChecks() {
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
   assert(!mapDataSource.includes("Infinity"), "Generated map data has no Infinity values.");
   assert((mapDataSource.match(/id: "/g) ?? []).length === 42, "Generated app data has 42 playable territories.");
+  const focusBounds = [...mapDataSource.matchAll(/focusBounds: \{ minX: ([^,]+), minY: ([^,]+), maxX: ([^,]+), maxY: ([^ }]+) \}/g)];
+  assert(focusBounds.length === 42, "Generated app data has 42 focus bounds.");
+  for (const match of focusBounds) {
+    const values = match.slice(1).map(Number);
+    assert(values.every(Number.isFinite), "Generated focus bounds are finite.");
+    assert(values[2] > values[0] && values[3] > values[1], "Generated focus bounds are non-empty.");
+  }
   assert(appSource.includes("createInitialTerritoryStates"), "App creates territory state from generated data.");
-  assert(mapViewSource.includes("touch-action") || mapViewSource.includes("onPointerMove"), "Map view owns pointer pan/zoom.");
+  assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
+  assert(mapViewSource.includes("data-map-animating"), "Map view exposes animation state.");
 }
 
 async function clickTerritory(page, territoryId) {
@@ -109,6 +117,16 @@ async function clickTerritory(page, territoryId) {
 
     target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
   }, territoryId);
+}
+
+async function viewBox(page) {
+  const value = await page.locator(".map-svg").getAttribute("viewBox");
+
+  if (!value) {
+    throw new Error("Map SVG has no viewBox.");
+  }
+
+  return value;
 }
 
 async function runMapChecks(page) {
@@ -126,9 +144,34 @@ async function runMapChecks(page) {
   );
 
   console.log("Checking selection");
+  const initialViewBox = await viewBox(page);
   await clickTerritory(page, "shire");
   await page.waitForSelector('[data-territory-fill="shire"][data-territory-fill-state="selected"]');
+  await page.waitForSelector('.map-svg[data-map-animating="true"]');
   assert((await page.locator("[data-skin-picker]").count()) === 1, "Selecting a territory shows the skin picker.");
+  await page.waitForFunction(() => document.querySelector('[data-skin-option="blue"]')?.disabled === true);
+  assert(await page.getByRole("button", { name: "blue" }).isDisabled(), "Skin swatches are disabled during focus animation.");
+  await clickTerritory(page, "bree");
+  assert(
+    (await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1,
+    "Clicking another territory during focus animation is ignored.",
+  );
+  await page.evaluate(() => {
+    const swatch = document.querySelector('[data-skin-option="blue"]');
+
+    if (!swatch) {
+      throw new Error("Missing blue skin swatch.");
+    }
+
+    swatch.click();
+  });
+  assert(
+    (await page.locator('[data-territory-fill="shire"][data-territory-skin="background"][data-territory-fill-state="selected"]').count()) === 1,
+    "Skin picker clicks during focus animation are ignored.",
+  );
+  await page.waitForSelector('.map-svg[data-map-animating="false"]');
+  const focusedViewBox = await viewBox(page);
+  assert(initialViewBox !== focusedViewBox, "Selecting a territory changes the map viewBox.");
 
   await page.getByRole("button", { name: "blue" }).click();
   await page.waitForSelector('[data-territory-fill="shire"][data-territory-skin="blue"][data-territory-fill-state="selected"]');
@@ -136,11 +179,13 @@ async function runMapChecks(page) {
   await clickTerritory(page, "shire");
   await page.waitForSelector('[data-territory-fill="shire"][data-territory-fill-state="unselected"]');
   assert((await page.locator("[data-skin-picker]").count()) === 0, "Clicking a selected territory hides the skin picker.");
+  await page.waitForTimeout(120);
+  assert((await viewBox(page)) === focusedViewBox, "Unselecting a territory does not change the viewBox.");
 
   console.log("Checking pan and zoom");
   const box = await page.locator(".map-svg").boundingBox();
   assert(box, "Map SVG has a bounding box.");
-  const beforeWheel = await page.locator("[data-map-content]").getAttribute("transform");
+  const beforeWheel = await viewBox(page);
   await page.locator(".map-svg").dispatchEvent("wheel", {
     bubbles: true,
     cancelable: true,
@@ -148,18 +193,20 @@ async function runMapChecks(page) {
     clientY: box.y + box.height / 2,
     deltaY: -500,
   });
-  const afterWheel = await page.locator("[data-map-content]").getAttribute("transform");
-  assert(beforeWheel !== afterWheel, "Wheel zoom changes the map transform.");
+  await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeWheel);
+  const afterWheel = await viewBox(page);
+  assert(beforeWheel !== afterWheel, "Wheel zoom changes the map viewBox.");
 
-  const beforeDrag = await page.locator("[data-map-content]").getAttribute("transform");
+  const beforeDrag = await viewBox(page);
 
   await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.45);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.55, { steps: 8 });
   await page.mouse.up();
 
-  const afterDrag = await page.locator("[data-map-content]").getAttribute("transform");
-  assert(beforeDrag !== afterDrag, "Drag pan changes the map transform.");
+  await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeDrag);
+  const afterDrag = await viewBox(page);
+  assert(beforeDrag !== afterDrag, "Drag pan changes the map viewBox.");
 }
 
 async function main() {

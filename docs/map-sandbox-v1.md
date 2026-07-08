@@ -44,6 +44,20 @@ When a playable territory is pressed:
 
 This keeps the first version deterministic and focused on single-territory selection.
 
+Selecting a territory also moves the map camera to that territory. The generated app data contains a `focusBounds` rectangle for each playable territory, built from the territory's fill loops with 100 map units of padding. The camera fits that rectangle to the current screen shape, fills the screen in one direction, centers in the other direction, and animates there linearly over 500ms.
+
+Unselecting a territory does not move the camera.
+
+During the 500ms focus animation, all app input is locked:
+
+- territory presses are ignored
+- skin swatches are disabled
+- pointer panning is ignored
+- pinch zooming is ignored
+- wheel or trackpad zooming is ignored
+
+After the animation finishes, the user can pan and zoom normally from the focused view.
+
 ## Skin Picker
 
 When exactly one territory is selected, show seven skin options at the top of the screen:
@@ -99,6 +113,7 @@ The map generator produces `src/map/generated/mapData.ts` with:
 - map dimensions and viewBox
 - territory shape paths
 - territory centers
+- territory focus bounds
 - skin colors for each territory
 - static ink paths
 - hit target paths
