@@ -211,7 +211,8 @@ public static class MapExtractor
     {
         new BackgroundSeed { Id = "background-ocean", Name = "Ocean", X = 85, Y = 1020 },
         new BackgroundSeed { Id = "background-north-east", Name = "North East Background", X = 1510, Y = 45 },
-        new BackgroundSeed { Id = "background-north-bay", Name = "North Bay Background", X = 380, Y = 22 }
+        new BackgroundSeed { Id = "background-north-bay", Name = "North Bay Background", X = 380, Y = 22 },
+        new BackgroundSeed { Id = "background-ocean", Name = "Ocean", X = 1435, Y = 1050 }
     };
 
     static readonly RegionConfig[] RegionConfigs = new RegionConfig[]
