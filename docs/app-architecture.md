@@ -105,9 +105,9 @@ Layer order:
 3. `TroopMarkerLayer`
 4. `HitTargetLayer`
 
-`MapView` owns pan, zoom, and selected-territory camera movement. On initial load, the `viewBox` fits the whole map to the current screen shape. When a territory is selected, `MapView` fits that territory's generated `focusBounds` rectangle to the current screen shape and animates the `viewBox` there over 500ms. The focus rectangle is generated from the canonical territory fill loops with 100 map units of padding.
+`MapView` owns pan, zoom, and selected-territory camera movement. On initial load, the `viewBox` fits the whole map to the current screen shape. When a territory is selected, `MapView` fits that territory's generated `focusBounds` rectangle to the current screen shape. Nearly identical focus moves happen instantly; visible moves use a short distance-based ease-in-out animation. The focus rectangle is generated from the canonical territory fill loops with 100 map units of padding.
 
-While the focus animation is running, app input is locked. Territory taps, skin-picker clicks, pointer panning, pinch zooming, and wheel zooming are ignored until the animation finishes. The SVG exposes `data-map-animating="true"` during that lock.
+While a focus animation is running, app input is locked. Territory taps, skin-picker clicks, pointer panning, pinch zooming, and wheel zooming are ignored until the animation finishes. The SVG exposes `data-map-animating="true"` during that lock.
 
 ### TerritoryFillLayer
 

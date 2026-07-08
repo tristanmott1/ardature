@@ -21,11 +21,19 @@ type MapViewport = {
 
 type PointerPoint = {
   id: number;
+  clientX: number;
+  clientY: number;
+};
+
+type ViewportPoint = {
   x: number;
   y: number;
 };
 
-const FOCUS_ANIMATION_MS = 500;
+const MIN_FOCUS_ANIMATION_MS = 120;
+const MAX_FOCUS_ANIMATION_MS = 600;
+const FOCUS_DURATION_PER_SCORE = 260;
+const FOCUS_SKIP_THRESHOLD = 0.01;
 const MIN_VIEWPORT_SIZE = 400;
 
 export function MapView({
@@ -70,16 +78,16 @@ export function MapView({
       return null;
     }
 
-    const matrix = svg.getScreenCTM();
-    if (!matrix) {
+    const bounds = svg.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) {
       return null;
     }
 
-    const point = svg.createSVGPoint();
-    point.x = clientX;
-    point.y = clientY;
-    const mapped = point.matrixTransform(matrix.inverse());
-    return { x: mapped.x, y: mapped.y };
+    const current = viewportRef.current;
+    return {
+      x: current.x + ((clientX - bounds.left) / bounds.width) * current.width,
+      y: current.y + ((clientY - bounds.top) / bounds.height) * current.height,
+    };
   }
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
@@ -94,7 +102,7 @@ export function MapView({
     }
 
     event.currentTarget.setPointerCapture(event.pointerId);
-    pointersRef.current.set(event.pointerId, { id: event.pointerId, ...point });
+    pointersRef.current.set(event.pointerId, { id: event.pointerId, clientX: event.clientX, clientY: event.clientY });
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
@@ -102,21 +110,23 @@ export function MapView({
       return;
     }
 
-    const point = viewportPoint(event.clientX, event.clientY);
-    if (!point) {
+    const before = orderedPointers();
+    const beforePoints = viewportPoints(before);
+
+    pointersRef.current.set(event.pointerId, { id: event.pointerId, clientX: event.clientX, clientY: event.clientY });
+    const after = orderedPointers();
+    const afterPoints = viewportPoints(after);
+
+    if (!beforePoints || !afterPoints) {
       return;
     }
 
-    const before = orderedPointers();
-    pointersRef.current.set(event.pointerId, { id: event.pointerId, ...point });
-    const after = orderedPointers();
-
     if (before.length === 1 && after.length === 1) {
-      const dx = before[0].x - after[0].x;
-      const dy = before[0].y - after[0].y;
+      const dx = beforePoints[0].x - afterPoints[0].x;
+      const dy = beforePoints[0].y - afterPoints[0].y;
       const current = viewportRef.current;
 
-      if (Math.hypot(dx, dy) > 4) {
+      if (Math.hypot(before[0].clientX - after[0].clientX, before[0].clientY - after[0].clientY) > 4) {
         suppressClickRef.current = true;
       }
 
@@ -126,10 +136,10 @@ export function MapView({
 
     if (before.length >= 2 && after.length >= 2) {
       suppressClickRef.current = true;
-      const previousCenter = midpoint(before[0], before[1]);
-      const nextCenter = midpoint(after[0], after[1]);
-      const previousDistance = distance(before[0], before[1]);
-      const nextDistance = distance(after[0], after[1]);
+      const previousCenter = midpoint(beforePoints[0], beforePoints[1]);
+      const nextCenter = midpoint(afterPoints[0], afterPoints[1]);
+      const previousDistance = screenDistance(before[0], before[1]);
+      const nextDistance = screenDistance(after[0], after[1]);
 
       if (previousDistance > 0 && nextDistance > 0) {
         zoomAt(previousCenter, nextCenter, nextDistance / previousDistance);
@@ -162,10 +172,10 @@ export function MapView({
       return;
     }
 
-    zoomAt(focus, focus, event.deltaY > 0 ? 0.9 : 1.1);
+    zoomAt(focus, focus, wheelZoomFactor(event));
   }
 
-  function zoomAt(previousFocus: PointerPoint | { x: number; y: number }, nextFocus: PointerPoint | { x: number; y: number }, factor: number) {
+  function zoomAt(previousFocus: ViewportPoint, nextFocus: ViewportPoint, factor: number) {
     const current = viewportRef.current;
     const width = current.width / factor;
     const height = current.height / factor;
@@ -184,18 +194,28 @@ export function MapView({
   function startFocusAnimation(targetViewport: MapViewport) {
     if (animationFrameRef.current !== null) {
       window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
     }
 
     const startViewport = viewportRef.current;
-    const startTime = performance.now();
+    const duration = focusAnimationDuration(startViewport, targetViewport);
     pointersRef.current.clear();
+
+    if (duration === 0) {
+      suppressClickRef.current = false;
+      setViewport(targetViewport);
+      setIsAnimating(false);
+      return;
+    }
+
+    const startTime = performance.now();
     suppressClickRef.current = true;
     setIsAnimating(true);
 
-    // Linearly interpolate the visible viewBox into the selected territory bounds.
+    // Ease the visible viewBox into the selected territory bounds.
     function step(now: number) {
-      const progress = Math.min(1, (now - startTime) / FOCUS_ANIMATION_MS);
-      setViewport(lerpViewport(startViewport, targetViewport, progress));
+      const progress = Math.min(1, (now - startTime) / duration);
+      setViewport(lerpViewport(startViewport, targetViewport, easeInOutCubic(progress)));
 
       if (progress < 1) {
         animationFrameRef.current = window.requestAnimationFrame(step);
@@ -213,6 +233,23 @@ export function MapView({
 
   function orderedPointers() {
     return [...pointersRef.current.values()].sort((left, right) => left.id - right.id);
+  }
+
+  function viewportPoints(points: PointerPoint[]) {
+    const result: ViewportPoint[] = [];
+
+    // Convert all active touches through the same current viewBox.
+    for (const point of points) {
+      const mapped = viewportPoint(point.clientX, point.clientY);
+
+      if (!mapped) {
+        return null;
+      }
+
+      result.push(mapped);
+    }
+
+    return result;
   }
 
   useLayoutEffect(() => {
@@ -348,6 +385,34 @@ function normalizeViewport(viewport: MapViewport): MapViewport {
   };
 }
 
+function focusAnimationDuration(start: MapViewport, target: MapViewport) {
+  const startCenter = viewportCenter(start);
+  const targetCenter = viewportCenter(target);
+  const centerDistanceRatio = Math.hypot(targetCenter.x - startCenter.x, targetCenter.y - startCenter.y) / viewportDiagonal(start);
+  const zoomDistance = Math.abs(Math.log(target.width / start.width));
+  const motionScore = Math.max(centerDistanceRatio, zoomDistance);
+
+  if (motionScore < FOCUS_SKIP_THRESHOLD) {
+    return 0;
+  }
+
+  return Math.max(
+    MIN_FOCUS_ANIMATION_MS,
+    Math.min(MAX_FOCUS_ANIMATION_MS, motionScore * FOCUS_DURATION_PER_SCORE),
+  );
+}
+
+function viewportCenter(viewport: MapViewport): ViewportPoint {
+  return {
+    x: viewport.x + viewport.width / 2,
+    y: viewport.y + viewport.height / 2,
+  };
+}
+
+function viewportDiagonal(viewport: MapViewport) {
+  return Math.hypot(viewport.width, viewport.height);
+}
+
 function lerpViewport(start: MapViewport, end: MapViewport, progress: number): MapViewport {
   return {
     x: lerp(start.x, end.x, progress),
@@ -361,13 +426,29 @@ function lerp(start: number, end: number, progress: number) {
   return start + (end - start) * progress;
 }
 
-function distance(first: PointerPoint, second: PointerPoint) {
-  return Math.hypot(second.x - first.x, second.y - first.y);
+function easeInOutCubic(progress: number) {
+  return progress < 0.5
+    ? 4 * progress * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 }
 
-function midpoint(first: PointerPoint, second: PointerPoint): PointerPoint {
+function wheelZoomFactor(event: WheelEvent<SVGSVGElement>) {
+  const pageScale = typeof window === "undefined" ? 800 : window.innerHeight;
+  const delta = event.deltaMode === 1
+    ? event.deltaY * 16
+    : event.deltaMode === 2
+      ? event.deltaY * pageScale
+      : event.deltaY;
+
+  return Math.max(0.75, Math.min(1.35, Math.exp(-delta * 0.0012)));
+}
+
+function screenDistance(first: PointerPoint, second: PointerPoint) {
+  return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+}
+
+function midpoint(first: ViewportPoint, second: ViewportPoint): ViewportPoint {
   return {
-    id: first.id,
     x: (first.x + second.x) / 2,
     y: (first.y + second.y) / 2,
   };

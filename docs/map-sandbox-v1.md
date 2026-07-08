@@ -44,11 +44,13 @@ When a playable territory is pressed:
 
 This keeps the first version deterministic and focused on single-territory selection.
 
-Selecting a territory also moves the map camera to that territory. The generated app data contains a `focusBounds` rectangle for each playable territory, built from the territory's fill loops with 100 map units of padding. The camera fits that rectangle to the current screen shape, fills the screen in one direction, centers in the other direction, and animates there linearly over 500ms.
+Selecting a territory also moves the map camera to that territory. The generated app data contains a `focusBounds` rectangle for each playable territory, built from the territory's fill loops with 100 map units of padding. The camera fits that rectangle to the current screen shape, fills the screen in one direction, and centers in the other direction.
+
+Focus movement is distance-based. If the current view is already nearly identical to the selected territory's focus view, the camera updates instantly. Otherwise, the camera uses a short ease-in-out animation, with larger moves taking longer than small moves.
 
 Unselecting a territory does not move the camera.
 
-During the 500ms focus animation, all app input is locked:
+During a focus animation, all app input is locked:
 
 - territory presses are ignored
 - skin swatches are disabled

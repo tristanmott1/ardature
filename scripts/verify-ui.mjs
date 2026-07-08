@@ -105,6 +105,8 @@ async function runSourceChecks() {
   assert(appSource.includes("createInitialTerritoryStates"), "App creates territory state from generated data.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
   assert(mapViewSource.includes("data-map-animating"), "Map view exposes animation state.");
+  assert(mapViewSource.includes("focusAnimationDuration"), "Map view uses adaptive focus duration.");
+  assert(mapViewSource.includes("easeInOutCubic"), "Map view eases focus animation.");
 }
 
 async function clickTerritory(page, territoryId) {
@@ -181,6 +183,19 @@ async function runMapChecks(page) {
   assert((await page.locator("[data-skin-picker]").count()) === 0, "Clicking a selected territory hides the skin picker.");
   await page.waitForTimeout(120);
   assert((await viewBox(page)) === focusedViewBox, "Unselecting a territory does not change the viewBox.");
+
+  await clickTerritory(page, "shire");
+  await page.waitForSelector('[data-territory-fill="shire"][data-territory-fill-state="selected"]');
+  await page.waitForTimeout(80);
+  assert((await viewBox(page)) === focusedViewBox, "Selecting an already-focused territory keeps the current viewBox.");
+  assert(
+    (await page.locator('.map-svg[data-map-animating="false"]').count()) === 1,
+    "Selecting an already-focused territory does not require an animation lock.",
+  );
+  assert(!(await page.getByRole("button", { name: "blue" }).isDisabled()), "Skin swatches stay enabled after instant focus.");
+
+  await clickTerritory(page, "shire");
+  await page.waitForSelector('[data-territory-fill="shire"][data-territory-fill-state="unselected"]');
 
   console.log("Checking pan and zoom");
   const box = await page.locator(".map-svg").boundingBox();
