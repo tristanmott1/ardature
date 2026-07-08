@@ -2,6 +2,7 @@ param(
   [string]$InputImage = "maps/source/territories-drawing.jpeg",
   [string]$TerritoryKey = "maps/territory-key.md",
   [string]$OutputJson = "maps/geometry/map.json",
+  [string]$AppData = "src/map/generated/mapData.ts",
   [string]$PreviewDirectory = "maps/previews",
   [string]$PreviewBackgroundColor = "#EFE9D9",
   [string]$LandmarkImage = "maps/source/landmark-drawing.jpeg",
@@ -28,12 +29,14 @@ $ErrorActionPreference = "Stop"
 $inputPath = (Resolve-Path $InputImage).Path
 $territoryKeyPath = (Resolve-Path $TerritoryKey).Path
 $jsonPath = Join-Path (Get-Location) $OutputJson
+$appDataPath = Join-Path (Get-Location) $AppData
 $previewDirectoryPath = Join-Path (Get-Location) $PreviewDirectory
 $landmarkPath = (Resolve-Path $LandmarkImage).Path
 $landmarkOutlinePath = (Resolve-Path $LandmarkOutlineImage).Path
 $landmarkSvgPath = Join-Path (Get-Location) $LandmarkSvg
 
 New-Item -ItemType Directory -Force -Path (Split-Path $jsonPath) | Out-Null
+New-Item -ItemType Directory -Force -Path (Split-Path $appDataPath) | Out-Null
 New-Item -ItemType Directory -Force -Path $previewDirectoryPath | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path $landmarkSvgPath) | Out-Null
 
@@ -285,6 +288,8 @@ public static class MapExtractor
         new PreviewTheme { Id = "background", SolidColor = "#EFE9D9" }
     };
 
+    static readonly string[] AppSkinIds = new string[] { "background", "blue", "green", "red", "yellow", "black", "purple" };
+
     static readonly TerritorySeed[] TerritorySeeds = new TerritorySeed[]
     {
         new TerritorySeed { Id = "forlond", Name = "Forlond", RegionId = "eriador", X = 165, Y = 150 },
@@ -340,6 +345,7 @@ public static class MapExtractor
         string inputImage,
         string territoryKey,
         string outputJson,
+        string appData,
         string previewDirectory,
         string previewBackgroundColor,
         string landmarkImage,
@@ -460,6 +466,7 @@ public static class MapExtractor
             WriteMapJson(outputJson, inputImage, territoryKey, landmarkImage, landmarkOutlineImage, width, height, mapScale, territories, borders, landmarks);
             WriteLandmarkSvg(landmarkSvg, width, height, mapScale, landmarks);
             WriteTerritoryThemeSvgs(previewDirectory, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks);
+            WriteAppData(appData, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks);
 
             Console.WriteLine("Image: " + width.ToString(CultureInfo.InvariantCulture) + "x" + height.ToString(CultureInfo.InvariantCulture));
             Console.WriteLine("Map units: " + (width * mapScale).ToString(CultureInfo.InvariantCulture) + "x" + (height * mapScale).ToString(CultureInfo.InvariantCulture));
@@ -469,6 +476,7 @@ public static class MapExtractor
             Console.WriteLine("Background territories: " + territories.Values.Count(t => !t.Playable).ToString(CultureInfo.InvariantCulture));
             Console.WriteLine("Borders: " + borders.Count.ToString(CultureInfo.InvariantCulture));
             Console.WriteLine("Map JSON: " + outputJson);
+            Console.WriteLine("App data: " + appData);
             Console.WriteLine("Landmarks overlay: " + landmarkSvg);
             Console.WriteLine("Territory previews: " + previewDirectory);
         }
@@ -2485,6 +2493,126 @@ public static class MapExtractor
         }
     }
 
+    static void WriteAppData(string outputTs, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks)
+    {
+        int mapWidth = width * mapScale;
+        int mapHeight = height * mapScale;
+        Dictionary<string, double> shadeValues = BuildTerritoryShadeValues(territories, borders, width, height);
+        Dictionary<string, BorderInfo> borderById = borders.ToDictionary(border => border.Id);
+        List<string> borderPaths = BuildPreviewBorderPathStrings(territories, borders, landmarks.Mask, width, height, mapScale);
+        StringBuilder builder = new StringBuilder();
+
+        builder.AppendLine("import type { GeneratedMapData } from \"../mapTypes\";");
+        builder.AppendLine();
+        builder.AppendLine("export const generatedMapData = {");
+        builder.AppendLine("  width: " + mapWidth.ToString(CultureInfo.InvariantCulture) + ",");
+        builder.AppendLine("  height: " + mapHeight.ToString(CultureInfo.InvariantCulture) + ",");
+        builder.AppendLine("  sourceWidth: " + width.ToString(CultureInfo.InvariantCulture) + ",");
+        builder.AppendLine("  sourceHeight: " + height.ToString(CultureInfo.InvariantCulture) + ",");
+        builder.AppendLine("  backgroundColor: " + JsonString(previewBackgroundColor) + ",");
+        builder.AppendLine("  skins: " + StringArrayJson(AppSkinIds) + ",");
+        builder.AppendLine("  territories: [");
+
+        List<TerritoryInfo> playableTerritories = territories.Values
+            .Where(t => t.Playable)
+            .OrderBy(t => TerritorySortKey(t.Id))
+            .ToList();
+        for (int i = 0; i < playableTerritories.Count; i++)
+        {
+            WriteAppTerritoryData(builder, playableTerritories[i], borderById, shadeValues, mapScale, i == playableTerritories.Count - 1);
+        }
+
+        builder.AppendLine("  ],");
+        builder.AppendLine("  staticInk: {");
+        builder.AppendLine("    borderPaths: " + StringArrayTs(borderPaths.ToArray(), "      ", "    ") + ",");
+        builder.AppendLine("    borderStroke: \"#111111\",");
+        builder.AppendLine("    borderOpacity: 0.72,");
+        builder.AppendLine("    borderStrokeWidth: 10,");
+        builder.AppendLine("    landmarkPath: " + JsonString(SvgCompoundPath(landmarks.Paths)) + ",");
+        builder.AppendLine("    landmarkFill: " + JsonString(landmarks.Fill) + ",");
+        builder.AppendLine("    landmarkOpacity: 0.82");
+        builder.AppendLine("  }");
+        builder.AppendLine("} as const satisfies GeneratedMapData;");
+
+        File.WriteAllText(outputTs, builder.ToString(), new UTF8Encoding(false));
+    }
+
+    static void WriteAppTerritoryData(StringBuilder builder, TerritoryInfo territory, Dictionary<string, BorderInfo> borderById, Dictionary<string, double> shadeValues, int mapScale, bool last)
+    {
+        TerritorySeed seed = TerritorySeeds.First(s => s.Id == territory.Id);
+        List<string> fillPaths = BuildTerritoryLoops(territory, borderById)
+            .Where(loop => loop.Count >= 3)
+            .Select(loop => SvgPath(loop, true))
+            .ToList();
+
+        if (fillPaths.Count == 0)
+        {
+            throw new InvalidOperationException("Territory " + territory.Id + " has no fill paths for app data.");
+        }
+
+        builder.AppendLine("    {");
+        builder.AppendLine("      id: " + JsonString(territory.Id) + ",");
+        builder.AppendLine("      name: " + JsonString(territory.Name) + ",");
+        builder.AppendLine("      regionId: " + JsonString(territory.RegionId) + ",");
+        builder.AppendLine("      center: { x: " + (seed.X * mapScale).ToString(CultureInfo.InvariantCulture) + ", y: " + (seed.Y * mapScale).ToString(CultureInfo.InvariantCulture) + " },");
+        builder.AppendLine("      fillPaths: " + StringArrayTs(fillPaths.ToArray(), "        ", "      ") + ",");
+        builder.AppendLine("      hitPaths: " + StringArrayTs(fillPaths.ToArray(), "        ", "      ") + ",");
+        builder.AppendLine("      skins: {");
+
+        for (int i = 0; i < AppSkinIds.Length; i++)
+        {
+            PreviewTheme theme = PreviewThemes.First(t => t.Id == AppSkinIds[i]);
+            string color = ColorForTheme(theme, shadeValues[territory.Id]);
+            builder.AppendLine("        " + theme.Id + ": " + JsonString(color) + (i == AppSkinIds.Length - 1 ? "" : ","));
+        }
+
+        builder.AppendLine("      }");
+        builder.AppendLine("    }" + (last ? "" : ","));
+    }
+
+    static List<string> BuildPreviewBorderPathStrings(Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, bool[] hiddenMask, int width, int height, int mapScale)
+    {
+        List<string> result = new List<string>();
+
+        foreach (BorderInfo border in borders.OrderBy(border => border.Id, StringComparer.Ordinal))
+        {
+            if (!ShouldDrawPreviewBorder(border, territories))
+            {
+                continue;
+            }
+
+            foreach (List<PointD> path in SplitVisibleBorderPaths(border.Paths, hiddenMask, width, height, mapScale))
+            {
+                if (path.Count >= 2)
+                {
+                    result.Add(SvgPath(path, false));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    static string StringArrayTs(string[] values, string itemIndent, string closeIndent)
+    {
+        if (values.Length == 0)
+        {
+            return "[]";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        builder.AppendLine("[");
+        for (int i = 0; i < values.Length; i++)
+        {
+            builder.Append(itemIndent);
+            builder.Append(JsonString(values[i]));
+            builder.AppendLine(i == values.Length - 1 ? "" : ",");
+        }
+        builder.Append(closeIndent);
+        builder.Append("]");
+        return builder.ToString();
+    }
+
     static void WriteTerritoriesSvg(string outputSvg, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks, PreviewTheme theme, Dictionary<string, double> shadeValues)
     {
         int mapWidth = width * mapScale;
@@ -3096,6 +3224,7 @@ Add-Type -TypeDefinition $code -ReferencedAssemblies "System.Drawing.dll"
   $inputPath,
   $territoryKeyPath,
   $jsonPath,
+  $appDataPath,
   $previewDirectoryPath,
   $PreviewBackgroundColor,
   $landmarkPath,
