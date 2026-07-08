@@ -59,7 +59,7 @@ Rhovanion lies east of the Misty Mountains, north of Rohan, and west of Rhun.
 | --- | --- | --- | --- | --- |
 | Greylin | Northwestern Rhovanion, north of Caradhras and northwest of Woodland Realm. | Caradhras, Woodland Realm | None |  |
 | Caradhras | Western Rhovanion on the east side of the Misty Mountains. | Rivendell, Greylin, Woodland Realm, Gladden Fields, Lorien | None | Cross-region border to Rivendell in Eriador. |
-| Woodland Realm | Northeastern Rhovanion forest territory. | Greylin, Caradhras, Gladden Fields, Erebor | None | Cross-region border to Erebor in Rhun. |
+| Woodland Realm | Northeastern Rhovanion forest territory. | Greylin, Caradhras, Gladden Fields, Erebor, Brown Lands | None | Cross-region borders to Erebor and Brown Lands in Rhun. |
 | Gladden Fields | Central-northern Rhovanion between Caradhras, Woodland Realm, Lorien, and Dol Guldur. | Woodland Realm, Caradhras, Lorien, Dol Guldur | None |  |
 | Lorien | Southwestern Rhovanion forest territory. | Caradhras, Gladden Fields, Dol Guldur, Moria, Emyn Muil | None | Fangorn Forest blocks any southern border into Rohan. |
 | Dol Guldur | Central Rhovanion south of Gladden Fields. | Lorien, Gladden Fields, Emyn Muil | None |  |
@@ -77,7 +77,7 @@ Rhun lies east of Rhovanion and north of Mordor.
 | Iron Hills | Northern Rhun east of Erebor. | Erebor, Brown Lands, Dorwinion, Sea of Rhun | None |  |
 | Sea of Rhun | Eastern Rhun around the inland sea. | Iron Hills, Dorwinion, Dagorlad, Lithlad | None | Cross-region border to Lithlad in Mordor. |
 | Dorwinion | Central Rhun west of the Sea of Rhun. | Iron Hills, Sea of Rhun, Dagorlad, Brown Lands | None |  |
-| Brown Lands | Western Rhun east of Emyn Muil. | Erebor, Iron Hills, Dorwinion, Dagorlad, Emyn Muil | None | Cross-region border to Emyn Muil in Rhovanion. |
+| Brown Lands | Western Rhun east of Emyn Muil. | Erebor, Iron Hills, Dorwinion, Dagorlad, Emyn Muil, Woodland Realm | None | Cross-region borders to Emyn Muil and Woodland Realm in Rhovanion. |
 | Dagorlad | Southwestern Rhun north of Mordor and east of Dead Marshes. | Brown Lands, Dorwinion, Sea of Rhun, Dead Marshes, Emyn Muil | None | Cross-region borders to Rhovanion. |
 
 ## Region: Mordor
@@ -124,7 +124,7 @@ Rohan sits near the center of the map, south of Rhovanion and north of Gondor.
 | Anfalas | Gondor | Andrast, Druwaith Iaur, Lamedon | None |
 | Belfalas | Gondor | Lamedon, Minas Tirith, South Gondor | None |
 | Bree | Eriador | Shire, North Downs, Ettenmoors, Rivendell, Swanfleet, Minhiriath | None |
-| Brown Lands | Rhun | Erebor, Iron Hills, Dorwinion, Dagorlad, Emyn Muil | None |
+| Brown Lands | Rhun | Erebor, Iron Hills, Dorwinion, Dagorlad, Emyn Muil, Woodland Realm | None |
 | Caradhras | Rhovanion | Rivendell, Greylin, Woodland Realm, Gladden Fields, Lorien | None |
 | Dagorlad | Rhun | Brown Lands, Dorwinion, Sea of Rhun, Dead Marshes, Emyn Muil | None |
 | Dead Marshes | Rhovanion | Emnet, Emyn Muil, Dagorlad, Udun, Minas Tirith, Eastfold | None |
@@ -161,4 +161,4 @@ Rohan sits near the center of the map, south of Rhovanion and north of Gondor.
 | Swanfleet | Eriador | Bree, Rivendell, Moria, Isengard, Minhiriath, Enedwaith | None |
 | Udun | Mordor | Dead Marshes, Minas Morgul | None |
 | Westfold | Rohan | Isengard, Edoras, Emnet | None |
-| Woodland Realm | Rhovanion | Greylin, Caradhras, Gladden Fields, Erebor | None |
+| Woodland Realm | Rhovanion | Greylin, Caradhras, Gladden Fields, Erebor, Brown Lands | None |

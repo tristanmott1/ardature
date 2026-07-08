@@ -3,7 +3,10 @@ const CORE_ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./icon.svg",
+  "./apple-touch-icon.png",
+  "./icon-180.png",
+  "./icon-192.png",
+  "./icon-512.png",
 /* __VITE_ASSETS__ */
 ];
 

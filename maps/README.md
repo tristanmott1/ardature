@@ -9,7 +9,7 @@ All source drawings currently use the same `1600x1131` coordinate space.
 - `source/middle-earth-original.jpeg`: original labeled reference map.
 - `source/territories-drawing.jpeg`: source-of-truth boundary drawing. Red lines define the six regions; blue lines define territories within those regions; page edges close shapes where needed.
 - `source/landmark-drawing.jpeg`: source-of-truth landmark ink drawing.
-- `source/landmark-outline-drawing.jpeg`: source-of-truth landmark mask drawing. Blue outlines clip the landmark ink.
+- `source/landmark-outline-drawing.jpeg`: source-of-truth landmark mask drawing. Blue outlines are used exactly to clip the landmark ink and hide covered border strokes.
 - `territory-key.md`: canonical territory names, region membership, and gameplay connections.
 
 ## Generated Files
@@ -25,7 +25,7 @@ All source drawings currently use the same `1600x1131` coordinate space.
 - `previews/territories-background.svg`: flat background-color territory preview generated from the extracted map model.
 - `../src/map/generated/mapData.ts`: app-ready TypeScript map data generated from the same extracted map model, including territory centers and selected-camera focus bounds.
 
-The territory previews use a flat `#EFE9D9` background, solid territory fills, masked physical border strokes, and the landmark overlay.
+The territory previews use a flat `#EFE9D9` background, solid territory fills, physical border strokes hidden by the exact landmark mask, and the landmark overlay.
 
 Regenerate the map geometry and preview with:
 
@@ -38,5 +38,7 @@ The map extractor validates that the output has 6 playable regions plus 1 backgr
 The extractor also writes `src/map/generated/mapData.ts` for the PWA. That file includes territory focus bounds generated from canonical fill loops with 500 map units of padding, clamped inside the map and without padding on sides that touch the outer map edge. It is generated and should not be manually edited.
 
 By default, the extractor simplifies traced borders with a 1.0-pixel source tolerance, scales the source drawing by 10, then applies one smoothing pass before writing geometry. The source image still controls topology; the generated JSON is the mathematical model used by the app.
+
+Landmarks are extracted without dilation, smoothing, simplification, or tiny-component cleanup. The extractor detects blue outline pixels, flood-fills from the page edge, treats blue and enclosed pixels as the landmark mask, then turns dark pixels from `source/landmark-drawing.jpeg` inside that mask into black vector ink.
 
 If borders change in the future, update `source/territories-drawing.jpeg` and `territory-key.md`, then rerun the single extractor. If landmark clipping changes, update `source/landmark-drawing.jpeg` or `source/landmark-outline-drawing.jpeg`, then rerun the same command.

@@ -18,10 +18,7 @@ param(
   [int]$MapScale = 10,
   [int]$SmoothPasses = 1,
   [double]$SimplifyTolerance = 1.0,
-  [int]$LandmarkMaxBrightness = 190,
-  [int]$LandmarkMinComponentArea = 4,
-  [double]$LandmarkSimplifyTolerance = 0.75,
-  [int]$LandmarkOutlineDilateRadius = 2
+  [int]$LandmarkMaxBrightness = 190
 )
 
 $ErrorActionPreference = "Stop"
@@ -371,10 +368,7 @@ public static class MapExtractor
         int mapScale,
         int smoothPasses,
         double simplifyTolerance,
-        int landmarkMaxBrightness,
-        int landmarkMinComponentArea,
-        double landmarkSimplifyTolerance,
-        int landmarkOutlineDilateRadius)
+        int landmarkMaxBrightness)
     {
         if (mapScale <= 0)
         {
@@ -394,21 +388,6 @@ public static class MapExtractor
         if (landmarkMaxBrightness < 0 || landmarkMaxBrightness > 255)
         {
             throw new InvalidOperationException("Landmark max brightness must be between 0 and 255.");
-        }
-
-        if (landmarkMinComponentArea < 0)
-        {
-            throw new InvalidOperationException("Landmark minimum component area cannot be negative.");
-        }
-
-        if (landmarkSimplifyTolerance < 0)
-        {
-            throw new InvalidOperationException("Landmark simplify tolerance cannot be negative.");
-        }
-
-        if (landmarkOutlineDilateRadius < 0)
-        {
-            throw new InvalidOperationException("Landmark outline dilate radius cannot be negative.");
         }
 
         try
@@ -467,10 +446,7 @@ public static class MapExtractor
                 mapScale,
                 minBlue,
                 blueDominance,
-                landmarkOutlineDilateRadius,
-                landmarkMaxBrightness,
-                landmarkMinComponentArea,
-                landmarkSimplifyTolerance);
+                landmarkMaxBrightness);
             ValidateLandmarks(landmarks, width * mapScale, height * mapScale);
 
             WriteMapJson(outputJson, inputImage, territoryKey, landmarkImage, landmarkOutlineImage, width, height, mapScale, territories, borders, landmarks);
@@ -1025,6 +1001,21 @@ public static class MapExtractor
             List<PointI> simplified = SimplifyPath(path, simplifyTolerance, closed);
             List<PointD> scaled = ScalePath(simplified, mapScale);
             result.Add(SmoothPath(scaled, smoothPasses, closed));
+        }
+
+        return result
+            .OrderByDescending(p => p.Count)
+            .ThenBy(p => PointKey(p[0]), StringComparer.Ordinal)
+            .ToList();
+    }
+
+    static List<List<PointD>> ScaleExactPaths(List<List<PointI>> paths, int mapScale)
+    {
+        List<List<PointD>> result = new List<List<PointD>>();
+
+        foreach (List<PointI> path in paths)
+        {
+            result.Add(ScalePath(path, mapScale));
         }
 
         return result
@@ -2261,10 +2252,7 @@ public static class MapExtractor
         int mapScale,
         int minBlue,
         int blueDominance,
-        int outlineDilateRadius,
-        int maxBrightness,
-        int minComponentArea,
-        double simplifyTolerance)
+        int maxBrightness)
     {
         using (var landmarkBitmap = new Bitmap(landmarkImage))
         using (var outlineBitmap = new Bitmap(landmarkOutlineImage))
@@ -2282,12 +2270,12 @@ public static class MapExtractor
             // The outline drawing defines masks; the landmark drawing defines the ink.
             bool[] ink = DetectDark(landmarkBitmap, maxBrightness);
             bool[] outline = DetectBlue(outlineBitmap, minBlue, blueDominance);
-            bool[] mask = BuildOutlineMask(outline, width, height, outlineDilateRadius, "landmark");
-            return ExtractLandmarkLayer("landmarks", "Landmarks", "#111111", ink, mask, width, height, mapScale, minComponentArea, simplifyTolerance);
+            bool[] mask = BuildOutlineMask(outline, width, height, "landmark");
+            return ExtractLandmarkLayer("landmarks", "Landmarks", "#111111", ink, mask, width, height, mapScale);
         }
     }
 
-    static LandmarkLayer ExtractLandmarkLayer(string id, string name, string fill, bool[] ink, bool[] mask, int width, int height, int mapScale, int minComponentArea, double simplifyTolerance)
+    static LandmarkLayer ExtractLandmarkLayer(string id, string name, string fill, bool[] ink, bool[] mask, int width, int height, int mapScale)
     {
         bool[] maskedInk = new bool[ink.Length];
         for (int i = 0; i < maskedInk.Length; i++)
@@ -2295,10 +2283,9 @@ public static class MapExtractor
             maskedInk[i] = ink[i] && mask[i];
         }
 
-        // Clean the clipped ink and trace only the remaining landmark shapes.
-        bool[] cleanedInk = RemoveTinyInkComponents(maskedInk, width, height, minComponentArea);
-        List<List<PointI>> rawPaths = TraceInkPaths(cleanedInk, width, height);
-        List<List<PointD>> paths = FinalizePaths(rawPaths, mapScale, 0, simplifyTolerance);
+        // Trace the clipped ink exactly from source pixels.
+        List<List<PointI>> rawPaths = TraceInkPaths(maskedInk, width, height);
+        List<List<PointD>> paths = ScaleExactPaths(rawPaths, mapScale);
 
         if (paths.Count == 0)
         {
@@ -2315,9 +2302,9 @@ public static class MapExtractor
         };
     }
 
-    static bool[] BuildOutlineMask(bool[] outline, int width, int height, int dilateRadius, string name)
+    static bool[] BuildOutlineMask(bool[] outline, int width, int height, string name)
     {
-        bool[] barrier = Dilate(outline, width, height, dilateRadius);
+        bool[] barrier = outline;
         bool[] outside = new bool[outline.Length];
         Queue<int> queue = new Queue<int>();
 
@@ -2436,26 +2423,6 @@ public static class MapExtractor
         finally
         {
             bitmap.UnlockBits(data);
-        }
-
-        return result;
-    }
-
-    static bool[] RemoveTinyInkComponents(bool[] ink, int width, int height, int minComponentArea)
-    {
-        bool[] barrier = new bool[ink.Length];
-        for (int i = 0; i < ink.Length; i++)
-        {
-            barrier[i] = !ink[i];
-        }
-
-        ComponentResult components = LabelComponents(barrier, width, height);
-        RemoveTinyComponents(components.Labels, components.Areas, minComponentArea);
-
-        bool[] result = new bool[ink.Length];
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = components.Labels[i] >= 0;
         }
 
         return result;
@@ -3339,7 +3306,4 @@ Add-Type -TypeDefinition $code -ReferencedAssemblies "System.Drawing.dll"
   $MapScale,
   $SmoothPasses,
   $SimplifyTolerance,
-  $LandmarkMaxBrightness,
-  $LandmarkMinComponentArea,
-  $LandmarkSimplifyTolerance,
-  $LandmarkOutlineDilateRadius)
+  $LandmarkMaxBrightness)
