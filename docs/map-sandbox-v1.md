@@ -44,7 +44,7 @@ When a playable territory is pressed:
 
 This keeps the first version deterministic and focused on single-territory selection.
 
-Selecting a territory also moves the map camera to that territory. The generated app data contains a `focusBounds` rectangle for each playable territory, built from the territory's fill loops with 100 map units of padding. The camera fits that rectangle to the current screen shape, fills the screen in one direction, and centers in the other direction.
+Selecting a territory also moves the map camera to that territory. The generated app data contains a `focusBounds` rectangle for each playable territory, built from the territory's fill loops with 500 map units of padding. If the territory touches the outer map edge on a side, that side gets no padding. The camera fits that rectangle to the current screen shape, fills the screen in one direction, centers in the other direction, and then clamps the result inside the map.
 
 Focus movement is distance-based. If the current view is already nearly identical to the selected territory's focus view, the camera updates instantly. Otherwise, the camera uses a short ease-in-out animation, with larger moves taking longer than small moves.
 
@@ -63,6 +63,8 @@ Manual camera gestures are locked while the focus animation runs:
 - wheel or trackpad zooming is ignored
 
 After the animation finishes or is canceled, the user can pan and zoom normally from the current view.
+
+The camera never shows area outside the map. The initial view is the largest screen-shaped rectangle that fits inside the map, so the full map is visible only when the screen has the same aspect ratio as the map.
 
 ## Skin Picker
 

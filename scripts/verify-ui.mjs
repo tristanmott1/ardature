@@ -90,6 +90,8 @@ async function runSourceChecks() {
   const appSource = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapViewSource = await readFile(new URL("../src/map/components/MapView.tsx", import.meta.url), "utf8");
+  const mapWidth = generatedNumber(mapDataSource, "width");
+  const mapHeight = generatedNumber(mapDataSource, "height");
 
   assert(mapDataSource.includes("satisfies GeneratedMapData"), "Generated map data is typed.");
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
@@ -101,14 +103,28 @@ async function runSourceChecks() {
     const values = match.slice(1).map(Number);
     assert(values.every(Number.isFinite), "Generated focus bounds are finite.");
     assert(values[2] > values[0] && values[3] > values[1], "Generated focus bounds are non-empty.");
+    assert(values[0] >= 0 && values[1] >= 0 && values[2] <= mapWidth && values[3] <= mapHeight, "Generated focus bounds stay inside the map.");
   }
   assert(appSource.includes("createInitialTerritoryStates"), "App creates territory state from generated data.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
+  assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
   assert(mapViewSource.includes("data-map-animating"), "Map view exposes animation state.");
   assert(mapViewSource.includes("focusAnimationDuration"), "Map view uses adaptive focus duration.");
   assert(mapViewSource.includes("easeInOutCubic"), "Map view eases focus animation.");
   assert(!appSource.includes("isMapAnimating"), "App does not globally lock game input during camera animation.");
   assert(!mapViewSource.includes("isAnimatingRef.current || suppressClickRef.current"), "Map animation does not suppress territory hits.");
+}
+
+function generatedNumber(source, name) {
+  const match = source.match(new RegExp(`\\n  ${name}: ([^,]+),`));
+
+  if (!match) {
+    throw new Error(`Missing generated ${name}.`);
+  }
+
+  const value = Number(match[1]);
+  assert(Number.isFinite(value), `Generated ${name} is finite.`);
+  return value;
 }
 
 async function clickTerritory(page, territoryId) {
@@ -134,6 +150,21 @@ async function pressTerritory(page, territoryId) {
     target.dispatchEvent(new MouseEvent("mousedown", {
       bubbles: true,
       cancelable: true,
+      view: window,
+      clientX: 0,
+      clientY: 0,
+    }));
+    target.dispatchEvent(new MouseEvent("mouseup", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: 0,
+      clientY: 0,
+    }));
+    target.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
       clientX: 0,
       clientY: 0,
     }));
@@ -148,6 +179,40 @@ async function viewBox(page) {
   }
 
   return value;
+}
+
+function parseViewBox(value) {
+  const parts = value.trim().split(/\s+/).map(Number);
+
+  if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part))) {
+    throw new Error(`Invalid viewBox: ${value}`);
+  }
+
+  return {
+    x: parts[0],
+    y: parts[1],
+    width: parts[2],
+    height: parts[3],
+  };
+}
+
+async function mapSize(page) {
+  const background = page.locator("[data-background-piece]");
+  const width = Number(await background.getAttribute("width"));
+  const height = Number(await background.getAttribute("height"));
+
+  assert(Number.isFinite(width) && Number.isFinite(height), "Map dimensions are finite.");
+  return { width, height };
+}
+
+function assertViewBoxInside(value, size, message) {
+  const viewport = parseViewBox(value);
+  const epsilon = 0.001;
+
+  assert(viewport.x >= -epsilon, message);
+  assert(viewport.y >= -epsilon, message);
+  assert(viewport.x + viewport.width <= size.width + epsilon, message);
+  assert(viewport.y + viewport.height <= size.height + epsilon, message);
 }
 
 async function waitForTerritoryState(page, territoryId, state) {
@@ -179,9 +244,11 @@ async function runMapChecks(page) {
     await page.locator(".static-map-ink").evaluate((node) => getComputedStyle(node).pointerEvents === "none"),
     "Static ink layer is pointer inert.",
   );
+  const size = await mapSize(page);
 
   console.log("Checking selection");
   const initialViewBox = await viewBox(page);
+  assertViewBoxInside(initialViewBox, size, "Initial viewBox stays inside the map.");
   await clickTerritory(page, "shire");
   await waitForTerritoryState(page, "shire", "selected");
   await page.waitForSelector('.map-svg[data-map-animating="true"]');
@@ -199,6 +266,7 @@ async function runMapChecks(page) {
   await page.waitForSelector('.map-svg[data-map-animating="false"]');
   const breeFocusedViewBox = await viewBox(page);
   assert(initialViewBox !== breeFocusedViewBox, "Selecting a territory changes the map viewBox.");
+  assertViewBoxInside(breeFocusedViewBox, size, "Focused viewBox stays inside the map.");
 
   await clickTerritory(page, "bree");
   await waitForTerritoryState(page, "bree", "unselected");
@@ -243,17 +311,22 @@ async function runMapChecks(page) {
   await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeWheel);
   const afterWheel = await viewBox(page);
   assert(beforeWheel !== afterWheel, "Wheel zoom changes the map viewBox.");
+  assertViewBoxInside(afterWheel, size, "Wheel zoom keeps the viewBox inside the map.");
 
   const beforeDrag = await viewBox(page);
+  const wheelViewport = parseViewBox(afterWheel);
+  const startX = wheelViewport.x <= 1 ? 0.55 : 0.45;
+  const endX = wheelViewport.x <= 1 ? 0.45 : 0.55;
 
-  await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.45);
+  await page.mouse.move(box.x + box.width * startX, box.y + box.height * 0.5);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.55, { steps: 8 });
+  await page.mouse.move(box.x + box.width * endX, box.y + box.height * 0.5, { steps: 8 });
   await page.mouse.up();
 
   await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeDrag);
   const afterDrag = await viewBox(page);
   assert(beforeDrag !== afterDrag, "Drag pan changes the map viewBox.");
+  assertViewBoxInside(afterDrag, size, "Drag pan keeps the viewBox inside the map.");
 }
 
 async function main() {

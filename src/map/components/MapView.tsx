@@ -58,7 +58,7 @@ export function MapView({
   const [viewport, setViewportState] = useState<MapViewport>(viewportRef.current);
 
   function setViewport(nextViewport: MapViewport) {
-    const next = normalizeViewport(nextViewport);
+    const next = constrainViewport(nextViewport, mapData.width, mapData.height);
     viewportRef.current = next;
     setViewportState(next);
   }
@@ -178,12 +178,12 @@ export function MapView({
     const height = current.height / factor;
     const ratioX = (nextFocus.x - current.x) / current.width;
     const ratioY = (nextFocus.y - current.y) / current.height;
-    const nextViewport = normalizeViewport({
+    const nextViewport = {
       width,
       height,
       x: previousFocus.x - ratioX * width,
       y: previousFocus.y - ratioY * height,
-    });
+    };
 
     setViewport(nextViewport);
   }
@@ -191,11 +191,12 @@ export function MapView({
   function startFocusAnimation(targetViewport: MapViewport) {
     stopFocusAnimation();
 
+    const target = constrainViewport(targetViewport, mapData.width, mapData.height);
     const startViewport = viewportRef.current;
-    const duration = focusAnimationDuration(startViewport, targetViewport);
+    const duration = focusAnimationDuration(startViewport, target);
 
     if (duration === 0) {
-      setViewport(targetViewport);
+      setViewport(target);
       return;
     }
 
@@ -205,7 +206,7 @@ export function MapView({
     // Ease the visible viewBox into the selected territory bounds.
     function step(now: number) {
       const progress = Math.min(1, (now - startTime) / duration);
-      setViewport(lerpViewport(startViewport, targetViewport, easeInOutCubic(progress)));
+      setViewport(lerpViewport(startViewport, target, easeInOutCubic(progress)));
 
       if (progress < 1) {
         animationFrameRef.current = window.requestAnimationFrame(step);
@@ -213,7 +214,7 @@ export function MapView({
       }
 
       animationFrameRef.current = null;
-      setViewport(targetViewport);
+      setViewport(target);
       suppressClickRef.current = false;
       setIsAnimating(false);
     }
@@ -265,7 +266,7 @@ export function MapView({
       ? bounds.width / bounds.height
       : mapData.width / mapData.height;
 
-    setViewport(fitBoundsToAspect({ minX: 0, minY: 0, maxX: mapData.width, maxY: mapData.height }, aspect));
+    setViewport(fitMapToAspect(mapData.width, mapData.height, aspect));
   }, [mapData.height, mapData.width]);
 
   useEffect(() => {
@@ -373,25 +374,63 @@ function fitBoundsToAspect(bounds: MapBounds, aspect: number): MapViewport {
   };
 }
 
-function normalizeViewport(viewport: MapViewport): MapViewport {
-  const scale = Math.max(
+function fitMapToAspect(mapWidth: number, mapHeight: number, aspect: number): MapViewport {
+  const mapAspect = mapWidth / mapHeight;
+
+  if (aspect > mapAspect) {
+    const height = mapWidth / aspect;
+    return {
+      x: 0,
+      y: (mapHeight - height) / 2,
+      width: mapWidth,
+      height,
+    };
+  }
+
+  const width = mapHeight * aspect;
+  return {
+    x: (mapWidth - width) / 2,
+    y: 0,
+    width,
+    height: mapHeight,
+  };
+}
+
+function constrainViewport(viewport: MapViewport, mapWidth: number, mapHeight: number): MapViewport {
+  if (
+    !Number.isFinite(viewport.x) ||
+    !Number.isFinite(viewport.y) ||
+    !Number.isFinite(viewport.width) ||
+    !Number.isFinite(viewport.height) ||
+    viewport.width <= 0 ||
+    viewport.height <= 0
+  ) {
+    return fitMapToAspect(mapWidth, mapHeight, mapWidth / mapHeight);
+  }
+
+  const center = viewportCenter(viewport);
+  const maximum = fitMapToAspect(mapWidth, mapHeight, viewport.width / viewport.height);
+  const minimumScale = Math.max(
     MIN_VIEWPORT_SIZE / viewport.width,
     MIN_VIEWPORT_SIZE / viewport.height,
     1,
   );
+  let width = viewport.width * minimumScale;
+  let height = viewport.height * minimumScale;
+  const maximumScale = Math.min(maximum.width / width, maximum.height / height, 1);
 
-  if (scale === 1) {
-    return viewport;
-  }
-
-  const width = viewport.width * scale;
-  const height = viewport.height * scale;
+  width *= maximumScale;
+  height *= maximumScale;
   return {
     width,
     height,
-    x: viewport.x - (width - viewport.width) / 2,
-    y: viewport.y - (height - viewport.height) / 2,
+    x: clamp(center.x - width / 2, 0, Math.max(0, mapWidth - width)),
+    y: clamp(center.y - height / 2, 0, Math.max(0, mapHeight - height)),
   };
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
 }
 
 function focusAnimationDuration(start: MapViewport, target: MapViewport) {

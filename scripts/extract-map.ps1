@@ -284,7 +284,8 @@ public static class MapExtractor
     const double ShadeContrastThreshold = 0.01;
     const double ShadeUniquenessThreshold = 0.0105;
     const double TerritoryFillBleedStrokeWidth = 12;
-    const double AppFocusPadding = 100;
+    const double AppFocusPadding = 500;
+    const double MapEdgeTolerance = 0.001;
 
     static readonly PreviewTheme[] PreviewThemes = new PreviewTheme[]
     {
@@ -583,18 +584,8 @@ public static class MapExtractor
         ComponentResult initialComponents = LabelComponents(barrier, width, height);
         RemoveTinyComponents(initialComponents.Labels, initialComponents.Areas, minComponentArea);
         ComponentResult components = RelabelFromLabels(initialComponents.Labels, width, height);
-        if (components.Areas.Count != BackgroundSeeds.Length)
-        {
-            List<ComponentStats> stats = CalculateComponentStats(components.Labels, components.Areas, width);
-            foreach (ComponentStats component in stats.OrderBy(s => s.CentroidY).ThenBy(s => s.CentroidX))
-            {
-                Console.WriteLine("Background component " + component.Label.ToString(CultureInfo.InvariantCulture) + " area " + component.Area.ToString(CultureInfo.InvariantCulture) + " centroid " + component.CentroidX.ToString("0.0", CultureInfo.InvariantCulture) + "," + component.CentroidY.ToString("0.0", CultureInfo.InvariantCulture));
-            }
-
-            throw new InvalidOperationException("Expected " + BackgroundSeeds.Length.ToString(CultureInfo.InvariantCulture) + " background components but found " + components.Areas.Count.ToString(CultureInfo.InvariantCulture) + ".");
-        }
-
-        Dictionary<int, string> componentTerritoryIds = AssignBackgroundsToComponents(components, width, height);
+        List<ComponentStats> stats = CalculateComponentStats(components.Labels, components.Areas, width);
+        Dictionary<int, string> componentTerritoryIds = AssignBackgroundsToComponents(components, stats, width, height);
         for (int i = 0; i < components.Labels.Length; i++)
         {
             int label = components.Labels[i];
@@ -692,26 +683,49 @@ public static class MapExtractor
         return result;
     }
 
-    static Dictionary<int, string> AssignBackgroundsToComponents(ComponentResult components, int width, int height)
+    static Dictionary<int, string> AssignBackgroundsToComponents(ComponentResult components, List<ComponentStats> stats, int width, int height)
     {
         Dictionary<int, string> result = new Dictionary<int, string>();
-        HashSet<int> usedLabels = new HashSet<int>();
 
         foreach (BackgroundSeed seed in BackgroundSeeds)
         {
             int label = FindNearestComponentLabel(components.Labels, width, height, seed.X, seed.Y, 160);
             if (label < 0)
             {
-                throw new InvalidOperationException("No component was found near background seed " + seed.Id + ".");
+                continue;
             }
 
-            if (usedLabels.Contains(label))
+            string existingId;
+            if (result.TryGetValue(label, out existingId) && existingId != seed.Id)
             {
-                throw new InvalidOperationException("Background seed " + seed.Id + " maps to a component already used by another background territory.");
+                throw new InvalidOperationException("Background seed " + seed.Id + " maps to a component already used by " + existingId + ".");
             }
 
-            usedLabels.Add(label);
             result[label] = seed.Id;
+        }
+
+        string[] missingIds = BackgroundSeeds
+            .Select(seed => seed.Id)
+            .Distinct()
+            .Where(id => !result.Values.Contains(id))
+            .ToArray();
+        if (missingIds.Length > 0)
+        {
+            throw new InvalidOperationException("No component was found for background territories: " + String.Join(", ", missingIds) + ".");
+        }
+
+        // Extra background components inherit the nearest background seed.
+        foreach (int label in components.Areas.Keys)
+        {
+            if (!result.ContainsKey(label))
+            {
+                ComponentStats component = stats.First(s => s.Label == label);
+                BackgroundSeed nearestSeed = BackgroundSeeds
+                    .OrderBy(seed => DistanceSquared(component.CentroidX, component.CentroidY, seed.X, seed.Y))
+                    .First();
+                result[label] = nearestSeed.Id;
+                Console.WriteLine("Merged extra background component " + label.ToString(CultureInfo.InvariantCulture) + " into " + nearestSeed.Name + ".");
+            }
         }
 
         return result;
@@ -845,7 +859,8 @@ public static class MapExtractor
     static List<List<PointI>> TraceBorderPaths(List<Segment> segments)
     {
         Dictionary<string, Segment> segmentByKey = new Dictionary<string, Segment>();
-        Dictionary<string, List<PointI>> adjacency = new Dictionary<string, List<PointI>>();
+        Dictionary<string, PointI> pointByKey = new Dictionary<string, PointI>();
+        Dictionary<string, HashSet<string>> unusedNeighbors = new Dictionary<string, HashSet<string>>();
 
         foreach (Segment segment in segments)
         {
@@ -856,17 +871,18 @@ public static class MapExtractor
             }
 
             segmentByKey[key] = segment;
-            AddNeighbor(adjacency, segment.A, segment.B);
-            AddNeighbor(adjacency, segment.B, segment.A);
+            AddUnusedNeighbor(unusedNeighbors, pointByKey, segment.A, segment.B);
+            AddUnusedNeighbor(unusedNeighbors, pointByKey, segment.B, segment.A);
         }
 
         HashSet<string> unused = new HashSet<string>(segmentByKey.Keys);
+        HashSet<string> starts = BuildPathStarts(unusedNeighbors);
         List<List<PointI>> paths = new List<List<PointI>>();
 
         // Walk unused unit segments into one or more ordered border paths.
         while (unused.Count > 0)
         {
-            PointI start = ChoosePathStart(unused, adjacency, segmentByKey);
+            PointI start = ChoosePathStart(starts, unused, segmentByKey, pointByKey);
             List<PointI> path = new List<PointI>();
             path.Add(start);
 
@@ -874,7 +890,7 @@ public static class MapExtractor
             while (true)
             {
                 PointI next;
-                if (!TryGetUnusedNeighbor(current, unused, adjacency, out next))
+                if (!TryTakeUnusedNeighbor(current, unused, unusedNeighbors, starts, pointByKey, out next))
                 {
                     break;
                 }
@@ -893,75 +909,78 @@ public static class MapExtractor
             .ToList();
     }
 
-    static void AddNeighbor(Dictionary<string, List<PointI>> adjacency, PointI point, PointI neighbor)
+    static void AddUnusedNeighbor(Dictionary<string, HashSet<string>> unusedNeighbors, Dictionary<string, PointI> pointByKey, PointI point, PointI neighbor)
     {
         string key = PointKey(point);
-        List<PointI> neighbors;
-        if (!adjacency.TryGetValue(key, out neighbors))
+        string neighborKey = PointKey(neighbor);
+        pointByKey[key] = point;
+        pointByKey[neighborKey] = neighbor;
+
+        HashSet<string> neighbors;
+        if (!unusedNeighbors.TryGetValue(key, out neighbors))
         {
-            neighbors = new List<PointI>();
-            adjacency[key] = neighbors;
+            neighbors = new HashSet<string>();
+            unusedNeighbors[key] = neighbors;
         }
 
-        neighbors.Add(neighbor);
+        neighbors.Add(neighborKey);
     }
 
-    static PointI ChoosePathStart(HashSet<string> unused, Dictionary<string, List<PointI>> adjacency, Dictionary<string, Segment> segmentByKey)
+    static HashSet<string> BuildPathStarts(Dictionary<string, HashSet<string>> unusedNeighbors)
     {
-        foreach (string key in unused)
+        HashSet<string> result = new HashSet<string>();
+        foreach (var pair in unusedNeighbors)
         {
-            Segment segment = segmentByKey[key];
-            if (UnusedDegree(segment.A, unused, adjacency) != 2)
+            if (pair.Value.Count > 0 && pair.Value.Count != 2)
             {
-                return segment.A;
+                result.Add(pair.Key);
             }
+        }
 
-            if (UnusedDegree(segment.B, unused, adjacency) != 2)
-            {
-                return segment.B;
-            }
+        return result;
+    }
+
+    static PointI ChoosePathStart(HashSet<string> starts, HashSet<string> unused, Dictionary<string, Segment> segmentByKey, Dictionary<string, PointI> pointByKey)
+    {
+        if (starts.Count > 0)
+        {
+            return pointByKey[starts.First()];
         }
 
         return segmentByKey[unused.First()].A;
     }
 
-    static int UnusedDegree(PointI point, HashSet<string> unused, Dictionary<string, List<PointI>> adjacency)
+    static bool TryTakeUnusedNeighbor(PointI point, HashSet<string> unused, Dictionary<string, HashSet<string>> unusedNeighbors, HashSet<string> starts, Dictionary<string, PointI> pointByKey, out PointI next)
     {
-        List<PointI> neighbors;
-        if (!adjacency.TryGetValue(PointKey(point), out neighbors))
+        string key = PointKey(point);
+        HashSet<string> neighbors;
+        if (unusedNeighbors.TryGetValue(key, out neighbors) && neighbors.Count > 0)
         {
-            return 0;
-        }
-
-        int count = 0;
-        foreach (PointI neighbor in neighbors)
-        {
-            if (unused.Contains(SegmentKey(point, neighbor)))
-            {
-                count++;
-            }
-        }
-
-        return count;
-    }
-
-    static bool TryGetUnusedNeighbor(PointI point, HashSet<string> unused, Dictionary<string, List<PointI>> adjacency, out PointI next)
-    {
-        List<PointI> neighbors;
-        if (adjacency.TryGetValue(PointKey(point), out neighbors))
-        {
-            foreach (PointI neighbor in neighbors)
-            {
-                if (unused.Contains(SegmentKey(point, neighbor)))
-                {
-                    next = neighbor;
-                    return true;
-                }
-            }
+            string neighborKey = neighbors.First();
+            next = pointByKey[neighborKey];
+            unused.Remove(SegmentKey(point, next));
+            neighbors.Remove(neighborKey);
+            unusedNeighbors[neighborKey].Remove(key);
+            UpdatePathStart(key, unusedNeighbors, starts);
+            UpdatePathStart(neighborKey, unusedNeighbors, starts);
+            return true;
         }
 
         next = new PointI();
         return false;
+    }
+
+    static void UpdatePathStart(string key, Dictionary<string, HashSet<string>> unusedNeighbors, HashSet<string> starts)
+    {
+        HashSet<string> neighbors;
+        int count = unusedNeighbors.TryGetValue(key, out neighbors) ? neighbors.Count : 0;
+        if (count > 0 && count != 2)
+        {
+            starts.Add(key);
+            return;
+        }
+
+        starts.Remove(key);
     }
 
     static List<PointI> CompressCollinear(List<PointI> points)
@@ -2528,7 +2547,7 @@ public static class MapExtractor
             .ToList();
         for (int i = 0; i < playableTerritories.Count; i++)
         {
-            WriteAppTerritoryData(builder, playableTerritories[i], borderById, shadeValues, mapScale, i == playableTerritories.Count - 1);
+            WriteAppTerritoryData(builder, playableTerritories[i], borderById, shadeValues, mapWidth, mapHeight, mapScale, i == playableTerritories.Count - 1);
         }
 
         builder.AppendLine("  ],");
@@ -2546,7 +2565,7 @@ public static class MapExtractor
         File.WriteAllText(outputTs, builder.ToString(), new UTF8Encoding(false));
     }
 
-    static void WriteAppTerritoryData(StringBuilder builder, TerritoryInfo territory, Dictionary<string, BorderInfo> borderById, Dictionary<string, double> shadeValues, int mapScale, bool last)
+    static void WriteAppTerritoryData(StringBuilder builder, TerritoryInfo territory, Dictionary<string, BorderInfo> borderById, Dictionary<string, double> shadeValues, int mapWidth, int mapHeight, int mapScale, bool last)
     {
         TerritorySeed seed = TerritorySeeds.First(s => s.Id == territory.Id);
         List<List<PointD>> loops = BuildTerritoryLoops(territory, borderById)
@@ -2555,14 +2574,14 @@ public static class MapExtractor
         List<string> fillPaths = loops
             .Select(loop => SvgPath(loop, true))
             .ToList();
-        BoundsD focusBounds = BuildFocusBounds(loops, AppFocusPadding);
+        BoundsD focusBounds = BuildFocusBounds(loops, AppFocusPadding, mapWidth, mapHeight);
 
         if (fillPaths.Count == 0)
         {
             throw new InvalidOperationException("Territory " + territory.Id + " has no fill paths for app data.");
         }
 
-        ValidateFocusBounds(territory, focusBounds);
+        ValidateFocusBounds(territory, focusBounds, mapWidth, mapHeight);
 
         builder.AppendLine("    {");
         builder.AppendLine("      id: " + JsonString(territory.Id) + ",");
@@ -2585,7 +2604,7 @@ public static class MapExtractor
         builder.AppendLine("    }" + (last ? "" : ","));
     }
 
-    static BoundsD BuildFocusBounds(List<List<PointD>> loops, double padding)
+    static BoundsD BuildFocusBounds(List<List<PointD>> loops, double padding, int mapWidth, int mapHeight)
     {
         BoundsD bounds = new BoundsD
         {
@@ -2595,7 +2614,7 @@ public static class MapExtractor
             MaxY = Double.NegativeInfinity
         };
 
-        // Measure the canonical fill loops, then add a small focus margin.
+        // Measure the canonical fill loops, then add an edge-aware focus margin.
         foreach (List<PointD> loop in loops)
         {
             foreach (PointD point in loop)
@@ -2607,14 +2626,19 @@ public static class MapExtractor
             }
         }
 
-        bounds.MinX -= padding;
-        bounds.MinY -= padding;
-        bounds.MaxX += padding;
-        bounds.MaxY += padding;
+        bool touchesLeft = bounds.MinX <= MapEdgeTolerance;
+        bool touchesTop = bounds.MinY <= MapEdgeTolerance;
+        bool touchesRight = bounds.MaxX >= mapWidth - MapEdgeTolerance;
+        bool touchesBottom = bounds.MaxY >= mapHeight - MapEdgeTolerance;
+
+        bounds.MinX = touchesLeft ? 0 : Math.Max(0, bounds.MinX - padding);
+        bounds.MinY = touchesTop ? 0 : Math.Max(0, bounds.MinY - padding);
+        bounds.MaxX = touchesRight ? mapWidth : Math.Min(mapWidth, bounds.MaxX + padding);
+        bounds.MaxY = touchesBottom ? mapHeight : Math.Min(mapHeight, bounds.MaxY + padding);
         return bounds;
     }
 
-    static void ValidateFocusBounds(TerritoryInfo territory, BoundsD bounds)
+    static void ValidateFocusBounds(TerritoryInfo territory, BoundsD bounds, int mapWidth, int mapHeight)
     {
         if (
             Double.IsNaN(bounds.MinX) ||
@@ -2625,6 +2649,10 @@ public static class MapExtractor
             Double.IsInfinity(bounds.MinY) ||
             Double.IsInfinity(bounds.MaxX) ||
             Double.IsInfinity(bounds.MaxY) ||
+            bounds.MinX < 0 ||
+            bounds.MinY < 0 ||
+            bounds.MaxX > mapWidth ||
+            bounds.MaxY > mapHeight ||
             bounds.MaxX <= bounds.MinX ||
             bounds.MaxY <= bounds.MinY)
         {
