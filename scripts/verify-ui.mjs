@@ -93,11 +93,14 @@ async function runSourceChecks() {
   const syncTransportSource = await readFile(new URL("../src/sync/syncTransport.ts", import.meta.url), "utf8");
   const mapWidth = generatedNumber(mapDataSource, "width");
   const mapHeight = generatedNumber(mapDataSource, "height");
+  const sourceWidth = generatedNumber(mapDataSource, "sourceWidth");
+  const sourceHeight = generatedNumber(mapDataSource, "sourceHeight");
 
   assert(mapDataSource.includes("satisfies GeneratedMapData"), "Generated map data is typed.");
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
   assert(!mapDataSource.includes("Infinity"), "Generated map data has no Infinity values.");
   assert((mapDataSource.match(/id: "/g) ?? []).length === 42, "Generated app data has 42 playable territories.");
+  assert(mapWidth === sourceWidth * 10 + 1000 && mapHeight === sourceHeight * 10 + 1000, "Generated app data includes the 500-unit display frame.");
   const focusBounds = [...mapDataSource.matchAll(/focusBounds: \{ minX: ([^,]+), minY: ([^,]+), maxX: ([^,]+), maxY: ([^ }]+) \}/g)];
   assert(focusBounds.length === 42, "Generated app data has 42 focus bounds.");
   for (const match of focusBounds) {
@@ -114,6 +117,7 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
   assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
+  assert(mapViewSource.includes("onMapPress"), "Map view supports map-background presses.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
 }
 
@@ -193,6 +197,18 @@ async function clickTerritory(page, territoryId) {
 
     target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
   }, territoryId);
+}
+
+async function clickMapBackground(page) {
+  await page.evaluate(() => {
+    const target = document.querySelector("[data-background-piece]");
+
+    if (!target) {
+      throw new Error("Missing map background.");
+    }
+
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+  });
 }
 
 async function setPlayerName(page, index, name) {
@@ -326,17 +342,27 @@ async function runLocalDraftChecks(page) {
   assert((await confirmDialog.locator(".territory-preview-shape").count()) === 0, "Confirm sheet has no territory preview.");
   assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Pending territory is selected on the map.");
   assert((await page.locator('[data-territory-fill="shire"] [data-territory-fill-piece="shire"]').first().getAttribute("fill")) === "#ffffff", "Pending territory is filled white on the map.");
+  await clickMapBackground(page);
+  await confirmDialog.waitFor({ state: "detached" });
+  assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 0, "Tapping the map background cancels the pending pick.");
+
+  await clickTerritory(page, "shire");
+  await confirmDialog.waitFor();
+  await clickTerritory(page, "bree");
+  await confirmDialog.getByRole("heading", { name: "Bree" }).waitFor();
+  const replacedConfirmBox = await confirmDialog.boundingBox();
   await page.getByRole("button", { name: "Confirm pick" }).click();
   const resultDialog = page.getByRole("status");
   await resultDialog.waitFor();
   const resultBox = await resultDialog.boundingBox();
-  assert(confirmBox && resultBox && Math.abs(confirmBox.width - resultBox.width) < 1, "Result sheet matches confirm sheet width.");
+  assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.width - resultBox.width) < 1, "Result sheet matches confirm sheet width.");
+  assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.height - resultBox.height) < 1, "Result sheet matches confirm sheet height.");
   assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
   assert((await resultDialog.locator(".territory-preview-shape").count()) === 0, "Result sheet has no territory preview.");
   await page.getByText("41 left").waitFor();
   assertFullMapViewBox(await viewBox(page), size, "Local result dismissal zooms back out to the full map.");
 
-  await clickTerritory(page, "bree");
+  await clickTerritory(page, "shire");
   await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
   await page.getByRole("button", { name: "Confirm pick" }).click();
   await page.locator(".pick-result-scrim").click();

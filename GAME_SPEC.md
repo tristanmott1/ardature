@@ -742,13 +742,13 @@ During manual drafts, the active player selects a remaining territory on the map
 Draft selection flow:
 
 1. Select a remaining territory.
-2. Show a confirmation popup with cancel and confirm controls.
+2. Show a compact confirmation bottom sheet with cancel and confirm controls.
 3. Confirming assigns the territory immediately and colors it with the owner's player color.
 4. Show a result popup naming the player and drafted territory.
 
-The confirmation popup is a compact bottom sheet with the territory name and cancel/confirm controls. The pending territory itself is highlighted on the map for the active drafting viewer.
+The confirmation popup is a compact bottom sheet with the territory name and cancel/confirm controls. The pending territory itself is highlighted on the map for the active drafting viewer. While confirmation is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels it.
 
-The result popup uses the same compact bottom-sheet footprint. In local mode, it auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
+The result popup uses the exact same compact bottom-sheet footprint. In local mode, it auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
 
 In sync mode, another player's pending selection never moves, focuses, or white-fills your map. The next player's turn starts immediately on that player's device. The result popup also auto-dismisses after about one second and can be dismissed early.
 

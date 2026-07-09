@@ -282,7 +282,7 @@ public static class MapExtractor
     const double ShadeUniquenessThreshold = 0.0105;
     const double TerritoryFillBleedStrokeWidth = 12;
     const double AppFocusPadding = 500;
-    const double MapEdgeTolerance = 0.001;
+    const double AppDisplayMargin = AppFocusPadding;
 
     static readonly PreviewTheme[] PreviewThemes = new PreviewTheme[]
     {
@@ -2377,13 +2377,15 @@ public static class MapExtractor
 
     static void WriteLandmarkSvg(string outputSvg, int width, int height, int mapScale, LandmarkLayer layer)
     {
-        int mapWidth = width * mapScale;
-        int mapHeight = height * mapScale;
+        double mapWidth = (width * mapScale) + (AppDisplayMargin * 2);
+        double mapHeight = (height * mapScale) + (AppDisplayMargin * 2);
+        double svgWidth = width + ((AppDisplayMargin * 2) / mapScale);
+        double svgHeight = height + ((AppDisplayMargin * 2) / mapScale);
         StringBuilder builder = new StringBuilder();
 
         builder.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-        builder.AppendLine("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + width.ToString(CultureInfo.InvariantCulture) + "\" height=\"" + height.ToString(CultureInfo.InvariantCulture) + "\" viewBox=\"0 0 " + mapWidth.ToString(CultureInfo.InvariantCulture) + " " + mapHeight.ToString(CultureInfo.InvariantCulture) + "\">");
-        builder.AppendLine("  <path d=\"" + SvgCompoundPath(layer.Paths) + "\" fill=\"" + layer.Fill + "\" fill-opacity=\"0.82\" fill-rule=\"evenodd\"/>");
+        builder.AppendLine("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + PointNumber(svgWidth) + "\" height=\"" + PointNumber(svgHeight) + "\" viewBox=\"0 0 " + PointNumber(mapWidth) + " " + PointNumber(mapHeight) + "\">");
+        builder.AppendLine("  <path d=\"" + SvgCompoundPath(OffsetPaths(layer.Paths, AppDisplayMargin, AppDisplayMargin)) + "\" fill=\"" + layer.Fill + "\" fill-opacity=\"0.82\" fill-rule=\"evenodd\"/>");
         builder.AppendLine("</svg>");
 
         File.WriteAllText(outputSvg, builder.ToString(), new UTF8Encoding(false));
@@ -2490,18 +2492,18 @@ public static class MapExtractor
 
     static void WriteAppData(string outputTs, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks)
     {
-        int mapWidth = width * mapScale;
-        int mapHeight = height * mapScale;
+        double mapWidth = (width * mapScale) + (AppDisplayMargin * 2);
+        double mapHeight = (height * mapScale) + (AppDisplayMargin * 2);
         Dictionary<string, double> shadeValues = BuildTerritoryShadeValues(territories, borders, width, height);
         Dictionary<string, BorderInfo> borderById = borders.ToDictionary(border => border.Id);
-        List<string> borderPaths = BuildPreviewBorderPathStrings(territories, borders, landmarks.Mask, width, height, mapScale);
+        List<string> borderPaths = BuildPreviewBorderPathStrings(territories, borders, landmarks.Mask, width, height, mapScale, AppDisplayMargin, AppDisplayMargin);
         StringBuilder builder = new StringBuilder();
 
         builder.AppendLine("import type { GeneratedMapData } from \"../mapTypes\";");
         builder.AppendLine();
         builder.AppendLine("export const generatedMapData = {");
-        builder.AppendLine("  width: " + mapWidth.ToString(CultureInfo.InvariantCulture) + ",");
-        builder.AppendLine("  height: " + mapHeight.ToString(CultureInfo.InvariantCulture) + ",");
+        builder.AppendLine("  width: " + PointNumber(mapWidth) + ",");
+        builder.AppendLine("  height: " + PointNumber(mapHeight) + ",");
         builder.AppendLine("  sourceWidth: " + width.ToString(CultureInfo.InvariantCulture) + ",");
         builder.AppendLine("  sourceHeight: " + height.ToString(CultureInfo.InvariantCulture) + ",");
         builder.AppendLine("  backgroundColor: " + JsonString(previewBackgroundColor) + ",");
@@ -2523,7 +2525,7 @@ public static class MapExtractor
         builder.AppendLine("    borderStroke: \"#111111\",");
         builder.AppendLine("    borderOpacity: 0.72,");
         builder.AppendLine("    borderStrokeWidth: 10,");
-        builder.AppendLine("    landmarkPath: " + JsonString(SvgCompoundPath(landmarks.Paths)) + ",");
+        builder.AppendLine("    landmarkPath: " + JsonString(SvgCompoundPath(OffsetPaths(landmarks.Paths, AppDisplayMargin, AppDisplayMargin))) + ",");
         builder.AppendLine("    landmarkFill: " + JsonString(landmarks.Fill) + ",");
         builder.AppendLine("    landmarkOpacity: 0.82");
         builder.AppendLine("  }");
@@ -2532,10 +2534,11 @@ public static class MapExtractor
         File.WriteAllText(outputTs, builder.ToString(), new UTF8Encoding(false));
     }
 
-    static void WriteAppTerritoryData(StringBuilder builder, TerritoryInfo territory, Dictionary<string, BorderInfo> borderById, Dictionary<string, double> shadeValues, int mapWidth, int mapHeight, int mapScale, bool last)
+    static void WriteAppTerritoryData(StringBuilder builder, TerritoryInfo territory, Dictionary<string, BorderInfo> borderById, Dictionary<string, double> shadeValues, double mapWidth, double mapHeight, int mapScale, bool last)
     {
         TerritorySeed seed = TerritorySeeds.First(s => s.Id == territory.Id);
         List<List<PointD>> loops = BuildTerritoryLoops(territory, borderById)
+            .Select(loop => OffsetPath(loop, AppDisplayMargin, AppDisplayMargin))
             .Where(loop => loop.Count >= 3)
             .ToList();
         List<string> fillPaths = loops
@@ -2554,7 +2557,7 @@ public static class MapExtractor
         builder.AppendLine("      id: " + JsonString(territory.Id) + ",");
         builder.AppendLine("      name: " + JsonString(territory.Name) + ",");
         builder.AppendLine("      regionId: " + JsonString(territory.RegionId) + ",");
-        builder.AppendLine("      center: { x: " + (seed.X * mapScale).ToString(CultureInfo.InvariantCulture) + ", y: " + (seed.Y * mapScale).ToString(CultureInfo.InvariantCulture) + " },");
+        builder.AppendLine("      center: { x: " + PointNumber((seed.X * mapScale) + AppDisplayMargin) + ", y: " + PointNumber((seed.Y * mapScale) + AppDisplayMargin) + " },");
         builder.AppendLine("      focusBounds: " + BoundsTs(focusBounds) + ",");
         builder.AppendLine("      fillPaths: " + StringArrayTs(fillPaths.ToArray(), "        ", "      ") + ",");
         builder.AppendLine("      hitPaths: " + StringArrayTs(fillPaths.ToArray(), "        ", "      ") + ",");
@@ -2571,7 +2574,7 @@ public static class MapExtractor
         builder.AppendLine("    }" + (last ? "" : ","));
     }
 
-    static BoundsD BuildFocusBounds(List<List<PointD>> loops, double padding, int mapWidth, int mapHeight)
+    static BoundsD BuildFocusBounds(List<List<PointD>> loops, double padding, double mapWidth, double mapHeight)
     {
         BoundsD bounds = new BoundsD
         {
@@ -2581,7 +2584,7 @@ public static class MapExtractor
             MaxY = Double.NegativeInfinity
         };
 
-        // Measure the canonical fill loops, then add an edge-aware focus margin.
+        // Measure the framed fill loops, then add the same margin on every side.
         foreach (List<PointD> loop in loops)
         {
             foreach (PointD point in loop)
@@ -2593,19 +2596,14 @@ public static class MapExtractor
             }
         }
 
-        bool touchesLeft = bounds.MinX <= MapEdgeTolerance;
-        bool touchesTop = bounds.MinY <= MapEdgeTolerance;
-        bool touchesRight = bounds.MaxX >= mapWidth - MapEdgeTolerance;
-        bool touchesBottom = bounds.MaxY >= mapHeight - MapEdgeTolerance;
-
-        bounds.MinX = touchesLeft ? 0 : Math.Max(0, bounds.MinX - padding);
-        bounds.MinY = touchesTop ? 0 : Math.Max(0, bounds.MinY - padding);
-        bounds.MaxX = touchesRight ? mapWidth : Math.Min(mapWidth, bounds.MaxX + padding);
-        bounds.MaxY = touchesBottom ? mapHeight : Math.Min(mapHeight, bounds.MaxY + padding);
+        bounds.MinX = Math.Max(0, bounds.MinX - padding);
+        bounds.MinY = Math.Max(0, bounds.MinY - padding);
+        bounds.MaxX = Math.Min(mapWidth, bounds.MaxX + padding);
+        bounds.MaxY = Math.Min(mapHeight, bounds.MaxY + padding);
         return bounds;
     }
 
-    static void ValidateFocusBounds(TerritoryInfo territory, BoundsD bounds, int mapWidth, int mapHeight)
+    static void ValidateFocusBounds(TerritoryInfo territory, BoundsD bounds, double mapWidth, double mapHeight)
     {
         if (
             Double.IsNaN(bounds.MinX) ||
@@ -2636,7 +2634,7 @@ public static class MapExtractor
             " }";
     }
 
-    static List<string> BuildPreviewBorderPathStrings(Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, bool[] hiddenMask, int width, int height, int mapScale)
+    static List<string> BuildPreviewBorderPathStrings(Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, bool[] hiddenMask, int width, int height, int mapScale, double offsetX, double offsetY)
     {
         List<string> result = new List<string>();
 
@@ -2651,7 +2649,7 @@ public static class MapExtractor
             {
                 if (path.Count >= 2)
                 {
-                    result.Add(SvgPath(path, false));
+                    result.Add(SvgPath(OffsetPath(path, offsetX, offsetY), false));
                 }
             }
         }
@@ -2681,14 +2679,16 @@ public static class MapExtractor
 
     static void WriteTerritoriesSvg(string outputSvg, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks, PreviewTheme theme, Dictionary<string, double> shadeValues)
     {
-        int mapWidth = width * mapScale;
-        int mapHeight = height * mapScale;
+        double mapWidth = (width * mapScale) + (AppDisplayMargin * 2);
+        double mapHeight = (height * mapScale) + (AppDisplayMargin * 2);
+        double svgWidth = width + ((AppDisplayMargin * 2) / mapScale);
+        double svgHeight = height + ((AppDisplayMargin * 2) / mapScale);
         Dictionary<string, BorderInfo> borderById = borders.ToDictionary(border => border.Id);
         StringBuilder builder = new StringBuilder();
 
         builder.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-        builder.AppendLine("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + width.ToString(CultureInfo.InvariantCulture) + "\" height=\"" + height.ToString(CultureInfo.InvariantCulture) + "\" viewBox=\"0 0 " + mapWidth.ToString(CultureInfo.InvariantCulture) + " " + mapHeight.ToString(CultureInfo.InvariantCulture) + "\">");
-        builder.AppendLine("  <rect x=\"0\" y=\"0\" width=\"" + mapWidth.ToString(CultureInfo.InvariantCulture) + "\" height=\"" + mapHeight.ToString(CultureInfo.InvariantCulture) + "\" fill=\"" + previewBackgroundColor + "\"/>");
+        builder.AppendLine("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + PointNumber(svgWidth) + "\" height=\"" + PointNumber(svgHeight) + "\" viewBox=\"0 0 " + PointNumber(mapWidth) + " " + PointNumber(mapHeight) + "\">");
+        builder.AppendLine("  <rect x=\"0\" y=\"0\" width=\"" + PointNumber(mapWidth) + "\" height=\"" + PointNumber(mapHeight) + "\" fill=\"" + previewBackgroundColor + "\"/>");
 
         foreach (TerritoryInfo territory in territories.Values.Where(t => t.Playable).OrderBy(t => TerritorySortKey(t.Id)))
         {
@@ -2697,13 +2697,13 @@ public static class MapExtractor
             {
                 if (loop.Count >= 3)
                 {
-                    builder.AppendLine("  <path d=\"" + SvgPath(loop, true) + "\" fill=\"" + color + "\" stroke=\"" + color + "\" stroke-width=\"" + PointNumber(TerritoryFillBleedStrokeWidth) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+                    builder.AppendLine("  <path d=\"" + SvgPath(OffsetPath(loop, AppDisplayMargin, AppDisplayMargin), true) + "\" fill=\"" + color + "\" stroke=\"" + color + "\" stroke-width=\"" + PointNumber(TerritoryFillBleedStrokeWidth) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
                 }
             }
         }
 
-        WritePreviewBorderStrokes(builder, territories, borders, landmarks.Mask, width, height, mapScale);
-        builder.AppendLine("  <path d=\"" + SvgCompoundPath(landmarks.Paths) + "\" fill=\"" + landmarks.Fill + "\" fill-opacity=\"0.82\" fill-rule=\"evenodd\"/>");
+        WritePreviewBorderStrokes(builder, territories, borders, landmarks.Mask, width, height, mapScale, AppDisplayMargin, AppDisplayMargin);
+        builder.AppendLine("  <path d=\"" + SvgCompoundPath(OffsetPaths(landmarks.Paths, AppDisplayMargin, AppDisplayMargin)) + "\" fill=\"" + landmarks.Fill + "\" fill-opacity=\"0.82\" fill-rule=\"evenodd\"/>");
         builder.AppendLine("</svg>");
         File.WriteAllText(outputSvg, builder.ToString(), new UTF8Encoding(false));
     }
@@ -2830,7 +2830,7 @@ public static class MapExtractor
         }
     }
 
-    static void WritePreviewBorderStrokes(StringBuilder builder, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, bool[] hiddenMask, int width, int height, int mapScale)
+    static void WritePreviewBorderStrokes(StringBuilder builder, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, bool[] hiddenMask, int width, int height, int mapScale, double offsetX, double offsetY)
     {
         foreach (BorderInfo border in borders.OrderBy(border => border.Id, StringComparer.Ordinal))
         {
@@ -2843,7 +2843,7 @@ public static class MapExtractor
             {
                 if (path.Count >= 2)
                 {
-                    builder.AppendLine("  <path d=\"" + SvgPath(path, false) + "\" fill=\"none\" stroke=\"#111111\" stroke-opacity=\"0.72\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+                    builder.AppendLine("  <path d=\"" + SvgPath(OffsetPath(path, offsetX, offsetY), false) + "\" fill=\"none\" stroke=\"#111111\" stroke-opacity=\"0.72\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
                 }
             }
         }
@@ -3076,6 +3076,30 @@ public static class MapExtractor
         }
 
         return builder.ToString();
+    }
+
+    static List<List<PointD>> OffsetPaths(List<List<PointD>> paths, double offsetX, double offsetY)
+    {
+        List<List<PointD>> result = new List<List<PointD>>();
+
+        foreach (List<PointD> path in paths)
+        {
+            result.Add(OffsetPath(path, offsetX, offsetY));
+        }
+
+        return result;
+    }
+
+    static List<PointD> OffsetPath(List<PointD> path, double offsetX, double offsetY)
+    {
+        List<PointD> result = new List<PointD>();
+
+        foreach (PointD point in path)
+        {
+            result.Add(new PointD(point.X + offsetX, point.Y + offsetY));
+        }
+
+        return result;
     }
 
     static string SvgPath(List<PointD> points, bool close)

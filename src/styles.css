@@ -661,6 +661,8 @@ select {
 
 .draft-sheet {
   width: min(320px, calc(100vw - 28px));
+  height: 132px;
+  align-content: center;
   gap: 10px;
   pointer-events: auto;
 }
@@ -677,6 +679,10 @@ select {
 
 .draft-sheet .icon-button {
   width: 100%;
+}
+
+.draft-sheet-action-spacer {
+  height: 44px;
 }
 
 .pick-result-scrim {

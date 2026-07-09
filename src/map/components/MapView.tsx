@@ -39,6 +39,7 @@ const MIN_VIEWPORT_SIZE = 400;
 
 export function MapView({
   mapData,
+  onMapPress,
   onTerritoryPress,
   resetCameraKey = 0,
   selectedTerritoryId,
@@ -46,6 +47,7 @@ export function MapView({
   territoryStates,
 }: {
   mapData: GeneratedMapData;
+  onMapPress?: () => void;
   onTerritoryPress?: (territoryId: string) => void;
   resetCameraKey?: number;
   selectedTerritoryId: string | null;
@@ -337,6 +339,11 @@ export function MapView({
           data-background-piece="true"
           fill={mapData.backgroundColor}
           height={mapData.height}
+          onClick={() => {
+            if (!suppressClickRef.current) {
+              onMapPress?.();
+            }
+          }}
           width={mapData.width}
           x="0"
           y="0"

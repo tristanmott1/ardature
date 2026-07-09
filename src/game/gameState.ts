@@ -116,7 +116,6 @@ export function canPickTerritory(state: GameState, territoryId: string) {
   return state.phase === "draft" &&
     Boolean(activePlayer(state)) &&
     Boolean(draft) &&
-    !draft?.pendingTerritoryId &&
     !draft?.resultTerritoryId &&
     draft?.ownership[territoryId] === null;
 }

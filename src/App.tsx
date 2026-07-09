@@ -148,10 +148,9 @@ function App() {
     ? Math.max(0, game.draft.timerEndsAt - now)
     : game.draft?.timerRemainingMs ?? null;
   const canControlSetup = game.mode === "local" || syncRole === "host";
-  const canPick = game.phase === "draft" &&
+  const canDraftOnMap = game.phase === "draft" &&
     canControlActivePlayer &&
     Boolean(active) &&
-    !game.draft?.pendingTerritoryId &&
     !game.draft?.resultTerritoryId;
   const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
   const isModalOpen = Boolean(
@@ -905,7 +904,8 @@ function App() {
 
       <MapView
         mapData={generatedMapData}
-        onTerritoryPress={canPick ? pressTerritory : undefined}
+        onMapPress={canShowConfirm ? cancelPendingPick : undefined}
+        onTerritoryPress={canDraftOnMap ? pressTerritory : undefined}
         resetCameraKey={resetCameraKey}
         selectedTerritoryId={viewerSelectedTerritoryId}
         showZoomOutControl={!isModalOpen}
@@ -1447,6 +1447,7 @@ function PickResultDialog({
       <section className="modal-panel draft-sheet pick-result-modal" role="status" aria-live="polite">
         <p className="muted">{activePlayer.name} drafted</p>
         <h2>{territory.name}</h2>
+        <div className="draft-sheet-action-spacer" aria-hidden="true" />
       </section>
     </div>
   );
