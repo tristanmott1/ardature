@@ -70,7 +70,7 @@ Budget rules:
 - While the marker moves, the UI shows live final heavy/cavalry/elite counts plus the guaranteed leader.
 - Once the player submits the army build, the heavy/cavalry/elite counts plus the guaranteed leader become that player's base army.
 
-Inherited troops from removed players are additive. They do not change the player's budget and they do not get converted into budget. If a player selected a `100%` cavalry mixture and later receives `2` heavy, `1` elite, and `1` leader from a removed player, their live allocation pool shows their original cavalry count, their original leader, plus the inherited `2` heavy, `1` elite, and `1` leader.
+Inherited troops from removed players are additive. They do not change the player's budget and they do not get converted into budget. Leaders from removed players are not inherited as leaders; each removed wizard or witch-king is randomly replaced with one heavy, cavalry, or elite troop before redistribution. If a player selected a `100%` cavalry mixture and later receives `2` heavy and `1` elite from a removed player, their live allocation pool shows their original cavalry count, their original leader, plus the inherited `2` heavy and `1` elite.
 
 ## Territory Allocation
 
@@ -142,6 +142,7 @@ If a player is removed during allocation:
 - The removed player's territories and troops are redistributed to the remaining players.
 - If the removed player has submitted an army build, use that troop mixture plus the player's guaranteed leader.
 - If the removed player has not submitted an army build, force a uniform army build with the removed player's effective triangle budget plus the player's guaranteed leader.
+- Before redistribution, replace every removed leader troop with one random heavy, cavalry, or elite troop.
 - The removed player's existing territory placements, if any, do not matter.
 - The removed player's territories and troops are decoupled before redistribution.
 - Shuffle the remaining players.

@@ -875,6 +875,7 @@ During allocation, removing a player redistributes that player's territories and
 - If fewer than 2 players remain, the game ends and returns home.
 - If the removed player has submitted an army build, use that mixture plus that player's guaranteed leader.
 - If the removed player has not submitted an army build, force a uniform mixture with that player's effective triangle budget plus that player's guaranteed leader.
+- Before redistribution, replace every removed wizard or witch-king with one random heavy, cavalry, or elite troop.
 - Existing troop placements on the removed player's territories do not matter.
 - The removed player's territories and troops are decoupled before redistribution.
 - Remaining players are shuffled.

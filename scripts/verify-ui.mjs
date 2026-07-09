@@ -140,6 +140,7 @@ async function runSourceChecks() {
   assert(syncMessagesSource.includes('type: "hostQuit"') && syncMessagesSource.includes('message.type === "hostQuit"'), "Sync messages include host quit.");
   assert(!gameTypesSource.includes("noticeTerritoryId") && !gameTypesSource.includes("noticePlayerId"), "Shared draft state does not store local notices.");
   assert(!gameStateSource.includes("timerMs(state.config.pickTimeLimit) ?? 0") && gameStateSource.includes('draft: state.mode === "sync" ? beginDraftTimer'), "Sync draft timers preserve unlimited pick time.");
+  assert(gameStateSource.includes("expandRemovedTroops(removedTroopPool") && gameStateSource.includes('troopType === "leader" ? randomMixtureTroop() : troopType'), "Removed-player leaders are replaced by random regular troops.");
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");

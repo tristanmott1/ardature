@@ -835,7 +835,7 @@ function removePlayerFromAllocation(state: GameState, playerId: string): GameSta
 
   const removedTerritories = shuffle(ownedTerritoryIds(state.draft.ownership, playerId));
   const playerOrder = shuffle(players.map((player) => player.id));
-  const removedTroops = shuffle(expandTroops(removedTroopPool(state.allocation, removedPlayer)));
+  const removedTroops = shuffle(expandRemovedTroops(removedTroopPool(state.allocation, removedPlayer)));
   const ownership = { ...state.draft.ownership };
   const playerAllocations = { ...state.allocation.playerAllocations };
   delete playerAllocations[playerId];
@@ -1033,6 +1033,21 @@ function expandTroops(counts: TroopCounts) {
   }
 
   return troops;
+}
+
+function expandRemovedTroops(counts: TroopCounts) {
+  const troops: TroopType[] = [];
+  for (const troopType of TROOP_TYPES) {
+    for (let count = 0; count < counts[troopType]; count += 1) {
+      troops.push(troopType === "leader" ? randomMixtureTroop() : troopType);
+    }
+  }
+
+  return troops;
+}
+
+function randomMixtureTroop() {
+  return MIXTURE_TROOP_TYPES[Math.floor(Math.random() * MIXTURE_TROOP_TYPES.length)];
 }
 
 function addOneTroop(counts: TroopCounts, troopType: TroopType): TroopCounts {
