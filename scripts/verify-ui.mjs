@@ -1,6 +1,6 @@
 ﻿import { chromium } from "playwright";
 import { spawn } from "node:child_process";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const baseUrl = "http://127.0.0.1:5174/";
@@ -23,6 +23,10 @@ function npmCommand() {
 
 function outputPath(name) {
   return fileURLToPath(new URL(name, outputDir));
+}
+
+async function capture(page, name) {
+  await page.screenshot({ path: outputPath(name) });
 }
 
 async function waitForServer(processHandle) {
@@ -288,6 +292,20 @@ async function assertBelow(page, upperLocator, lowerLocator, message) {
   assert(upper && lower && lower.y >= upper.y + upper.height - 1, message);
 }
 
+async function checkColorMenuDismissal(page) {
+  const firstColorButton = page.locator(".player-row").nth(0).getByRole("button", { name: /color/i });
+  const secondColorButton = page.locator(".player-row").nth(1).getByRole("button", { name: /color/i });
+
+  await firstColorButton.click();
+  assert((await page.locator(".color-select-menu").count()) === 1, "Opening a color menu shows one menu.");
+  await page.mouse.click(5, 5);
+  assert((await page.locator(".color-select-menu").count()) === 0, "Clicking outside a color menu closes it.");
+  await secondColorButton.click();
+  assert((await page.locator(".color-select-menu").count()) === 1, "A different color menu can open after dismissal.");
+  await page.mouse.click(5, 5);
+  assert((await page.locator(".color-select-menu").count()) === 0, "The second color menu also closes on outside click.");
+}
+
 function colorLabel(color) {
   return color.charAt(0).toUpperCase() + color.slice(1);
 }
@@ -315,6 +333,7 @@ async function runSetupPreferenceChecks(page) {
   await page.goto(baseUrl);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
+  await capture(page, "01-home-mobile.png");
 
   await page.getByRole("button", { name: "Local" }).click();
   await setPlayerName(page, 0, "Aragorn");
@@ -328,6 +347,8 @@ async function runSetupPreferenceChecks(page) {
   await page.getByLabel("TROOP TIME").selectOption("120");
   await page.getByRole("button", { name: "Randomize" }).click();
   const savedLocalNames = await playerNames(page);
+  await checkColorMenuDismissal(page);
+  await capture(page, "02-local-setup-mobile.png");
   await closeActiveSetup(page);
 
   await page.getByRole("button", { name: "Local" }).click();
@@ -339,7 +360,9 @@ async function runSetupPreferenceChecks(page) {
 
   await page.getByRole("button", { name: "Sync" }).click();
   await page.getByLabel("Sync player name").fill("Galadriel");
+  await capture(page, "03-sync-entry-mobile.png");
   await page.getByRole("button", { name: "Sync player color" }).click();
+  await capture(page, "04-sync-entry-color-menu-mobile.png");
   await page.getByRole("menuitemradio", { name: "Purple" }).click();
   await page.getByRole("button", { name: "Close" }).click();
   await page.getByRole("button", { name: "Sync" }).click();
@@ -365,6 +388,7 @@ async function runLocalDraftChecks(page) {
   await page.reload();
   await page.waitForSelector("[data-background-piece]");
   await startLocalSnakeDraft(page);
+  await capture(page, "05-local-draft-map-mobile.png");
 
   const size = await mapSize(page);
   const homeViewport = homeViewportFromSize(size);
@@ -394,6 +418,7 @@ async function runLocalDraftChecks(page) {
   assert((await confirmDialog.locator(".territory-preview-shape").count()) === 0, "Confirm sheet has no territory preview.");
   assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Pending territory is selected on the map.");
   assert((await page.locator('[data-territory-fill="shire"] [data-territory-fill-piece="shire"]').first().getAttribute("fill")) === "#ffffff", "Pending territory is filled white on the map.");
+  await capture(page, "06-local-draft-confirm-mobile.png");
   await clickMapBackground(page);
   await confirmDialog.waitFor({ state: "detached" });
   assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 0, "Tapping the map background cancels the pending pick.");
@@ -407,6 +432,7 @@ async function runLocalDraftChecks(page) {
   const resultDialog = page.getByRole("status");
   await resultDialog.waitFor();
   const resultBox = await resultDialog.boundingBox();
+  await capture(page, "07-local-draft-result-mobile.png");
   assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.width - resultBox.width) < 1, "Result sheet matches confirm sheet width.");
   assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.height - resultBox.height) < 1, "Result sheet matches confirm sheet height.");
   assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
@@ -422,11 +448,13 @@ async function runLocalDraftChecks(page) {
 
   await page.getByRole("button", { name: "Pause draft" }).click();
   await page.getByRole("dialog", { name: "Paused" }).waitFor();
+  await capture(page, "08-local-pause-mobile.png");
   assert((await page.locator(".draft-panel").count()) === 0, "Pause hides draft controls.");
   assert((await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "End game" }).count()) === 0, "Local pause has no end-game close button.");
   assert((await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart game" }).count()) === 1, "Local pause has a restart button.");
   await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart game" }).click();
   await page.getByRole("dialog", { name: "Restart this game and return to setup?" }).waitFor();
+  await capture(page, "09-restart-confirm-mobile.png");
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("dialog", { name: "Paused" }).waitFor();
   await page.getByText("40 territories remain.").waitFor();
@@ -478,6 +506,7 @@ async function runRandomReviewChecks(page) {
   await page.getByRole("button", { name: "Random", exact: true }).click();
   await page.getByRole("button", { name: "Start game" }).click();
   await page.waitForSelector('.app-shell[data-app-phase="review"]');
+  await capture(page, "10-review-mobile.png");
   assert((await page.locator("[data-territory-hit]").count()) === 0, "Review map has no territory hit targets.");
   assert((await page.locator('[data-territory-fill][data-territory-skin="background"]').count()) < 42, "Random draft colors territories.");
 }
@@ -493,6 +522,7 @@ async function runSyncEntryChecks(page) {
   await page.getByRole("menuitemradio", { name: "Purple" }).click();
   await page.getByRole("button", { name: "Host" }).click();
   await page.waitForSelector(".qr-code svg", { timeout: 10000 });
+  await capture(page, "11-sync-host-lobby-mobile.png");
   await assertBelow(page, page.locator(".qr-code"), page.getByRole("button", { name: "Scan" }), "Sync scan sits below the host QR.");
   await assertBelow(page, page.locator(".player-list"), page.getByRole("button", { name: "Randomize" }), "Sync randomize sits below player names.");
   assert((await page.locator(".player-row").count()) === 1, "Host lobby starts with the host player.");
@@ -501,12 +531,14 @@ async function runSyncEntryChecks(page) {
   assert((await page.locator("[data-sync-role='host']").count()) === 1, "App records host sync role.");
   await page.getByRole("button", { name: "Close" }).click();
   await page.getByRole("dialog", { name: "End this game and return home?" }).waitFor();
+  await capture(page, "12-sync-exit-confirm-mobile.png");
   assert((await page.getByRole("dialog", { name: "End this game and return home?" }).getByRole("button").count()) === 2, "Exit confirmation has two icon buttons.");
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.waitForSelector("[data-sync-role='host']");
 }
 
 async function main() {
+  await rm(outputDir, { recursive: true, force: true });
   await mkdir(outputDir, { recursive: true });
   await runSourceChecks();
 
@@ -525,14 +557,8 @@ async function main() {
     mobile.setDefaultTimeout(10000);
     await runSetupPreferenceChecks(mobile);
     await runLocalDraftChecks(mobile);
-    await mobile.screenshot({ path: outputPath("draft-local-mobile.png") });
-
-    const desktop = await browser.newPage({ deviceScaleFactor: 1, viewport: { width: 1100, height: 820 } });
-    desktop.setDefaultTimeout(10000);
-    await runRandomReviewChecks(desktop);
-    await desktop.screenshot({ path: outputPath("draft-review-desktop.png") });
-    await runSyncEntryChecks(desktop);
-    await desktop.screenshot({ path: outputPath("sync-host-desktop.png") });
+    await runRandomReviewChecks(mobile);
+    await runSyncEntryChecks(mobile);
 
     console.log("Closing browser");
     await Promise.race([

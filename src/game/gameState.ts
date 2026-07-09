@@ -323,7 +323,10 @@ export function nextActiveStep(draft: DraftState, players: GamePlayer[], draftSt
 }
 
 export function draftPlayerIdAtStep(originalTurnOrder: string[], draftStyle: DraftStyle, startIndex: number, step: number) {
-  const count = originalTurnOrder.length;
+  if (originalTurnOrder.length === 0) {
+    return "";
+  }
+
   const rotated = rotate(originalTurnOrder, startIndex);
   const cycle = draftStyle === "roundRobin"
     ? rotated
@@ -397,6 +400,10 @@ function simulateRandomDraft(players: GamePlayer[], config: GameConfig, draft: D
   };
 
   while (state.draft && remainingTerritoryIds(state.draft.ownership).length > 0) {
+    if (!activePlayer(state)) {
+      return state.draft;
+    }
+
     state = randomPickForActivePlayer(state, Date.now());
     if (state.draft) {
       state = {
@@ -454,6 +461,11 @@ function normalizeDraft(value: unknown): DraftState | null {
     return null;
   }
 
+  const originalTurnOrder = draft.originalTurnOrder.filter((id): id is string => typeof id === "string");
+  if (originalTurnOrder.length === 0) {
+    return null;
+  }
+
   const ownership = createOwnershipMap();
   for (const territoryId of TERRITORY_IDS) {
     const ownerId = draft.ownership[territoryId];
@@ -461,7 +473,7 @@ function normalizeDraft(value: unknown): DraftState | null {
   }
 
   return {
-    originalTurnOrder: draft.originalTurnOrder.filter((id): id is string => typeof id === "string"),
+    originalTurnOrder,
     startIndex: Number.isInteger(draft.startIndex) ? Math.max(0, draft.startIndex ?? 0) : 0,
     step: Number.isInteger(draft.step) ? Math.max(0, draft.step ?? 0) : 0,
     ownership,
