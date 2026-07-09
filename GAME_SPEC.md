@@ -116,7 +116,7 @@ Setup has these stages:
 
 The host determines setup options.
 
-The setup/draft milestone stopped after territory draft review. The next gameplay implementation milestone is troop allocation, documented in `docs/troop-allocation-v1.md`. Full turns are still out of scope for the troop allocation milestone.
+The setup/draft milestone stopped after territory draft review. The current gameplay implementation milestone is troop allocation, documented in `docs/troop-allocation-v1.md`. Full turns are still out of scope for the troop allocation milestone.
 
 ### Setup Options
 

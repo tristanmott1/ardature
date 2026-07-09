@@ -1,6 +1,8 @@
 import { generatedMapData } from "../map/generated/mapData";
 import type { MapSkin, TerritoryState } from "../map/mapTypes";
 import type {
+  AllocationState,
+  ArmyMarker,
   AppPhase,
   DraftState,
   DraftStyle,
@@ -11,12 +13,30 @@ import type {
   PlayerColor,
   TerritoryOwnerMap,
   TroopAllocationTimeLimit,
+  TroopCounts,
+  TroopType,
 } from "./gameTypes";
 
 export const PLAYER_COLORS: PlayerColor[] = ["green", "blue", "yellow", "red", "purple", "black"];
 export const PICK_TIME_LIMITS: PickTimeLimit[] = [5, 10, 15, 0];
 export const TROOP_ALLOCATION_TIME_LIMITS: TroopAllocationTimeLimit[] = [60, 120, 180, 240, 300, 0];
 export const LOCAL_GAME_KEY = "ardature.localGame.v1";
+export const TROOP_TYPES: TroopType[] = ["heavy", "cavalry", "elite", "leader"];
+export const MIXTURE_TROOP_TYPES: Exclude<TroopType, "leader">[] = ["heavy", "cavalry", "elite"];
+
+const STARTING_BUDGET_BY_PLAYER_COUNT: Record<number, number> = {
+  2: 40,
+  3: 35,
+  4: 30,
+  5: 25,
+  6: 20,
+};
+
+const TROOP_COSTS: Record<Exclude<TroopType, "leader">, number> = {
+  heavy: 0.8,
+  cavalry: 1,
+  elite: 1.2,
+};
 
 const DEFAULT_CONFIG: GameConfig = {
   draftStyle: "snake",
@@ -25,6 +45,8 @@ const DEFAULT_CONFIG: GameConfig = {
 };
 
 const TERRITORY_IDS = generatedMapData.territories.map((territory) => territory.id);
+const CENTER_MARKER: ArmyMarker = { heavy: 1 / 3, cavalry: 1 / 3, elite: 1 / 3 };
+const ZERO_TROOPS: TroopCounts = { heavy: 0, cavalry: 0, elite: 0, leader: 0 };
 
 export function createInitialGameState(): GameState {
   return {
@@ -33,6 +55,7 @@ export function createInitialGameState(): GameState {
     players: [],
     config: { ...DEFAULT_CONFIG },
     draft: null,
+    allocation: null,
   };
 }
 
@@ -87,6 +110,131 @@ export function createTerritoryStates(players: GamePlayer[], ownership: Territor
       ];
     }),
   );
+}
+
+export function createTroopCounts(values: Partial<TroopCounts> = {}): TroopCounts {
+  return {
+    heavy: values.heavy ?? 0,
+    cavalry: values.cavalry ?? 0,
+    elite: values.elite ?? 0,
+    leader: values.leader ?? 0,
+  };
+}
+
+export function troopTotal(counts: TroopCounts) {
+  return counts.heavy + counts.cavalry + counts.elite + counts.leader;
+}
+
+export function addTroops(left: TroopCounts, right: TroopCounts): TroopCounts {
+  return {
+    heavy: left.heavy + right.heavy,
+    cavalry: left.cavalry + right.cavalry,
+    elite: left.elite + right.elite,
+    leader: left.leader + right.leader,
+  };
+}
+
+export function subtractTroops(left: TroopCounts, right: TroopCounts): TroopCounts {
+  return {
+    heavy: left.heavy - right.heavy,
+    cavalry: left.cavalry - right.cavalry,
+    elite: left.elite - right.elite,
+    leader: left.leader - right.leader,
+  };
+}
+
+export function territoryTroops(allocation: AllocationState | null, territoryId: string): TroopCounts {
+  if (!allocation) {
+    return createTroopCounts();
+  }
+
+  for (const playerAllocation of Object.values(allocation.playerAllocations)) {
+    const troops = playerAllocation.territories[territoryId];
+    if (troops) {
+      return troops;
+    }
+  }
+
+  return createTroopCounts();
+}
+
+export function territoryTroopTotal(allocation: AllocationState | null, territoryId: string) {
+  return troopTotal(territoryTroops(allocation, territoryId));
+}
+
+export function remainingTroops(allocation: AllocationState, playerId: string): TroopCounts {
+  const playerAllocation = allocation.playerAllocations[playerId];
+  if (!playerAllocation) {
+    return createTroopCounts();
+  }
+
+  let placed = createTroopCounts();
+  for (const troops of Object.values(playerAllocation.territories)) {
+    placed = addTroops(placed, troops);
+  }
+
+  return subtractTroops(addTroops(playerAllocation.baseTroops, playerAllocation.inheritedTroops), placed);
+}
+
+export function emptyOwnedTerritoryCount(allocation: AllocationState, ownership: TerritoryOwnerMap, playerId: string) {
+  return ownedTerritoryIds(ownership, playerId).filter((territoryId) => troopTotal(allocation.playerAllocations[playerId]?.territories[territoryId] ?? ZERO_TROOPS) === 0).length;
+}
+
+export function canAddTroop(allocation: AllocationState, ownership: TerritoryOwnerMap, playerId: string, territoryId: string, troopType: TroopType) {
+  if (ownership[territoryId] !== playerId) {
+    return false;
+  }
+
+  const remaining = remainingTroops(allocation, playerId);
+  if (remaining[troopType] <= 0) {
+    return false;
+  }
+
+  const territoryEmpty = troopTotal(allocation.playerAllocations[playerId]?.territories[territoryId] ?? ZERO_TROOPS) === 0;
+  const emptyCountAfterAdd = emptyOwnedTerritoryCount(allocation, ownership, playerId) - (territoryEmpty ? 1 : 0);
+  return troopTotal(remaining) - 1 >= emptyCountAfterAdd;
+}
+
+export function allocationComplete(allocation: AllocationState, ownership: TerritoryOwnerMap, playerId: string) {
+  const playerAllocation = allocation.playerAllocations[playerId];
+  return Boolean(playerAllocation) &&
+    playerAllocation.buildSubmitted &&
+    troopTotal(remainingTroops(allocation, playerId)) === 0 &&
+    ownedTerritoryIds(ownership, playerId).every((territoryId) => troopTotal(playerAllocation.territories[territoryId] ?? ZERO_TROOPS) > 0);
+}
+
+export function armyCountsForMarker(marker: ArmyMarker, playerColor: PlayerColor | null, playerCount: number) {
+  const budget = STARTING_BUDGET_BY_PLAYER_COUNT[playerCount] ?? 20;
+  const effectiveBudget = Math.max(0, budget - 1);
+  const weightedCost = marker.heavy * TROOP_COSTS.heavy + marker.cavalry * TROOP_COSTS.cavalry + marker.elite * TROOP_COSTS.elite;
+  const adjustedCount = Math.round(effectiveBudget / weightedCost);
+  const raw = {
+    heavy: marker.heavy * adjustedCount,
+    cavalry: marker.cavalry * adjustedCount,
+    elite: marker.elite * adjustedCount,
+  };
+  const counts = createTroopCounts({
+    heavy: Math.round(raw.heavy),
+    cavalry: Math.round(raw.cavalry),
+    elite: Math.round(raw.elite),
+    leader: playerColor ? 1 : 0,
+  });
+
+  // Correct rounded classes so they exactly spend the adjusted triangle count.
+  while (counts.heavy + counts.cavalry + counts.elite > adjustedCount) {
+    const troopType = [...MIXTURE_TROOP_TYPES]
+      .filter((type) => counts[type] > 0)
+      .sort((left, right) => (raw[left] - Math.floor(raw[left])) - (raw[right] - Math.floor(raw[right])))[0];
+    counts[troopType] -= 1;
+  }
+
+  while (counts.heavy + counts.cavalry + counts.elite < adjustedCount) {
+    const troopType = [...MIXTURE_TROOP_TYPES]
+      .sort((left, right) => (Math.ceil(raw[left]) - raw[left]) - (Math.ceil(raw[right]) - raw[right]))[0];
+    counts[troopType] += 1;
+  }
+
+  return counts;
 }
 
 export function remainingTerritoryIds(ownership: TerritoryOwnerMap) {
@@ -174,6 +322,223 @@ export function startDraft(players: GamePlayer[], config: GameConfig) {
     : draft;
 }
 
+export function startAllocation(state: GameState, now: number): GameState {
+  if (!state.draft) {
+    return state;
+  }
+
+  const allocation = beginAllocationTimer(createAllocationState(state.players, state.draft.ownership, state.config), state.config, now);
+  return {
+    ...state,
+    phase: state.mode === "local" ? "allocationHandoff" : "allocation",
+    allocation,
+  };
+}
+
+export function beginAllocationTurn(state: GameState): GameState {
+  if (!state.allocation || state.mode !== "local") {
+    return state;
+  }
+
+  return {
+    ...state,
+    phase: "allocation",
+    allocation: beginAllocationTimer(state.allocation, state.config, Date.now()),
+  };
+}
+
+export function submitArmyBuild(state: GameState, playerId: string): GameState {
+  const allocation = state.allocation;
+  const player = state.players.find((candidate) => candidate.id === playerId);
+  if (!allocation || !player) {
+    return state;
+  }
+
+  const playerAllocation = allocation.playerAllocations[playerId];
+  if (!playerAllocation) {
+    return state;
+  }
+
+  return {
+    ...state,
+    allocation: {
+      ...allocation,
+      playerAllocations: {
+        ...allocation.playerAllocations,
+        [playerId]: {
+          ...playerAllocation,
+          buildSubmitted: true,
+          baseTroops: armyCountsForMarker(playerAllocation.marker, player.color, allocation.originalPlayerCount),
+        },
+      },
+    },
+  };
+}
+
+export function updateArmyMarker(state: GameState, playerId: string, marker: ArmyMarker): GameState {
+  const allocation = state.allocation;
+  if (!allocation || allocation.playerAllocations[playerId]?.buildSubmitted) {
+    return state;
+  }
+
+  return {
+    ...state,
+    allocation: {
+      ...allocation,
+      playerAllocations: {
+        ...allocation.playerAllocations,
+        [playerId]: {
+          ...allocation.playerAllocations[playerId],
+          marker,
+        },
+      },
+    },
+  };
+}
+
+export function selectAllocationTerritory(state: GameState, playerId: string, territoryId: string | null): GameState {
+  if (!state.allocation || (territoryId && state.draft?.ownership[territoryId] !== playerId)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    allocation: {
+      ...state.allocation,
+      selectedTerritoryId: territoryId,
+    },
+  };
+}
+
+export function adjustTerritoryTroop(state: GameState, playerId: string, territoryId: string, troopType: TroopType, delta: 1 | -1): GameState {
+  const allocation = state.allocation;
+  const ownership = state.draft?.ownership;
+  const playerAllocation = allocation?.playerAllocations[playerId];
+  if (!allocation || !ownership || !playerAllocation || ownership[territoryId] !== playerId) {
+    return state;
+  }
+
+  const currentTroops = playerAllocation.territories[territoryId] ?? createTroopCounts();
+  if (delta < 0 && currentTroops[troopType] <= 0) {
+    return state;
+  }
+
+  if (delta > 0 && !canAddTroop(allocation, ownership, playerId, territoryId, troopType)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    allocation: {
+      ...allocation,
+      playerAllocations: {
+        ...allocation.playerAllocations,
+        [playerId]: {
+          ...playerAllocation,
+          territories: {
+            ...playerAllocation.territories,
+            [territoryId]: {
+              ...currentTroops,
+              [troopType]: currentTroops[troopType] + delta,
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
+export function finishAllocationForPlayer(state: GameState, playerId: string): GameState {
+  const allocation = state.allocation;
+  const ownership = state.draft?.ownership;
+  if (!allocation || !ownership || !allocationComplete(allocation, ownership, playerId)) {
+    return state;
+  }
+
+  const nextAllocation = clearAllocationTimer(markAllocationReady(allocation, playerId), state.config);
+  if (state.mode === "sync") {
+    return allAllocationsReady(nextAllocation, state.players)
+      ? { ...state, phase: "gameMap", allocation: nextAllocation }
+      : { ...state, phase: "allocationWaiting", allocation: nextAllocation };
+  }
+
+  const nextIndex = nextLocalAllocationIndex(nextAllocation, state.players);
+  if (nextIndex === null) {
+    return { ...state, phase: "gameMap", allocation: nextAllocation };
+  }
+
+  return {
+    ...state,
+    phase: "allocationHandoff",
+    allocation: {
+      ...nextAllocation,
+      currentIndex: nextIndex,
+      selectedTerritoryId: null,
+    },
+  };
+}
+
+export function randomCompleteAllocationForPlayer(state: GameState, playerId: string): GameState {
+  const allocation = state.allocation;
+  const ownership = state.draft?.ownership;
+  if (!allocation || !ownership || !state.players.some((player) => player.id === playerId)) {
+    return state;
+  }
+
+  const builtState = allocation.playerAllocations[playerId]?.buildSubmitted
+    ? state
+    : submitArmyBuild(state, playerId);
+  const filledAllocation = randomFillAllocation(builtState.allocation ?? allocation, ownership, playerId);
+
+  return {
+    ...builtState,
+    allocation: {
+      ...filledAllocation,
+      playerAllocations: {
+        ...filledAllocation.playerAllocations,
+        [playerId]: {
+          ...filledAllocation.playerAllocations[playerId],
+          ready: true,
+          randomCompleted: true,
+        },
+      },
+    },
+  };
+}
+
+export function beginAllocationTimer(allocation: AllocationState, config: GameConfig, now: number) {
+  const duration = allocation.timerRemainingMs ?? troopTimerMs(config.troopAllocationTimeLimit);
+  if (!duration) {
+    return { ...allocation, timerRemainingMs: null, timerEndsAt: null };
+  }
+
+  return {
+    ...allocation,
+    timerRemainingMs: duration,
+    timerEndsAt: now + duration,
+  };
+}
+
+export function pauseAllocationTimer(allocation: AllocationState, now: number) {
+  if (!allocation.timerEndsAt) {
+    return allocation;
+  }
+
+  return {
+    ...allocation,
+    timerRemainingMs: Math.max(0, allocation.timerEndsAt - now),
+    timerEndsAt: null,
+  };
+}
+
+export function clearAllocationTimer(allocation: AllocationState, config: GameConfig) {
+  return {
+    ...allocation,
+    timerRemainingMs: troopTimerMs(config.troopAllocationTimeLimit),
+    timerEndsAt: null,
+  };
+}
+
 export function beginDraftTimer(draft: DraftState, config: GameConfig, now: number) {
   const duration = draft.timerRemainingMs ?? timerMs(config.pickTimeLimit);
   if (!duration) {
@@ -232,15 +597,15 @@ export function confirmTerritoryPick(state: GameState, territoryId: string, now:
   }, state.config);
 
   if (remainingTerritoryIds(ownership).length === 0) {
-    return {
+    return startAllocation({
       ...state,
-      phase: "review" as const,
+      phase: "allocation" as const,
       draft: {
         ...draft,
         resultTerritoryId: null,
         resultPlayerId: null,
       },
-    };
+    }, now);
   }
 
   return {
@@ -263,6 +628,10 @@ export function randomPickForActivePlayer(state: GameState, now: number): GameSt
 }
 
 export function removePlayerFromDraft(state: GameState, playerId: string): GameState {
+  if (state.allocation && state.draft) {
+    return removePlayerFromAllocation(state, playerId);
+  }
+
   const players = state.players.filter((player) => player.id !== playerId);
   const draft = state.draft
     ? {
@@ -353,6 +722,10 @@ export function timerMs(limit: PickTimeLimit) {
   return limit > 0 ? limit * 1000 : null;
 }
 
+export function troopTimerMs(limit: TroopAllocationTimeLimit) {
+  return limit > 0 ? limit * 1000 : null;
+}
+
 export function secondsLabel(value: number | null) {
   if (!value) {
     return "Unlimited";
@@ -397,6 +770,7 @@ function simulateRandomDraft(players: GamePlayer[], config: GameConfig, draft: D
     players,
     config,
     draft,
+    allocation: null,
   };
 
   while (state.draft && remainingTerritoryIds(state.draft.ownership).length > 0) {
@@ -421,6 +795,263 @@ function simulateRandomDraft(players: GamePlayer[], config: GameConfig, draft: D
   return state.draft ?? draft;
 }
 
+function createAllocationState(players: GamePlayer[], ownership: TerritoryOwnerMap, config: GameConfig): AllocationState {
+  const playerAllocations: AllocationState["playerAllocations"] = {};
+
+  for (const player of players) {
+    const territories = Object.fromEntries(ownedTerritoryIds(ownership, player.id).map((territoryId) => [territoryId, createTroopCounts()]));
+    playerAllocations[player.id] = {
+      marker: { ...CENTER_MARKER },
+      buildSubmitted: false,
+      baseTroops: createTroopCounts(),
+      inheritedTroops: createTroopCounts(),
+      territories,
+      ready: false,
+      randomCompleted: false,
+    };
+  }
+
+  return {
+    originalPlayerCount: players.length,
+    order: players.map((player) => player.id),
+    currentIndex: 0,
+    selectedTerritoryId: null,
+    timerRemainingMs: troopTimerMs(config.troopAllocationTimeLimit),
+    timerEndsAt: null,
+    playerAllocations,
+  };
+}
+
+function removePlayerFromAllocation(state: GameState, playerId: string): GameState {
+  if (!state.allocation || !state.draft) {
+    return state;
+  }
+
+  const removedPlayer = state.players.find((player) => player.id === playerId);
+  const players = state.players.filter((player) => player.id !== playerId);
+  if (!removedPlayer || players.length < 2) {
+    return createInitialGameState();
+  }
+
+  const removedTerritories = shuffle(ownedTerritoryIds(state.draft.ownership, playerId));
+  const playerOrder = shuffle(players.map((player) => player.id));
+  const removedTroops = shuffle(expandTroops(removedTroopPool(state.allocation, removedPlayer)));
+  const ownership = { ...state.draft.ownership };
+  const playerAllocations = { ...state.allocation.playerAllocations };
+  delete playerAllocations[playerId];
+
+  // Give each removed territory to a remaining player in round-robin order.
+  const territoryRecipients = new Map<string, string>();
+  for (let index = 0; index < removedTerritories.length; index += 1) {
+    const recipientId = playerOrder[index % playerOrder.length];
+    const territoryId = removedTerritories[index];
+    ownership[territoryId] = recipientId;
+    territoryRecipients.set(territoryId, recipientId);
+    playerAllocations[recipientId] = ensureRecipientAllocation(playerAllocations[recipientId]);
+    playerAllocations[recipientId] = {
+      ...playerAllocations[recipientId],
+      ready: false,
+      territories: {
+        ...playerAllocations[recipientId].territories,
+        [territoryId]: createTroopCounts(),
+      },
+    };
+  }
+
+  // Place one removed troop on each new territory before assigning extras.
+  let troopIndex = 0;
+  for (const territoryId of removedTerritories) {
+    const recipientId = territoryRecipients.get(territoryId);
+    const troopType = removedTroops[troopIndex];
+    if (!recipientId || !troopType) {
+      break;
+    }
+
+    const recipient = ensureRecipientAllocation(playerAllocations[recipientId]);
+    playerAllocations[recipientId] = {
+      ...recipient,
+      inheritedTroops: addOneTroop(recipient.inheritedTroops, troopType),
+      territories: {
+        ...recipient.territories,
+        [territoryId]: addOneTroop(recipient.territories[territoryId] ?? createTroopCounts(), troopType),
+      },
+      ready: false,
+    };
+    troopIndex += 1;
+  }
+
+  // Extra removed troops become unallocated inherited troops by the same player order.
+  for (; troopIndex < removedTroops.length; troopIndex += 1) {
+    const recipientId = playerOrder[(troopIndex - removedTerritories.length) % playerOrder.length];
+    const troopType = removedTroops[troopIndex];
+    const recipient = ensureRecipientAllocation(playerAllocations[recipientId]);
+    playerAllocations[recipientId] = {
+      ...recipient,
+      inheritedTroops: addOneTroop(recipient.inheritedTroops, troopType),
+      ready: false,
+    };
+  }
+
+  const readyRecipients = new Set(players.filter((player) => state.allocation?.playerAllocations[player.id]?.ready).map((player) => player.id));
+  const secondTurns = state.mode === "local"
+    ? playerOrder.filter((recipientId) => readyRecipients.has(recipientId))
+    : [];
+  const allocation = {
+    ...state.allocation,
+    order: [...state.allocation.order.filter((id) => id !== playerId), ...secondTurns],
+    currentIndex: Math.min(state.allocation.currentIndex, Math.max(0, state.allocation.order.length - 2)),
+    selectedTerritoryId: null,
+    playerAllocations,
+  };
+
+  return {
+    ...state,
+    players,
+    draft: {
+      ...state.draft,
+      ownership,
+      pendingTerritoryId: null,
+      resultTerritoryId: null,
+      resultPlayerId: null,
+    },
+    allocation,
+  };
+}
+
+function removedTroopPool(allocation: AllocationState, player: GamePlayer): TroopCounts {
+  const playerAllocation = allocation.playerAllocations[player.id];
+  if (!playerAllocation) {
+    return createTroopCounts();
+  }
+
+  const baseTroops = playerAllocation.buildSubmitted
+    ? playerAllocation.baseTroops
+    : armyCountsForMarker({ ...CENTER_MARKER }, player.color, allocation.originalPlayerCount);
+
+  return addTroops(baseTroops, playerAllocation.inheritedTroops);
+}
+
+function ensureRecipientAllocation(allocation: AllocationState["playerAllocations"][string] | undefined): AllocationState["playerAllocations"][string] {
+  return allocation ?? {
+    marker: { ...CENTER_MARKER },
+    buildSubmitted: false,
+    baseTroops: createTroopCounts(),
+    inheritedTroops: createTroopCounts(),
+    territories: {},
+    ready: false,
+    randomCompleted: false,
+  };
+}
+
+function markAllocationReady(allocation: AllocationState, playerId: string): AllocationState {
+  const playerAllocation = allocation.playerAllocations[playerId];
+  if (!playerAllocation) {
+    return allocation;
+  }
+
+  return {
+    ...allocation,
+    selectedTerritoryId: null,
+    playerAllocations: {
+      ...allocation.playerAllocations,
+      [playerId]: {
+        ...playerAllocation,
+        ready: true,
+      },
+    },
+  };
+}
+
+function allAllocationsReady(allocation: AllocationState, players: GamePlayer[]) {
+  return players.every((player) => allocation.playerAllocations[player.id]?.ready);
+}
+
+function nextLocalAllocationIndex(allocation: AllocationState, players: GamePlayer[]) {
+  const activeIds = new Set(players.map((player) => player.id));
+  for (let index = allocation.currentIndex + 1; index < allocation.order.length; index += 1) {
+    const playerId = allocation.order[index];
+    if (activeIds.has(playerId) && !allocation.playerAllocations[playerId]?.ready) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
+function randomFillAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, playerId: string): AllocationState {
+  const playerAllocation = allocation.playerAllocations[playerId];
+  if (!playerAllocation) {
+    return allocation;
+  }
+
+  const ownedIds = ownedTerritoryIds(ownership, playerId);
+  const remaining = remainingTroops(allocation, playerId);
+  const emptyTerritories = ownedIds.filter((territoryId) => troopTotal(playerAllocation.territories[territoryId] ?? ZERO_TROOPS) === 0);
+  const firstTargets = shuffle(emptyTerritories);
+  const allTargets = shuffle(ownedIds);
+  const troops = shuffle(expandTroops(remaining));
+  const territories = { ...playerAllocation.territories };
+  let troopIndex = 0;
+
+  // Fill empty territories first so the one-troop minimum is preserved.
+  for (const territoryId of firstTargets) {
+    const troopType = troops[troopIndex];
+    if (!troopType) {
+      break;
+    }
+
+    territories[territoryId] = addOneTroop(territories[territoryId] ?? createTroopCounts(), troopType);
+    troopIndex += 1;
+  }
+
+  const targets = allTargets.length > 0 ? allTargets : firstTargets;
+  for (; troopIndex < troops.length; troopIndex += 1) {
+    const territoryId = targets[(troopIndex - firstTargets.length) % targets.length];
+    const troopType = troops[troopIndex];
+    territories[territoryId] = addOneTroop(territories[territoryId] ?? createTroopCounts(), troopType);
+  }
+
+  return {
+    ...allocation,
+    selectedTerritoryId: null,
+    playerAllocations: {
+      ...allocation.playerAllocations,
+      [playerId]: {
+        ...playerAllocation,
+        territories,
+      },
+    },
+  };
+}
+
+function expandTroops(counts: TroopCounts) {
+  const troops: TroopType[] = [];
+  for (const troopType of TROOP_TYPES) {
+    for (let count = 0; count < counts[troopType]; count += 1) {
+      troops.push(troopType);
+    }
+  }
+
+  return troops;
+}
+
+function addOneTroop(counts: TroopCounts, troopType: TroopType): TroopCounts {
+  return {
+    ...counts,
+    [troopType]: counts[troopType] + 1,
+  };
+}
+
+function shuffle<T>(items: T[]) {
+  const nextItems = [...items];
+  for (let index = nextItems.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [nextItems[index], nextItems[swapIndex]] = [nextItems[swapIndex], nextItems[index]];
+  }
+
+  return nextItems;
+}
+
 function normalizeGameState(value: unknown): GameState | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -432,11 +1063,12 @@ function normalizeGameState(value: unknown): GameState | null {
   }
 
   return {
-    phase: state.phase === "setup" || state.phase === "draft" || state.phase === "paused" || state.phase === "review" ? state.phase : "home",
+    phase: normalizePhase(state.phase),
     mode: state.mode === "sync" ? "sync" : "local",
     players: state.players.filter(isPlayer),
     config: normalizeConfig(state.config),
     draft: normalizeDraft(state.draft),
+    allocation: normalizeAllocation(state.allocation),
   };
 }
 
@@ -483,6 +1115,107 @@ function normalizeDraft(value: unknown): DraftState | null {
     timerRemainingMs: typeof draft.timerRemainingMs === "number" ? draft.timerRemainingMs : null,
     timerEndsAt: null,
   };
+}
+
+function normalizePhase(value: unknown): AppPhase {
+  if (
+    value === "setup" ||
+    value === "draft" ||
+    value === "allocation" ||
+    value === "allocationHandoff" ||
+    value === "allocationWaiting" ||
+    value === "paused" ||
+    value === "gameMap"
+  ) {
+    return value;
+  }
+
+  return value === "review" ? "gameMap" : "home";
+}
+
+function normalizeAllocation(value: unknown): AllocationState | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const allocation = value as Partial<AllocationState>;
+  if (!Array.isArray(allocation.order) || !allocation.playerAllocations || typeof allocation.playerAllocations !== "object") {
+    return null;
+  }
+
+  const playerAllocations: AllocationState["playerAllocations"] = {};
+  for (const [playerId, playerAllocation] of Object.entries(allocation.playerAllocations)) {
+    if (!playerAllocation || typeof playerAllocation !== "object") {
+      continue;
+    }
+
+    const partial = playerAllocation as Partial<AllocationState["playerAllocations"][string]>;
+    const territories: Record<string, TroopCounts> = {};
+    if (partial.territories && typeof partial.territories === "object") {
+      for (const territoryId of TERRITORY_IDS) {
+        const troops = partial.territories[territoryId];
+        if (troops) {
+          territories[territoryId] = normalizeTroopCounts(troops);
+        }
+      }
+    }
+
+    playerAllocations[playerId] = {
+      marker: normalizeMarker(partial.marker),
+      buildSubmitted: partial.buildSubmitted === true,
+      baseTroops: normalizeTroopCounts(partial.baseTroops),
+      inheritedTroops: normalizeTroopCounts(partial.inheritedTroops),
+      territories,
+      ready: partial.ready === true,
+      randomCompleted: partial.randomCompleted === true,
+    };
+  }
+
+  return {
+    originalPlayerCount: Number.isInteger(allocation.originalPlayerCount) ? Math.max(2, Math.min(6, allocation.originalPlayerCount ?? 2)) : 2,
+    order: allocation.order.filter((id): id is string => typeof id === "string"),
+    currentIndex: Number.isInteger(allocation.currentIndex) ? Math.max(0, allocation.currentIndex ?? 0) : 0,
+    selectedTerritoryId: typeof allocation.selectedTerritoryId === "string" ? allocation.selectedTerritoryId : null,
+    timerRemainingMs: typeof allocation.timerRemainingMs === "number" ? allocation.timerRemainingMs : null,
+    timerEndsAt: null,
+    playerAllocations,
+  };
+}
+
+function normalizeTroopCounts(value: unknown): TroopCounts {
+  const counts = value as Partial<TroopCounts>;
+  return createTroopCounts({
+    heavy: wholeNumber(counts?.heavy),
+    cavalry: wholeNumber(counts?.cavalry),
+    elite: wholeNumber(counts?.elite),
+    leader: wholeNumber(counts?.leader),
+  });
+}
+
+function normalizeMarker(value: unknown): ArmyMarker {
+  const marker = value as Partial<ArmyMarker>;
+  const heavy = finiteRatio(marker?.heavy);
+  const cavalry = finiteRatio(marker?.cavalry);
+  const elite = finiteRatio(marker?.elite);
+  const total = heavy + cavalry + elite;
+
+  if (total <= 0) {
+    return { ...CENTER_MARKER };
+  }
+
+  return {
+    heavy: heavy / total,
+    cavalry: cavalry / total,
+    elite: elite / total,
+  };
+}
+
+function wholeNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function finiteRatio(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 function isPlayer(value: unknown): value is GamePlayer {

@@ -1,4 +1,4 @@
-import type { GameState, PlayerColor } from "../game/gameTypes";
+import type { GameState, PlayerAllocation, PlayerColor } from "../game/gameTypes";
 
 export type ArdatureSyncMessage =
   | {
@@ -19,6 +19,10 @@ export type ArdatureSyncMessage =
       territoryId: string;
     }
   | {
+      type: "allocationUpdate";
+      allocation: PlayerAllocation;
+    }
+  | {
       type: "quit";
     }
   | {
@@ -35,6 +39,7 @@ export function isArdatureSyncMessage(value: unknown): value is ArdatureSyncMess
     message.type === "profileUpdate" ||
     message.type === "draftPending" ||
     message.type === "draftConfirm" ||
+    message.type === "allocationUpdate" ||
     message.type === "quit" ||
     message.type === "hostQuit";
 }

@@ -95,6 +95,7 @@ async function runSourceChecks() {
   const gameStateSource = await readFile(new URL("../src/game/gameState.ts", import.meta.url), "utf8");
   const gameTypesSource = await readFile(new URL("../src/game/gameTypes.ts", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const mapConnectionsSource = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
   const mapViewSource = await readFile(new URL("../src/map/components/MapView.tsx", import.meta.url), "utf8");
   const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
   const syncMessagesSource = await readFile(new URL("../src/sync/syncMessages.ts", import.meta.url), "utf8");
@@ -106,6 +107,8 @@ async function runSourceChecks() {
   const homeViewport = generatedViewport(mapDataSource, "homeViewport");
 
   assert(mapDataSource.includes("satisfies GeneratedMapData"), "Generated map data is typed.");
+  assert(mapConnectionsSource.includes("generatedMapConnections"), "Generated map connections exist.");
+  assert((mapConnectionsSource.match(/": \[/g) ?? []).length === 42, "Generated map connections include 42 playable territories.");
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
   assert(!mapDataSource.includes("Infinity"), "Generated map data has no Infinity values.");
   assert((mapDataSource.match(/id: "/g) ?? []).length === 42, "Generated app data has 42 playable territories.");
@@ -493,8 +496,8 @@ async function runLocalDraftChecks(page) {
   );
 }
 
-async function runRandomReviewChecks(page) {
-  console.log("Checking random draft review");
+async function runRandomAllocationChecks(page) {
+  console.log("Checking random draft allocation");
   await page.goto(baseUrl);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
@@ -505,10 +508,70 @@ async function runRandomReviewChecks(page) {
   await setPlayerColor(page, 1, "red");
   await page.getByRole("button", { name: "Random", exact: true }).click();
   await page.getByRole("button", { name: "Start game" }).click();
-  await page.waitForSelector('.app-shell[data-app-phase="review"]');
-  await capture(page, "10-review-mobile.png");
-  assert((await page.locator("[data-territory-hit]").count()) === 0, "Review map has no territory hit targets.");
+  await page.waitForSelector('.app-shell[data-app-phase="allocationHandoff"]');
+  await capture(page, "10-allocation-handoff-mobile.png");
   assert((await page.locator('[data-territory-fill][data-territory-skin="background"]').count()) < 42, "Random draft colors territories.");
+  await page.getByRole("button", { name: "Begin allocation" }).click();
+  await page.waitForSelector(".army-triangle");
+  await capture(page, "11-allocation-army-mobile.png");
+  assert((await page.locator(".troop-chip").count()) === 4, "Army build shows three troop classes plus leader.");
+  const projectedCounts = (await page.locator(".troop-chip").evaluateAll((nodes) => nodes.map((node) => (node.textContent ?? "").replace(/\D/g, "")))).sort((left, right) => Number(left) - Number(right));
+  assert(projectedCounts.join(",") === "1,13,13,13", "Two-player center army reserves one leader and spends 39 triangle budget.");
+  await page.getByRole("button", { name: "Confirm army" }).click();
+  await page.waitForSelector(".allocation-controls");
+  const ownedTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="yellow"]').first().getAttribute("data-territory-fill");
+  assert(ownedTerritoryId, "Random draft gives the allocating player at least one territory.");
+  await clickTerritory(page, ownedTerritoryId);
+  await page.waitForSelector(".allocation-target");
+  await capture(page, "12-allocation-territory-mobile.png");
+  assert((await page.locator(".troop-stepper").count()) === 4, "Territory allocation has four troop steppers.");
+  await page.getByRole("button", { name: "Add heavy" }).click();
+  assert((await page.locator(".troop-marker").count()) >= 1, "Adding a troop shows a troop marker.");
+  await finishAllocationTurn(page, "yellow", { coveredTerritoryIds: [ownedTerritoryId], troopPool: [
+    ...Array(12).fill("heavy"),
+    ...Array(13).fill("cavalry"),
+    ...Array(13).fill("elite"),
+    "leader",
+  ] });
+  await page.waitForSelector('.app-shell[data-app-phase="allocationHandoff"]');
+  await page.getByRole("button", { name: "Begin allocation" }).click();
+  await page.waitForSelector(".army-triangle");
+  await page.getByRole("button", { name: "Confirm army" }).click();
+  await page.waitForSelector(".allocation-controls");
+  await finishAllocationTurn(page, "red");
+  await page.waitForSelector('.app-shell[data-app-phase="gameMap"]');
+  await capture(page, "13-game-map-mobile.png");
+  assert((await page.getByLabel("Current viewer").count()) === 1, "Local game map can switch viewer perspective.");
+  assert((await page.locator(".troop-marker").count()) > 0, "Read-only game map shows troop totals.");
+}
+
+async function finishAllocationTurn(page, skin, options = {}) {
+  const territoryIds = await page.locator(`[data-territory-fill][data-territory-skin="${skin}"]`).evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("data-territory-fill")).filter(Boolean),
+  );
+  assert(territoryIds.length > 0, `Expected owned ${skin} territories.`);
+
+  const covered = new Set(options.coveredTerritoryIds ?? []);
+  const troopPool = options.troopPool ? [...options.troopPool] : [
+    ...Array(13).fill("heavy"),
+    ...Array(13).fill("cavalry"),
+    ...Array(13).fill("elite"),
+    "leader",
+  ];
+
+  for (const territoryId of territoryIds.filter((id) => !covered.has(id))) {
+    const troopType = troopPool.shift();
+    assert(troopType, "Expected enough troops to cover owned territories.");
+    await clickTerritory(page, territoryId);
+    await page.getByRole("button", { name: `Add ${troopType}` }).click();
+  }
+
+  await clickTerritory(page, territoryIds[0]);
+  for (const troopType of troopPool) {
+    await page.getByRole("button", { name: `Add ${troopType}` }).click();
+  }
+
+  await page.getByRole("button", { name: "Ready" }).click();
 }
 
 async function runSyncEntryChecks(page) {
@@ -522,7 +585,7 @@ async function runSyncEntryChecks(page) {
   await page.getByRole("menuitemradio", { name: "Purple" }).click();
   await page.getByRole("button", { name: "Host" }).click();
   await page.waitForSelector(".qr-code svg", { timeout: 10000 });
-  await capture(page, "11-sync-host-lobby-mobile.png");
+  await capture(page, "14-sync-host-lobby-mobile.png");
   await assertBelow(page, page.locator(".qr-code"), page.getByRole("button", { name: "Scan" }), "Sync scan sits below the host QR.");
   await assertBelow(page, page.locator(".player-list"), page.getByRole("button", { name: "Randomize" }), "Sync randomize sits below player names.");
   assert((await page.locator(".player-row").count()) === 1, "Host lobby starts with the host player.");
@@ -531,7 +594,7 @@ async function runSyncEntryChecks(page) {
   assert((await page.locator("[data-sync-role='host']").count()) === 1, "App records host sync role.");
   await page.getByRole("button", { name: "Close" }).click();
   await page.getByRole("dialog", { name: "End this game and return home?" }).waitFor();
-  await capture(page, "12-sync-exit-confirm-mobile.png");
+  await capture(page, "15-sync-exit-confirm-mobile.png");
   assert((await page.getByRole("dialog", { name: "End this game and return home?" }).getByRole("button").count()) === 2, "Exit confirmation has two icon buttons.");
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.waitForSelector("[data-sync-role='host']");
@@ -557,7 +620,7 @@ async function main() {
     mobile.setDefaultTimeout(10000);
     await runSetupPreferenceChecks(mobile);
     await runLocalDraftChecks(mobile);
-    await runRandomReviewChecks(mobile);
+    await runRandomAllocationChecks(mobile);
     await runSyncEntryChecks(mobile);
 
     console.log("Closing browser");

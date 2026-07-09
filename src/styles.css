@@ -197,7 +197,8 @@ button:focus-visible,
 }
 
 .draft-panel,
-.review-panel {
+.allocation-panel,
+.game-map-panel {
   top: max(10px, env(safe-area-inset-top));
   display: flex;
   gap: 10px;
@@ -206,7 +207,9 @@ button:focus-visible,
   padding: 8px;
 }
 
-.draft-layout .draft-panel {
+.draft-layout .draft-panel,
+.draft-layout .allocation-panel,
+.draft-layout .game-map-panel {
   position: relative;
   top: auto;
   left: auto;
@@ -229,7 +232,7 @@ button:focus-visible,
 .panel-header,
 .brand-row,
 .draft-status,
-.review-players,
+.allocation-summary,
 .mode-grid,
 .setup-actions,
 .modal-actions {
@@ -553,6 +556,155 @@ select {
   font-weight: 760;
 }
 
+.allocation-panel,
+.game-map-panel {
+  align-items: start;
+}
+
+.allocation-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.allocation-summary {
+  min-height: 38px;
+}
+
+.army-builder,
+.allocation-controls {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+}
+
+.army-triangle {
+  justify-self: center;
+  width: min(210px, 72vw);
+  height: 128px;
+  touch-action: none;
+}
+
+.army-triangle path {
+  fill: rgba(255, 255, 255, 0.24);
+  stroke: rgba(17, 17, 17, 0.5);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+
+.army-triangle circle {
+  fill: #ffffff;
+  stroke: #111111;
+  stroke-width: 3;
+}
+
+.army-triangle text {
+  fill: #111111;
+  font-size: 16px;
+  font-weight: 900;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.troop-count-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.troop-chip {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  font-size: 0.84rem;
+  font-weight: 820;
+}
+
+.troop-badge {
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border: 1px solid rgba(17, 17, 17, 0.34);
+  border-radius: 50%;
+  color: #111111;
+  background: rgba(255, 255, 255, 0.56);
+  font-size: 0.68rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.troop-badge[data-side="dark"] {
+  color: #efe9d9;
+  background: rgba(17, 17, 17, 0.78);
+}
+
+.allocation-target {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+}
+
+.allocation-target span {
+  font-weight: 900;
+}
+
+.troop-step-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.troop-stepper {
+  display: grid;
+  grid-template-columns: auto 32px 28px 32px 34px;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.troop-stepper .icon-button {
+  width: 32px;
+  min-height: 32px;
+}
+
+.troop-stepper span,
+.troop-stepper em {
+  text-align: center;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.troop-stepper em {
+  color: rgba(24, 24, 27, 0.6);
+}
+
+.handoff-panel,
+.waiting-panel {
+  justify-items: center;
+}
+
+.large-dot {
+  width: 24px;
+  height: 24px;
+}
+
+.game-map-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.game-map-panel select {
+  min-height: 38px;
+}
+
 .connection-dot {
   width: 9px;
   height: 9px;
@@ -614,11 +766,6 @@ select {
 .setup-actions.two-up {
   display: grid;
   grid-template-columns: 1fr 1fr;
-}
-
-.review-players {
-  flex-wrap: wrap;
-  justify-content: center;
 }
 
 .modal-scrim {

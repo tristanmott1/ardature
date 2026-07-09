@@ -8,7 +8,7 @@ This directory contains planning and implementation notes for the app. The exist
 - `../maps/README.md`: map source drawings, generated geometry, previews, and extraction workflow.
 - `app-architecture.md`: planned PWA directory structure, app data flow, and map rendering architecture.
 - `setup-draft-sync-v1.md`: setup, sync lobby, territory draft, draft pause/reconnect, and draft ownership mechanics.
-- `troop-allocation-v1.md`: next gameplay milestone for army building, troop allocation, allocation pause/removal, and viewer-specific read-only map visibility.
+- `troop-allocation-v1.md`: current gameplay milestone for army building, troop allocation, allocation pause/removal, and viewer-specific read-only map visibility.
 
 ## Documentation Rules
 

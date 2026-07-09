@@ -10,7 +10,7 @@ import { Maximize } from "lucide-react";
 import { HitTargetLayer } from "./HitTargetLayer";
 import { StaticMapInk } from "./StaticMapInk";
 import { TerritoryFillLayer } from "./TerritoryFillLayer";
-import { TroopMarkerLayer } from "./TroopMarkerLayer";
+import { TroopMarkerLayer, type TroopMarker } from "./TroopMarkerLayer";
 import type { GeneratedMapData, MapBounds, MapViewport, TerritoryState } from "../mapTypes";
 
 type PointerPoint = {
@@ -38,6 +38,7 @@ export function MapView({
   selectedTerritoryId,
   showMapViewControl = true,
   territoryStates,
+  troopMarkers = [],
 }: {
   mapData: GeneratedMapData;
   onMapPress?: () => void;
@@ -46,6 +47,7 @@ export function MapView({
   selectedTerritoryId: string | null;
   showMapViewControl?: boolean;
   territoryStates: Record<string, TerritoryState>;
+  troopMarkers?: readonly TroopMarker[];
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const pointersRef = useRef(new Map<number, PointerPoint>());
@@ -344,7 +346,7 @@ export function MapView({
         <g className="map-content" data-map-content="true">
           <TerritoryFillLayer mapData={mapData} territoryStates={territoryStates} />
           <StaticMapInk ink={mapData.staticInk} />
-          <TroopMarkerLayer />
+          <TroopMarkerLayer markers={troopMarkers} />
           {onTerritoryPress ? (
             <HitTargetLayer
               isClickSuppressed={() => suppressClickRef.current}

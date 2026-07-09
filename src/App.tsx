@@ -4,6 +4,7 @@ import jsQR from "jsqr";
 import {
   Check,
   GripVertical,
+  Minus,
   Pause,
   Play,
   Plus,
@@ -20,8 +21,15 @@ import {
   PICK_TIME_LIMITS,
   PLAYER_COLORS,
   TROOP_ALLOCATION_TIME_LIMITS,
+  TROOP_TYPES,
+  adjustTerritoryTroop,
   activePlayer,
+  allocationComplete,
+  armyCountsForMarker,
+  beginAllocationTurn,
+  beginAllocationTimer,
   beginDraftTimer,
+  canAddTroop,
   canPickTerritory,
   clearDraftTimer,
   clearLocalGame,
@@ -31,25 +39,42 @@ import {
   createPlayer,
   createTerritoryStates,
   draftProgressForPlayer,
+  emptyOwnedTerritoryCount,
+  finishAllocationForPlayer,
   formatTimerOption,
   formatTroopTimerOption,
   isSetupValid,
+  ownedTerritoryIds,
   pauseDraftTimer,
+  pauseAllocationTimer,
+  randomCompleteAllocationForPlayer,
   randomPickForActivePlayer,
   readLocalGame,
   remainingTerritoryIds,
+  remainingTroops,
   removePlayerFromDraft,
   saveLocalGame,
+  selectAllocationTerritory,
   startDraft,
+  startAllocation,
+  submitArmyBuild,
+  territoryTroopTotal,
+  territoryTroops,
+  troopTotal,
+  updateArmyMarker,
 } from "./game/gameState";
 import type {
+  ArmyMarker,
   DraftStyle,
   GameConfig,
   GamePlayer,
   GameState,
   PickTimeLimit,
   PlayerColor,
+  TerritoryOwnerMap,
+  TroopCounts,
   TroopAllocationTimeLimit,
+  TroopType,
 } from "./game/gameTypes";
 import {
   gameConfigFromPreferences,
@@ -60,6 +85,7 @@ import {
   syncProfileFromPreferences,
 } from "./game/setupPreferences";
 import { generatedMapData } from "./map/generated/mapData";
+import { generatedMapConnections } from "./map/generated/mapConnections";
 import { MapView } from "./map/components/MapView";
 import type { GeneratedTerritoryData } from "./map/mapTypes";
 import { isArdatureSyncMessage } from "./sync/syncMessages";
@@ -126,14 +152,34 @@ function App() {
   const latestGameRef = useRef(game);
   const latestSyncRoleRef = useRef(syncRole);
   const latestLocalPlayerIdRef = useRef(localPlayerId);
+  const lastSentAllocationRef = useRef("");
   const active = activePlayer(game);
   const activeDraftProgress = active ? draftProgressForPlayer(game, active.id) : null;
   const ownership = game.draft?.ownership ?? createOwnershipMap();
+  const localAllocationPlayerId = game.allocation?.order[game.allocation.currentIndex] ?? null;
+  const allocationPlayerId = game.mode === "local"
+    ? localAllocationPlayerId
+    : localPlayerId;
+  const allocationPlayer = game.players.find((player) => player.id === allocationPlayerId) ?? null;
+  const localAllocationReady = Boolean(allocationPlayerId && game.allocation?.playerAllocations[allocationPlayerId]?.ready);
+  const gameMapViewerId = game.mode === "local"
+    ? localPlayerId ?? game.players[0]?.id ?? null
+    : localPlayerId;
   const canControlActivePlayer = game.mode === "local" || (game.mode === "sync" && active?.id === localPlayerId);
-  const viewerSelectedTerritoryId = canControlActivePlayer ? game.draft?.pendingTerritoryId ?? null : null;
+  const viewerSelectedTerritoryId = game.phase === "draft"
+    ? canControlActivePlayer ? game.draft?.pendingTerritoryId ?? null : null
+    : game.phase === "allocation" && allocationPlayerId
+      ? game.allocation?.selectedTerritoryId ?? null
+      : game.phase === "gameMap"
+        ? game.allocation?.selectedTerritoryId ?? null
+        : null;
   const territoryStates = useMemo(
     () => createTerritoryStates(game.players, ownership, viewerSelectedTerritoryId),
     [game.players, ownership, viewerSelectedTerritoryId],
+  );
+  const troopMarkers = useMemo(
+    () => createTroopMarkers(game, allocationPlayerId, gameMapViewerId),
+    [allocationPlayerId, game, gameMapViewerId],
   );
   const remainingCount = game.draft ? remainingTerritoryIds(game.draft.ownership).length : generatedMapData.territories.length;
   const blockingResultTerritory = game.draft?.resultTerritoryId
@@ -153,12 +199,18 @@ function App() {
     : null;
   const timerRemaining = game.phase === "draft" && game.draft?.timerEndsAt
     ? Math.max(0, game.draft.timerEndsAt - now)
-    : game.draft?.timerRemainingMs ?? null;
+    : game.phase === "allocation" && game.allocation?.timerEndsAt
+      ? Math.max(0, game.allocation.timerEndsAt - now)
+      : game.phase === "allocation"
+        ? game.allocation?.timerRemainingMs ?? null
+        : game.draft?.timerRemainingMs ?? null;
   const canControlSetup = game.mode === "local" || syncRole === "host";
   const canDraftOnMap = game.phase === "draft" &&
     canControlActivePlayer &&
     Boolean(active) &&
     !game.draft?.resultTerritoryId;
+  const canAllocateOnMap = game.phase === "allocation" && Boolean(allocationPlayerId) && !localAllocationReady;
+  const canInspectGameMap = game.phase === "gameMap" && Boolean(gameMapViewerId);
   const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
   const isModalOpen = Boolean(
     viewerPendingTerritory ||
@@ -167,7 +219,9 @@ function App() {
     syncCameraMode ||
     isEndGamePromptOpen ||
     isRestartGamePromptOpen ||
-    game.phase === "paused",
+    game.phase === "paused" ||
+    game.phase === "allocationHandoff" ||
+    game.phase === "allocationWaiting",
   );
   const showDraftControls = game.phase === "draft" &&
     !viewerPendingTerritory &&
@@ -176,6 +230,9 @@ function App() {
     !syncCameraMode &&
     !isEndGamePromptOpen &&
     !isRestartGamePromptOpen;
+  const showAllocationControls = game.phase === "allocation" && !localAllocationReady && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
+  const showAllocationWaiting = (game.phase === "allocationWaiting" || (game.phase === "allocation" && localAllocationReady)) && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
+  const showGameMapControls = game.phase === "gameMap" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
 
   useEffect(() => {
     const notice = syncDraftNoticeFromOwnershipChange(latestGameRef.current, game);
@@ -239,6 +296,25 @@ function App() {
   }, [game, syncRole]);
 
   useEffect(() => {
+    if (game.mode !== "sync" || syncRole !== "joiner" || !localPlayerId || !game.allocation) {
+      return;
+    }
+
+    const allocation = game.allocation.playerAllocations[localPlayerId];
+    if (!allocation) {
+      return;
+    }
+
+    const serialized = JSON.stringify(allocation);
+    if (serialized === lastSentAllocationRef.current) {
+      return;
+    }
+
+    lastSentAllocationRef.current = serialized;
+    joinTransportRef.current?.send({ type: "allocationUpdate", allocation });
+  }, [game.allocation, game.mode, localPlayerId, syncRole]);
+
+  useEffect(() => {
     const previousPhase = previousPhaseRef.current;
     previousPhaseRef.current = game.phase;
 
@@ -250,13 +326,16 @@ function App() {
   }, [game]);
 
   useEffect(() => {
-    if (game.phase !== "draft" || !game.draft?.timerEndsAt) {
+    if (
+      (game.phase !== "draft" || !game.draft?.timerEndsAt) &&
+      (game.phase !== "allocation" || !game.allocation?.timerEndsAt)
+    ) {
       return undefined;
     }
 
     const interval = window.setInterval(() => setNow(Date.now()), 100);
     return () => window.clearInterval(interval);
-  }, [game.phase, game.draft?.timerEndsAt]);
+  }, [game.phase, game.draft?.timerEndsAt, game.allocation?.timerEndsAt]);
 
   useEffect(() => {
     if (game.mode === "sync" && syncRole !== "host") {
@@ -277,6 +356,39 @@ function App() {
         : randomPickForActivePlayer(current, Date.now());
     });
   }, [game.mode, game.phase, game.draft?.timerEndsAt, now, syncRole]);
+
+  useEffect(() => {
+    if (game.mode === "sync" && syncRole !== "host") {
+      return;
+    }
+
+    if (game.phase !== "allocation" || !game.allocation?.timerEndsAt || game.allocation.timerEndsAt > now) {
+      return;
+    }
+
+    setGame((current) => {
+      if (current.phase !== "allocation" || !current.allocation?.timerEndsAt || current.allocation.timerEndsAt > Date.now()) {
+        return current;
+      }
+
+      if (current.mode === "sync") {
+        let next = current;
+        for (const player of current.players) {
+          if (!next.allocation?.playerAllocations[player.id]?.ready) {
+            next = randomCompleteAllocationForPlayer(next, player.id);
+          }
+        }
+
+        return next.allocation && current.players.every((player) => next.allocation?.playerAllocations[player.id]?.ready)
+          ? { ...next, phase: "gameMap" }
+          : next;
+      }
+
+      return allocationPlayerId
+        ? finishAllocationForPlayer(randomCompleteAllocationForPlayer(current, allocationPlayerId), allocationPlayerId)
+        : current;
+    });
+  }, [allocationPlayerId, game.mode, game.phase, game.allocation?.timerEndsAt, now, syncRole]);
 
   useEffect(() => {
     return () => {
@@ -561,6 +673,27 @@ function App() {
       return;
     }
 
+    if (rawMessage.type === "allocationUpdate") {
+      setGame((current) => {
+        if (!current.allocation || !current.players.some((player) => player.id === playerId)) {
+          return current;
+        }
+
+        const allocation = {
+          ...current.allocation,
+          playerAllocations: {
+            ...current.allocation.playerAllocations,
+            [playerId]: rawMessage.allocation,
+          },
+        };
+
+        return current.players.every((player) => allocation.playerAllocations[player.id]?.ready)
+          ? { ...current, phase: "gameMap", allocation }
+          : { ...current, allocation };
+      });
+      return;
+    }
+
     if (rawMessage.type === "quit") {
       hostTransportRef.current?.removePeer(playerId);
       setGame((current) => {
@@ -595,7 +728,7 @@ function App() {
     setGame((current) => {
       const playerStatus = status === "connected" ? "connected" : status === "reconnecting" ? "reconnecting" : "disconnected";
       const next = markSyncPlayerStatus(current, playerId, playerStatus);
-      return status !== "connected" && current.phase === "draft" ? pauseSyncGame(next) : next;
+      return status !== "connected" && (current.phase === "draft" || current.phase === "allocation") ? pauseSyncGame(next) : next;
     });
   }, []);
 
@@ -759,15 +892,31 @@ function App() {
     }
 
     const draft = startDraft(game.players, game.config);
-    const phase = remainingTerritoryIds(draft.ownership).length === 0 ? "review" : "draft";
-    setGame({
+    const draftState = {
       ...game,
-      phase,
-      draft: phase === "draft" ? beginDraftTimer(draft, game.config, Date.now()) : draft,
-    });
+      phase: "draft" as const,
+      draft,
+    };
+
+    setGame(remainingTerritoryIds(draft.ownership).length === 0
+      ? startAllocation(draftState, Date.now())
+      : {
+          ...draftState,
+          draft: beginDraftTimer(draft, game.config, Date.now()),
+        });
   }
 
   function pressTerritory(territoryId: string) {
+    if (game.phase === "allocation" && allocationPlayerId) {
+      setGame((current) => selectAllocationTerritory(current, allocationPlayerId, territoryId));
+      return;
+    }
+
+    if (game.phase === "gameMap" && gameMapViewerId) {
+      setGame((current) => selectAllocationTerritory(current, gameMapViewerId, territoryId));
+      return;
+    }
+
     if (!canPickTerritory(game, territoryId)) {
       return;
     }
@@ -818,6 +967,55 @@ function App() {
       : current);
   }
 
+  function changeArmyMarker(marker: ArmyMarker) {
+    if (!allocationPlayerId) {
+      return;
+    }
+
+    setGame((current) => updateArmyMarker(current, allocationPlayerId, marker));
+  }
+
+  function submitCurrentArmyBuild() {
+    if (!allocationPlayerId) {
+      return;
+    }
+
+    setGame((current) => submitArmyBuild(current, allocationPlayerId));
+  }
+
+  function adjustSelectedTroop(troopType: TroopType, delta: 1 | -1) {
+    if (!allocationPlayerId || !game.allocation?.selectedTerritoryId) {
+      return;
+    }
+
+    setGame((current) => adjustTerritoryTroop(current, allocationPlayerId, game.allocation?.selectedTerritoryId ?? "", troopType, delta));
+  }
+
+  function finishCurrentAllocation() {
+    if (!allocationPlayerId) {
+      return;
+    }
+
+    setGame((current) => finishAllocationForPlayer(current, allocationPlayerId));
+  }
+
+  function startLocalAllocationTurn() {
+    setGame((current) => beginAllocationTurn(current));
+  }
+
+  function changeGameMapViewer(playerId: string) {
+    setLocalPlayerId(playerId);
+    setGame((current) => current.allocation
+      ? {
+          ...current,
+          allocation: {
+            ...current.allocation,
+            selectedTerritoryId: null,
+          },
+        }
+      : current);
+  }
+
   function nextDraftTurn() {
     setResetCameraKey((current) => current + 1);
 
@@ -838,20 +1036,63 @@ function App() {
       return;
     }
 
-    setGame((current) => current.phase === "draft" && current.draft
-      ? current.mode === "sync"
-        ? pauseSyncGame(current)
-        : {
-            ...current,
-            phase: "paused",
-            draft: pauseDraftTimer(current.draft, Date.now()),
-          }
-      : current);
+    setGame((current) => {
+      if (current.phase === "draft" && current.draft) {
+        return current.mode === "sync"
+          ? pauseSyncGame(current)
+          : {
+              ...current,
+              phase: "paused",
+              draft: pauseDraftTimer(current.draft, Date.now()),
+            };
+      }
+
+      if (current.phase === "allocation" && current.allocation) {
+        return {
+          ...current,
+          phase: "paused",
+          allocation: current.mode === "sync"
+            ? {
+                ...current.allocation,
+                selectedTerritoryId: null,
+                timerEndsAt: null,
+                timerRemainingMs: current.allocation.timerRemainingMs,
+              }
+            : pauseAllocationTimer(current.allocation, Date.now()),
+        };
+      }
+
+      return current;
+    });
   }
 
   function resumeDraft() {
     setGame((current) => {
-      if (current.phase !== "paused" || !current.draft) {
+      if (current.phase !== "paused") {
+        return current;
+      }
+
+      if (current.allocation) {
+        if (current.mode === "sync") {
+          if (syncRole !== "host" || current.players.some((player) => player.connectionStatus !== "connected")) {
+            return current;
+          }
+
+          return {
+            ...current,
+            phase: "allocation",
+            allocation: beginAllocationTimer(current.allocation, current.config, Date.now()),
+          };
+        }
+
+        return {
+          ...current,
+          phase: "allocation",
+          allocation: beginAllocationTimer(current.allocation, current.config, Date.now()),
+        };
+      }
+
+      if (!current.draft) {
         return current;
       }
 
@@ -910,6 +1151,7 @@ function App() {
           ...current,
           phase: "setup",
           draft: null,
+          allocation: null,
         }
       : current);
   }
@@ -942,7 +1184,7 @@ function App() {
 
   return (
     <main
-      className={`app-shell${showDraftControls ? " draft-layout" : ""}`}
+      className={`app-shell${showDraftControls || showAllocationControls || showGameMapControls ? " draft-layout" : ""}`}
       data-app-phase={game.phase}
       data-draft-controls={showDraftControls ? "visible" : "hidden"}
       data-sync-role={syncRole ?? "none"}
@@ -958,14 +1200,42 @@ function App() {
         />
       ) : null}
 
+      {showAllocationControls && allocationPlayer ? (
+        <AllocationPanel
+          allocation={game.allocation}
+          canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
+          onAdjustTroop={adjustSelectedTroop}
+          onArmyMarkerChange={changeArmyMarker}
+          onFinish={finishCurrentAllocation}
+          onPause={pauseDraft}
+          onSubmitBuild={submitCurrentArmyBuild}
+          ownership={ownership}
+          player={allocationPlayer}
+          timerRemaining={timerRemaining}
+        />
+      ) : null}
+
+      {showGameMapControls ? (
+        <GameMapPanel
+          localViewerId={gameMapViewerId}
+          mode={game.mode}
+          onExit={returnHome}
+          onViewerChange={changeGameMapViewer}
+          players={game.players}
+          selectedTerritoryId={game.allocation?.selectedTerritoryId ?? null}
+          troopBreakdown={game.allocation?.selectedTerritoryId ? territoryTroops(game.allocation, game.allocation.selectedTerritoryId) : null}
+        />
+      ) : null}
+
       <MapView
         mapData={generatedMapData}
         onMapPress={canShowConfirm ? cancelPendingPick : undefined}
-        onTerritoryPress={canDraftOnMap ? pressTerritory : undefined}
+        onTerritoryPress={canDraftOnMap || canAllocateOnMap || canInspectGameMap ? pressTerritory : undefined}
         resetCameraKey={resetCameraKey}
         selectedTerritoryId={viewerSelectedTerritoryId}
         showMapViewControl={!isModalOpen}
         territoryStates={territoryStates}
+        troopMarkers={troopMarkers}
       />
 
       {game.phase === "home" && !syncEntryOpen ? (
@@ -1027,8 +1297,16 @@ function App() {
         />
       ) : null}
 
-      {game.phase === "review" ? (
-        <ReviewPanel onExit={returnHome} players={game.players} />
+      {game.phase === "allocationHandoff" && allocationPlayer ? (
+        <HandoffPanel onContinue={startLocalAllocationTurn} player={allocationPlayer} />
+      ) : null}
+
+      {showAllocationWaiting && allocationPlayer ? (
+        <AllocationWaitingPanel
+          localPlayer={allocationPlayer}
+          players={game.players}
+          allocation={game.allocation}
+        />
       ) : null}
 
       {canShowConfirm && viewerPendingTerritory && active ? (
@@ -1388,6 +1666,255 @@ function DraftPanel({
   );
 }
 
+function AllocationPanel({
+  allocation,
+  canFinish,
+  onAdjustTroop,
+  onArmyMarkerChange,
+  onFinish,
+  onPause,
+  onSubmitBuild,
+  ownership,
+  player,
+  timerRemaining,
+}: {
+  allocation: GameState["allocation"];
+  canFinish: boolean;
+  onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
+  onArmyMarkerChange: (marker: ArmyMarker) => void;
+  onFinish: () => void;
+  onPause: () => void;
+  onSubmitBuild: () => void;
+  ownership: TerritoryOwnerMap;
+  player: GamePlayer;
+  timerRemaining: number | null;
+}) {
+  const playerAllocation = allocation?.playerAllocations[player.id] ?? null;
+  const projectedTroops = playerAllocation
+    ? armyCountsForMarker(playerAllocation.marker, player.color, allocation?.originalPlayerCount ?? 2)
+    : null;
+
+  return (
+    <section className="hud-panel allocation-panel compact-hud">
+      <button className="icon-button danger" type="button" onClick={onPause} aria-label="Pause allocation">
+        <Pause size={18} />
+      </button>
+      <div className="allocation-summary">
+        <span className="player-dot" style={{ background: colorCss(player.color) }} />
+        <strong>{player.name}</strong>
+        {timerRemaining ? <span className="timer-chip">{Math.ceil(timerRemaining / 1000)}s</span> : null}
+      </div>
+      {playerAllocation && !playerAllocation.buildSubmitted ? (
+        <div className="army-builder">
+          <ArmyTriangle marker={playerAllocation.marker} onChange={onArmyMarkerChange} />
+          {projectedTroops ? <TroopCountRow counts={projectedTroops} player={player} /> : null}
+          <button className="primary icon-text-button wide-button" type="button" onClick={onSubmitBuild} aria-label="Confirm army">
+            <Check size={18} />
+          </button>
+        </div>
+      ) : playerAllocation && allocation ? (
+        <AllocationControls
+          allocation={allocation}
+          canFinish={canFinish}
+          onAdjustTroop={onAdjustTroop}
+          onFinish={onFinish}
+          ownership={ownership}
+          player={player}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function AllocationControls({
+  allocation,
+  canFinish,
+  onAdjustTroop,
+  onFinish,
+  ownership,
+  player,
+}: {
+  allocation: NonNullable<GameState["allocation"]>;
+  canFinish: boolean;
+  onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
+  onFinish: () => void;
+  ownership: TerritoryOwnerMap;
+  player: GamePlayer;
+}) {
+  const selectedTerritoryId = allocation.selectedTerritoryId;
+  const selectedTroops = selectedTerritoryId ? territoryTroops(allocation, selectedTerritoryId) : null;
+  const remaining = remainingTroops(allocation, player.id);
+  const selectedTerritory = generatedMapData.territories.find((territory) => territory.id === selectedTerritoryId);
+
+  return (
+    <div className="allocation-controls">
+      <div className="allocation-target">
+        <strong>{selectedTerritory?.name ?? "Select a territory"}</strong>
+        {selectedTerritoryId ? <span>{troopTotal(selectedTroops ?? createEmptyTroops())}</span> : null}
+      </div>
+      <div className="troop-step-grid">
+        {TROOP_TYPES.map((troopType) => (
+          <div className="troop-stepper" key={troopType}>
+            <TroopBadge player={player} troopType={troopType} />
+            <button className="icon-button" type="button" onClick={() => onAdjustTroop(troopType, -1)} disabled={!selectedTroops || selectedTroops[troopType] <= 0} aria-label={`Remove ${troopType}`}>
+              <Minus size={16} />
+            </button>
+            <span>{selectedTroops?.[troopType] ?? 0}</span>
+            <button className="icon-button" type="button" onClick={() => onAdjustTroop(troopType, 1)} disabled={!selectedTerritoryId || !canAddTroop(allocation, ownership, player.id, selectedTerritoryId, troopType)} aria-label={`Add ${troopType}`}>
+              <Plus size={16} />
+            </button>
+            <em>{remaining[troopType]}</em>
+          </div>
+        ))}
+      </div>
+      <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Ready">
+        <Check size={20} />
+      </button>
+    </div>
+  );
+}
+
+function ArmyTriangle({ marker, onChange }: { marker: ArmyMarker; onChange: (marker: ArmyMarker) => void }) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const corners = {
+    heavy: { x: 100, y: 12 },
+    cavalry: { x: 18, y: 154 },
+    elite: { x: 182, y: 154 },
+  };
+  const markerPoint = markerToTrianglePoint(marker);
+
+  function updateFromPointer(clientX: number, clientY: number) {
+    const svg = svgRef.current;
+    if (!svg) {
+      return;
+    }
+
+    const bounds = svg.getBoundingClientRect();
+    const point = {
+      x: ((clientX - bounds.left) / bounds.width) * 200,
+      y: ((clientY - bounds.top) / bounds.height) * 170,
+    };
+    onChange(pointToMarker(point));
+  }
+
+  return (
+    <svg
+      className="army-triangle"
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        updateFromPointer(event.clientX, event.clientY);
+      }}
+      onPointerMove={(event) => {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          updateFromPointer(event.clientX, event.clientY);
+        }
+      }}
+      ref={svgRef}
+      viewBox="0 0 200 170"
+    >
+      <path d={`M ${corners.heavy.x} ${corners.heavy.y} L ${corners.elite.x} ${corners.elite.y} L ${corners.cavalry.x} ${corners.cavalry.y} Z`} />
+      <text x={corners.heavy.x} y={corners.heavy.y + 8}>H</text>
+      <text x={corners.cavalry.x} y={corners.cavalry.y + 4}>C</text>
+      <text x={corners.elite.x} y={corners.elite.y + 4}>E</text>
+      <circle cx={markerPoint.x} cy={markerPoint.y} r="9" />
+    </svg>
+  );
+}
+
+function HandoffPanel({ onContinue, player }: { onContinue: () => void; player: GamePlayer }) {
+  return (
+    <div className="modal-scrim">
+      <section className="modal-panel handoff-panel" role="dialog" aria-label="Allocation handoff">
+        <span className="player-dot large-dot" style={{ background: colorCss(player.color) }} />
+        <h2>{player.name}</h2>
+        <button className="primary icon-text-button wide-button" type="button" onClick={onContinue} aria-label="Begin allocation">
+          <Check size={20} />
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function AllocationWaitingPanel({
+  allocation,
+  localPlayer,
+  players,
+}: {
+  allocation: GameState["allocation"];
+  localPlayer: GamePlayer;
+  players: GamePlayer[];
+}) {
+  return (
+    <div className="modal-scrim">
+      <section className="modal-panel waiting-panel" role="status">
+        <h2>{localPlayer.name} ready</h2>
+        <div className="player-list paused-list">
+          {players.map((player) => (
+            <article className="player-row compact-row" key={player.id}>
+              <span className="player-dot" style={{ background: colorCss(player.color) }} />
+              <strong>{player.name}</strong>
+              <span className="connection-label">{allocation?.playerAllocations[player.id]?.ready ? "ready" : "allocating"}</span>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function GameMapPanel({
+  localViewerId,
+  mode,
+  onExit,
+  onViewerChange,
+  players,
+  selectedTerritoryId,
+  troopBreakdown,
+}: {
+  localViewerId: string | null;
+  mode: "local" | "sync";
+  onExit: () => void;
+  onViewerChange: (playerId: string) => void;
+  players: GamePlayer[];
+  selectedTerritoryId: string | null;
+  troopBreakdown: TroopCounts | null;
+}) {
+  return (
+    <section className="hud-panel game-map-panel compact-hud">
+      <button className="icon-button danger" type="button" onClick={onExit} aria-label="Return home">
+        <X size={18} />
+      </button>
+      {mode === "local" ? (
+        <select aria-label="Current viewer" value={localViewerId ?? ""} onChange={(event) => onViewerChange(event.target.value)}>
+          {players.map((player) => (
+            <option key={player.id} value={player.id}>{player.name}</option>
+          ))}
+        </select>
+      ) : (
+        <strong>{players.find((player) => player.id === localViewerId)?.name ?? "Map"}</strong>
+      )}
+      {selectedTerritoryId && troopBreakdown ? <TroopCountRow counts={troopBreakdown} player={players.find((player) => player.id === localViewerId) ?? players[0]} /> : null}
+    </section>
+  );
+}
+
+function TroopCountRow({ counts, player }: { counts: TroopCounts; player: GamePlayer }) {
+  return (
+    <div className="troop-count-row">
+      {TROOP_TYPES.map((troopType) => (
+        <span className="troop-chip" key={troopType}>
+          <TroopBadge player={player} troopType={troopType} />
+          {counts[troopType]}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function TroopBadge({ player, troopType }: { player: GamePlayer; troopType: TroopType }) {
+  return <span className="troop-badge" data-side={isLightColor(player.color) ? "light" : "dark"}>{troopLabel(player.color, troopType)}</span>;
+}
+
 function PausePanel({
   canRemove,
   canResume,
@@ -1445,24 +1972,6 @@ function PausePanel({
         </button>
       </section>
     </div>
-  );
-}
-
-function ReviewPanel({ onExit, players }: { onExit: () => void; players: GamePlayer[] }) {
-  return (
-    <section className="hud-panel review-panel compact-hud">
-      <button className="icon-button danger" type="button" onClick={onExit} aria-label="Return home">
-        <X size={18} />
-      </button>
-      <div className="review-players">
-        {players.map((player) => (
-          <span className="player-chip" key={player.id}>
-            <span className="player-dot" style={{ background: colorCss(player.color) }} />
-            {player.name}
-          </span>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -1910,20 +2419,128 @@ function QrScanner({
   );
 }
 
-function pauseSyncGame(state: GameState): GameState {
-  if (!state.draft) {
-    return state;
+function createTroopMarkers(game: GameState, allocationPlayerId: string | null, gameMapViewerId: string | null) {
+  if (!game.allocation || !game.draft) {
+    return [];
+  }
+
+  const viewerId = game.phase === "gameMap" ? gameMapViewerId : allocationPlayerId;
+  if (!viewerId) {
+    return [];
+  }
+
+  const territoryById = new Map(generatedMapData.territories.map((territory) => [territory.id, territory]));
+  const visibleIds = game.phase === "gameMap"
+    ? visibleTroopTotalTerritoryIds(game.draft.ownership, viewerId)
+    : new Set(ownedTerritoryIds(game.draft.ownership, viewerId));
+
+  return [...visibleIds]
+    .map((territoryId) => {
+      const territory = territoryById.get(territoryId);
+      const count = territoryTroopTotal(game.allocation, territoryId);
+
+      return territory && count > 0
+        ? { territoryId, center: territory.center, count }
+        : null;
+    })
+    .filter((marker): marker is NonNullable<typeof marker> => Boolean(marker));
+}
+
+function visibleTroopTotalTerritoryIds(ownership: Record<string, string | null>, viewerId: string) {
+  const visibleIds = new Set(ownedTerritoryIds(ownership, viewerId));
+
+  for (const territoryId of [...visibleIds]) {
+    const connections = generatedMapConnections[territoryId as keyof typeof generatedMapConnections] ?? [];
+    for (const connectedId of connections) {
+      if (ownership[connectedId] && ownership[connectedId] !== viewerId) {
+        visibleIds.add(connectedId);
+      }
+    }
+  }
+
+  return visibleIds;
+}
+
+function markerToTrianglePoint(marker: ArmyMarker) {
+  const corners = {
+    heavy: { x: 100, y: 12 },
+    cavalry: { x: 18, y: 154 },
+    elite: { x: 182, y: 154 },
+  };
+
+  return {
+    x: marker.heavy * corners.heavy.x + marker.cavalry * corners.cavalry.x + marker.elite * corners.elite.x,
+    y: marker.heavy * corners.heavy.y + marker.cavalry * corners.cavalry.y + marker.elite * corners.elite.y,
+  };
+}
+
+function pointToMarker(point: { x: number; y: number }): ArmyMarker {
+  const a = { x: 100, y: 12 };
+  const b = { x: 18, y: 154 };
+  const c = { x: 182, y: 154 };
+  const denominator = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
+  const heavy = ((b.y - c.y) * (point.x - c.x) + (c.x - b.x) * (point.y - c.y)) / denominator;
+  const cavalry = ((c.y - a.y) * (point.x - c.x) + (a.x - c.x) * (point.y - c.y)) / denominator;
+  const elite = 1 - heavy - cavalry;
+  const clamped = {
+    heavy: Math.max(0, heavy),
+    cavalry: Math.max(0, cavalry),
+    elite: Math.max(0, elite),
+  };
+  const total = clamped.heavy + clamped.cavalry + clamped.elite;
+
+  if (total <= 0) {
+    return { heavy: 1 / 3, cavalry: 1 / 3, elite: 1 / 3 };
   }
 
   return {
+    heavy: clamped.heavy / total,
+    cavalry: clamped.cavalry / total,
+    elite: clamped.elite / total,
+  };
+}
+
+function createEmptyTroops(): TroopCounts {
+  return { heavy: 0, cavalry: 0, elite: 0, leader: 0 };
+}
+
+function isLightColor(color: PlayerColor | null) {
+  return color === "green" || color === "blue" || color === "yellow";
+}
+
+function troopLabel(color: PlayerColor | null, troopType: TroopType) {
+  const light = isLightColor(color);
+  switch (troopType) {
+    case "heavy":
+      return light ? "D" : "O";
+    case "cavalry":
+      return light ? "R" : "W";
+    case "elite":
+      return light ? "E" : "U";
+    case "leader":
+      return light ? "Z" : "K";
+  }
+}
+
+function pauseSyncGame(state: GameState): GameState {
+  return {
     ...state,
     phase: "paused",
-    draft: clearDraftTimer({
-      ...state.draft,
-      pendingTerritoryId: null,
-      resultTerritoryId: null,
-      resultPlayerId: null,
-    }, state.config),
+    draft: state.draft
+      ? clearDraftTimer({
+          ...state.draft,
+          pendingTerritoryId: null,
+          resultTerritoryId: null,
+          resultPlayerId: null,
+        }, state.config)
+      : state.draft,
+    allocation: state.allocation
+      ? {
+          ...state.allocation,
+          selectedTerritoryId: null,
+          timerEndsAt: null,
+        }
+      : state.allocation,
   };
 }
 

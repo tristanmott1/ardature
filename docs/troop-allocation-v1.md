@@ -26,7 +26,7 @@ The gameplay troop classes are the same for both sides:
 - elite: elf or uruk-hai
 - leader: wizard or witch-king
 
-The leader troop is not part of the triangle mixture. Every player has exactly one base leader troop, determined by side, and the leader allocates to territories like any other troop.
+The leader troop is not part of the triangle mixture. Every player always has exactly one base leader troop, determined by side, and the leader allocates to territories like any other troop.
 
 The UI should use icons wherever practical. Allocation controls should not use troop names when an icon can clearly identify the troop class.
 
@@ -53,7 +53,7 @@ Budget rules:
   - 4 players: `30`
   - 5 players: `25`
   - 6 players: `20`
-- The leader troop costs `1` budget and is guaranteed exactly once in the player's base army.
+- The leader troop costs `1` budget and is guaranteed exactly once in the player's base army no matter where the triangle marker is placed.
 - The effective triangle budget is `startingBudget - 1`.
 - Troop costs are:
   - heavy: `0.8`

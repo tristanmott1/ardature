@@ -3,6 +3,7 @@ param(
   [string]$TerritoryKey = "maps/territory-key.md",
   [string]$OutputJson = "maps/geometry/map.json",
   [string]$AppData = "src/map/generated/mapData.ts",
+  [string]$AppConnections = "src/map/generated/mapConnections.ts",
   [string]$PreviewDirectory = "maps/previews",
   [string]$PreviewBackgroundColor = "#EFE9D9",
   [string]$LandmarkImage = "maps/source/landmark-drawing.jpeg",
@@ -27,6 +28,7 @@ $inputPath = (Resolve-Path $InputImage).Path
 $territoryKeyPath = (Resolve-Path $TerritoryKey).Path
 $jsonPath = Join-Path (Get-Location) $OutputJson
 $appDataPath = Join-Path (Get-Location) $AppData
+$appConnectionsPath = Join-Path (Get-Location) $AppConnections
 $previewDirectoryPath = Join-Path (Get-Location) $PreviewDirectory
 $landmarkPath = (Resolve-Path $LandmarkImage).Path
 $landmarkOutlinePath = (Resolve-Path $LandmarkOutlineImage).Path
@@ -34,6 +36,7 @@ $landmarkSvgPath = Join-Path (Get-Location) $LandmarkSvg
 
 New-Item -ItemType Directory -Force -Path (Split-Path $jsonPath) | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path $appDataPath) | Out-Null
+New-Item -ItemType Directory -Force -Path (Split-Path $appConnectionsPath) | Out-Null
 New-Item -ItemType Directory -Force -Path $previewDirectoryPath | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path $landmarkSvgPath) | Out-Null
 
@@ -135,6 +138,8 @@ public static class MapExtractor
         public bool Playable;
         public string[] LandConnections;
         public string[] ShipConnections;
+        public double CenterX;
+        public double CenterY;
         public List<string> BorderIds = new List<string>();
     }
 
@@ -353,6 +358,7 @@ public static class MapExtractor
         string territoryKey,
         string outputJson,
         string appData,
+        string appConnections,
         string previewDirectory,
         string previewBackgroundColor,
         string landmarkImage,
@@ -432,6 +438,7 @@ public static class MapExtractor
 
             Dictionary<string, TerritoryInfo> territories = BuildTerritoryInfos(keyEntries);
             ValidateTerritoryGrid(territoryIds, territories, width, height);
+            DetectTerritoryCenters(sourceBitmap, territoryIds, territories, width, height);
 
             // Finally derive the canonical shared border objects from the territory grid.
             List<BorderInfo> borders = ExtractBorders(territoryIds, territories, keyEntries, width, height, mapScale, smoothPasses, simplifyTolerance);
@@ -453,6 +460,7 @@ public static class MapExtractor
             WriteLandmarkSvg(landmarkSvg, width, height, mapScale, landmarks);
             WriteTerritoryThemeSvgs(previewDirectory, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks);
             WriteAppData(appData, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks);
+            WriteAppConnections(appConnections, territories);
 
             Console.WriteLine("Image: " + width.ToString(CultureInfo.InvariantCulture) + "x" + height.ToString(CultureInfo.InvariantCulture));
             Console.WriteLine("Map units: " + (width * mapScale).ToString(CultureInfo.InvariantCulture) + "x" + (height * mapScale).ToString(CultureInfo.InvariantCulture));
@@ -463,6 +471,7 @@ public static class MapExtractor
             Console.WriteLine("Borders: " + borders.Count.ToString(CultureInfo.InvariantCulture));
             Console.WriteLine("Map JSON: " + outputJson);
             Console.WriteLine("App data: " + appData);
+            Console.WriteLine("App connections: " + appConnections);
             Console.WriteLine("Landmarks overlay: " + landmarkSvg);
             Console.WriteLine("Territory previews: " + previewDirectory);
         }
@@ -1473,6 +1482,71 @@ public static class MapExtractor
         finally
         {
             bitmap.UnlockBits(data);
+        }
+
+        return result;
+    }
+
+    static void DetectTerritoryCenters(Bitmap bitmap, string[] territoryIds, Dictionary<string, TerritoryInfo> territories, int width, int height)
+    {
+        bool[] green = DetectGreen(bitmap);
+        bool[] barrier = green.Select(value => !value).ToArray();
+        ComponentResult components = LabelComponents(barrier, width, height);
+        List<ComponentStats> stats = CalculateComponentStats(components.Labels, components.Areas, width)
+            .Where(component => component.Area >= 20)
+            .ToList();
+        Dictionary<string, ComponentStats> centerByTerritoryId = new Dictionary<string, ComponentStats>();
+
+        // Each large green circle should sit inside exactly one playable territory.
+        foreach (ComponentStats component in stats)
+        {
+            int x = Math.Max(0, Math.Min(width - 1, (int)Math.Round(component.CentroidX)));
+            int y = Math.Max(0, Math.Min(height - 1, (int)Math.Round(component.CentroidY)));
+            string territoryId = territoryIds[y * width + x];
+
+            if (!territories.ContainsKey(territoryId) || !territories[territoryId].Playable)
+            {
+                continue;
+            }
+
+            if (centerByTerritoryId.ContainsKey(territoryId))
+            {
+                throw new InvalidOperationException("Territory " + territoryId + " has more than one green center marker.");
+            }
+
+            centerByTerritoryId[territoryId] = component;
+        }
+
+        foreach (TerritoryInfo territory in territories.Values.Where(t => t.Playable))
+        {
+            ComponentStats component;
+            if (!centerByTerritoryId.TryGetValue(territory.Id, out component))
+            {
+                throw new InvalidOperationException("Territory " + territory.Id + " has no green center marker.");
+            }
+
+            territory.CenterX = component.CentroidX;
+            territory.CenterY = component.CentroidY;
+        }
+    }
+
+    static bool[] DetectGreen(Bitmap bitmap)
+    {
+        int width = bitmap.Width;
+        int height = bitmap.Height;
+        bool[] result = new bool[width * height];
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                Color color = bitmap.GetPixel(x, y);
+                int r = color.R;
+                int g = color.G;
+                int b = color.B;
+
+                result[y * width + x] = g >= 130 && g - r >= 35 && g - b >= 35;
+            }
         }
 
         return result;
@@ -2535,9 +2609,34 @@ public static class MapExtractor
         File.WriteAllText(outputTs, builder.ToString(), new UTF8Encoding(false));
     }
 
+    static void WriteAppConnections(string outputTs, Dictionary<string, TerritoryInfo> territories)
+    {
+        List<TerritoryInfo> playableTerritories = territories.Values
+            .Where(t => t.Playable)
+            .OrderBy(t => TerritorySortKey(t.Id))
+            .ToList();
+        StringBuilder builder = new StringBuilder();
+
+        builder.AppendLine("export const generatedMapConnections = {");
+        for (int i = 0; i < playableTerritories.Count; i++)
+        {
+            TerritoryInfo territory = playableTerritories[i];
+            string[] connections = territory.LandConnections
+                .Concat(territory.ShipConnections)
+                .Distinct()
+                .OrderBy(id => TerritorySortKey(id))
+                .ToArray();
+
+            builder.AppendLine("  " + JsonString(territory.Id) + ": " + StringArrayTs(connections, "    ", "  ") + (i == playableTerritories.Count - 1 ? "" : ","));
+        }
+
+        builder.AppendLine("} as const;");
+
+        File.WriteAllText(outputTs, builder.ToString(), new UTF8Encoding(false));
+    }
+
     static void WriteAppTerritoryData(StringBuilder builder, TerritoryInfo territory, Dictionary<string, BorderInfo> borderById, Dictionary<string, double> shadeValues, double mapWidth, double mapHeight, int mapScale, bool last)
     {
-        TerritorySeed seed = TerritorySeeds.First(s => s.Id == territory.Id);
         List<List<PointD>> loops = BuildTerritoryLoops(territory, borderById)
             .Select(loop => OffsetPath(loop, AppDisplayMargin, AppDisplayMargin))
             .Where(loop => loop.Count >= 3)
@@ -2558,7 +2657,7 @@ public static class MapExtractor
         builder.AppendLine("      id: " + JsonString(territory.Id) + ",");
         builder.AppendLine("      name: " + JsonString(territory.Name) + ",");
         builder.AppendLine("      regionId: " + JsonString(territory.RegionId) + ",");
-        builder.AppendLine("      center: { x: " + PointNumber((seed.X * mapScale) + AppDisplayMargin) + ", y: " + PointNumber((seed.Y * mapScale) + AppDisplayMargin) + " },");
+        builder.AppendLine("      center: { x: " + PointNumber((territory.CenterX * mapScale) + AppDisplayMargin) + ", y: " + PointNumber((territory.CenterY * mapScale) + AppDisplayMargin) + " },");
         builder.AppendLine("      focusBounds: " + BoundsTs(focusBounds) + ",");
         builder.AppendLine("      fillPaths: " + StringArrayTs(fillPaths.ToArray(), "        ", "      ") + ",");
         builder.AppendLine("      hitPaths: " + StringArrayTs(fillPaths.ToArray(), "        ", "      ") + ",");
@@ -3325,6 +3424,7 @@ Add-Type -TypeDefinition $code -ReferencedAssemblies "System.Drawing.dll"
   $territoryKeyPath,
   $jsonPath,
   $appDataPath,
+  $appConnectionsPath,
   $previewDirectoryPath,
   $PreviewBackgroundColor,
   $landmarkPath,

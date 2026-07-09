@@ -1,6 +1,6 @@
 export type PlayMode = "local" | "sync";
 
-export type AppPhase = "home" | "setup" | "draft" | "paused" | "review";
+export type AppPhase = "home" | "setup" | "draft" | "allocation" | "allocationHandoff" | "allocationWaiting" | "paused" | "gameMap";
 
 export type PlayerColor = "green" | "blue" | "yellow" | "red" | "purple" | "black";
 
@@ -29,6 +29,16 @@ export type GameConfig = {
 
 export type TerritoryOwnerMap = Record<string, string | null>;
 
+export type TroopType = "heavy" | "cavalry" | "elite" | "leader";
+
+export type TroopCounts = Record<TroopType, number>;
+
+export type ArmyMarker = {
+  heavy: number;
+  cavalry: number;
+  elite: number;
+};
+
 export type DraftState = {
   originalTurnOrder: string[];
   startIndex: number;
@@ -41,10 +51,31 @@ export type DraftState = {
   timerEndsAt: number | null;
 };
 
+export type PlayerAllocation = {
+  marker: ArmyMarker;
+  buildSubmitted: boolean;
+  baseTroops: TroopCounts;
+  inheritedTroops: TroopCounts;
+  territories: Record<string, TroopCounts>;
+  ready: boolean;
+  randomCompleted: boolean;
+};
+
+export type AllocationState = {
+  originalPlayerCount: number;
+  order: string[];
+  currentIndex: number;
+  selectedTerritoryId: string | null;
+  timerRemainingMs: number | null;
+  timerEndsAt: number | null;
+  playerAllocations: Record<string, PlayerAllocation>;
+};
+
 export type GameState = {
   phase: AppPhase;
   mode: PlayMode;
   players: GamePlayer[];
   config: GameConfig;
   draft: DraftState | null;
+  allocation: AllocationState | null;
 };
