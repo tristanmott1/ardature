@@ -225,7 +225,7 @@ function App() {
     !syncCameraMode &&
     !isEndGamePromptOpen &&
     !isRestartGamePromptOpen;
-  const showAllocationWaiting = (game.phase === "allocationWaiting" || (game.phase === "allocation" && localAllocationReady)) && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
+  const showAllocationWaiting = game.mode === "sync" && game.phase === "allocation" && localAllocationReady && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const showGameMapControls = game.phase === "gameMap" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const canUseMapCameraControls = !Boolean(
     showArmyBuildModal ||
@@ -443,7 +443,7 @@ function App() {
           }
         }
 
-        return { ...next, phase: "allocationWaiting" };
+        return { ...next, phase: "allocation" };
       }
 
       return allocationPlayerId
@@ -2033,10 +2033,12 @@ function AllocationWaitingPanel({
   onPause: () => void;
   players: GamePlayer[];
 }) {
+  const readyPlayers = players.filter((player) => allocation?.playerAllocations[player.id]?.ready);
+  const waitingPlayers = players.filter((player) => !allocation?.playerAllocations[player.id]?.ready);
+
   return (
     <section className="hud-panel game-stage-panel allocation-waiting-panel compact-hud" role="status">
       <GameTopBar
-        detail="ready"
         onExit={onExit}
         onPause={canPause ? onPause : undefined}
         pauseLabel="Pause allocation"
@@ -2044,21 +2046,31 @@ function AllocationWaitingPanel({
         title={localPlayer.name}
       />
       <div className="waiting-panel">
-        <h2>{localPlayer.name} ready</h2>
-        <div className="player-list paused-list">
-          {players.map((player) => (
-            <article className="player-row compact-row" key={player.id}>
-              <span className="player-dot" style={{ background: colorCss(player.color) }} />
-              <strong>{player.name}</strong>
-              <span className="connection-label">{allocation?.playerAllocations[player.id]?.ready ? "ready" : "allocating"}</span>
-            </article>
-          ))}
+        <div className="ready-columns">
+          <ReadyColumn title="Ready" players={readyPlayers} />
+          <ReadyColumn title="Waiting" players={waitingPlayers} />
         </div>
         {canAdvance ? (
           <button className="primary icon-text-button wide-button" type="button" onClick={onAdvance} aria-label="Start game">
             <Check size={20} />
           </button>
         ) : null}
+      </div>
+    </section>
+  );
+}
+
+function ReadyColumn({ players, title }: { players: GamePlayer[]; title: string }) {
+  return (
+    <section className="ready-column" aria-label={title}>
+      <h2>{title}</h2>
+      <div className="ready-player-list">
+        {players.map((player) => (
+          <article className="ready-player-row" key={player.id}>
+            <span className="player-dot" style={{ background: colorCss(player.color) }} />
+            <strong>{player.name}</strong>
+          </article>
+        ))}
       </div>
     </section>
   );

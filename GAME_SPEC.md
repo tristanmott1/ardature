@@ -173,7 +173,7 @@ Rules:
 
 In local mode, allocation uses pass-and-play turns in configured turn order, skipping removed players. The allocation timer includes both army build and territory placement. If the timer expires, the app locks the current army mixture, randomly allocates remaining troops, shows a brief message, and advances through a handoff screen.
 
-In sync mode, every player allocates at the same time. The host owns the canonical allocation timer. Players press ready when done and cannot manually unready. The waiting page shows every remaining player's ready status to all devices. The host can advance only after every remaining player is ready. If the timer expires, the host randomly completes allocation for every unready player.
+In sync mode, every player allocates at the same time. The host owns the canonical allocation timer. Players press ready when done and cannot manually unready. Ready players see a local waiting page with all remaining players split into `READY` and `WAITING` columns, while unready players stay in allocation. The host can advance only after every remaining player is ready. If the timer expires, the host randomly completes allocation for every unready player.
 
 If a player is removed during allocation, their territories and troops are redistributed to remaining players using the exact redistribution rules in `docs/troop-allocation-v1.md`. Additional troops received from a removed player are additive and do not alter the recipient's army-build budget.
 
@@ -819,9 +819,9 @@ Sync allocation:
 - All players allocate simultaneously on their own devices.
 - The host owns the canonical allocation timer.
 - Players press ready when finished.
-- Ready players go to a waiting page.
+- Ready players go to a local waiting page while unready players stay in allocation.
 - Ready is final unless another player is removed and redistribution affects that player.
-- The waiting page shows all remaining players and whether each one is ready.
+- The waiting page shows all remaining players in two columns: `READY` and `WAITING`.
 - The host can advance only when every remaining player is ready.
 - If time expires, the host randomly completes allocation for every unready player.
 

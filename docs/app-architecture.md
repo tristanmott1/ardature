@@ -276,7 +276,7 @@ Sync mode should be copied and adapted from Qwixx rather than literally reused:
 - Ardatúrë-specific payload kinds and compact QR prefixes.
 - Host-authoritative setup, draft, timer, ownership, pause, reconnect, and removal state.
 
-The host is always one of the players and owns the canonical game state. Joiners send requests and render the latest host state. Joiners can edit their own unlocked name/color during setup, while the host can edit any name/color and lock or unlock those fields. During sync draft, joiners send only confirmed draft picks, not pending selection previews. During sync allocation, joiners send actual allocation updates, not selected-territory UI state. The host owns the canonical allocation timer and advances only after every remaining player is ready or after timeout random-completion.
+The host is always one of the players and owns the canonical game state. Joiners send requests and render the latest host state. Joiners can edit their own unlocked name/color during setup, while the host can edit any name/color and lock or unlock those fields. During sync draft, joiners send only confirmed draft picks, not pending selection previews. During sync allocation, joiners send actual allocation updates, not selected-territory UI state. Ready/waiting is derived locally from each player's `ready` flag while the shared phase remains `allocation` until the host starts the map. The host owns the canonical allocation timer and advances only after every remaining player is ready or after timeout random-completion.
 
 During sync draft, graceful quit and ungraceful disconnect are separate:
 

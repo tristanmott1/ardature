@@ -800,12 +800,10 @@ select {
   transform: scale(0.96);
 }
 
-.handoff-panel,
-.waiting-panel {
+.handoff-panel {
   justify-items: center;
 }
 
-.allocation-waiting-panel .waiting-panel,
 .game-map-panel > select,
 .game-map-panel > strong,
 .game-map-panel > .troop-count-row {
@@ -814,8 +812,59 @@ select {
 
 .allocation-waiting-panel .waiting-panel {
   display: grid;
+  gap: 16px;
+  padding:
+    14px
+    max(12px, env(safe-area-inset-right))
+    16px
+    max(12px, env(safe-area-inset-left));
+}
+
+.ready-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 14px;
-  padding-bottom: 16px;
+  width: 100%;
+}
+
+.ready-column {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ready-column h2 {
+  margin: 0;
+  color: rgba(24, 24, 27, 0.66);
+  font-size: 0.75rem;
+  font-weight: 860;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.ready-player-list {
+  display: grid;
+  gap: 7px;
+}
+
+.ready-player-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  min-height: 34px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.ready-player-row strong {
+  overflow: hidden;
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .large-dot {

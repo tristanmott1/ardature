@@ -442,7 +442,7 @@ export function finishAllocationForPlayer(state: GameState, playerId: string): G
 
   const nextAllocation = clearAllocationTimer(markAllocationReady(allocation, playerId), state.config);
   if (state.mode === "sync") {
-    return { ...state, phase: "allocationWaiting", allocation: nextAllocation };
+    return { ...state, phase: "allocation", allocation: nextAllocation };
   }
 
   const nextIndex = nextLocalAllocationIndex(nextAllocation, state.players);
@@ -1124,14 +1124,13 @@ function normalizePhase(value: unknown): AppPhase {
     value === "draft" ||
     value === "allocation" ||
     value === "allocationHandoff" ||
-    value === "allocationWaiting" ||
     value === "paused" ||
     value === "gameMap"
   ) {
     return value;
   }
 
-  return value === "review" ? "gameMap" : "home";
+  return value === "allocationWaiting" ? "allocation" : value === "review" ? "gameMap" : "home";
 }
 
 function normalizeAllocation(value: unknown): AllocationState | null {

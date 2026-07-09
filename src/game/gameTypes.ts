@@ -1,6 +1,6 @@
 export type PlayMode = "local" | "sync";
 
-export type AppPhase = "home" | "setup" | "draft" | "allocation" | "allocationHandoff" | "allocationWaiting" | "paused" | "gameMap";
+export type AppPhase = "home" | "setup" | "draft" | "allocation" | "allocationHandoff" | "paused" | "gameMap";
 
 export type PlayerColor = "green" | "blue" | "yellow" | "red" | "purple" | "black";
 

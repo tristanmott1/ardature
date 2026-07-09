@@ -154,7 +154,12 @@ async function runSourceChecks() {
   assert(!gameTypesSource.includes("noticeTerritoryId") && !gameTypesSource.includes("noticePlayerId"), "Shared draft state does not store local notices.");
   assert(!gameStateSource.includes("timerMs(state.config.pickTimeLimit) ?? 0") && gameStateSource.includes('draft: state.mode === "sync" ? beginDraftTimer'), "Sync draft timers preserve unlimited pick time.");
   assert(gameStateSource.includes("expandRemovedTroops(removedTroopPool") && gameStateSource.includes('troopType === "leader" ? randomMixtureTroop() : troopType'), "Removed-player leaders are replaced by random regular troops.");
-  assert(gameStateSource.includes('if (state.mode === "sync")') && gameStateSource.includes('phase: "allocationWaiting"') && gameStateSource.includes("startGameMapAfterAllocation"), "Sync allocation waits for host advance after everyone is ready.");
+  assert(!gameTypesSource.includes("allocationWaiting"), "AppPhase does not include allocationWaiting.");
+  assert(gameStateSource.includes('return { ...state, phase: "allocation", allocation: nextAllocation };'), "Sync ready keeps the shared phase in allocation.");
+  assert(gameStateSource.includes('value === "allocationWaiting" ? "allocation"'), "Old allocationWaiting saves normalize to allocation.");
+  assert(appSource.includes('game.mode === "sync" && game.phase === "allocation" && localAllocationReady'), "Ready page is derived from this device's ready state.");
+  assert(appSource.includes("function ReadyColumn") && appSource.includes('title="Ready"') && appSource.includes('title="Waiting"'), "Allocation ready page uses ready and waiting columns.");
+  assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
   assert(appSource.includes("canAdvance={syncRole === \"host\"") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");

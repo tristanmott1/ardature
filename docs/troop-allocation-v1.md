@@ -130,8 +130,8 @@ Sync mode is simultaneous and host-authoritative.
 - If the timer is unlimited, there is no timer and no automatic random completion.
 - When a player finishes, they press ready.
 - Ready is final. Players cannot manually unready.
-- Ready players go to a waiting page.
-- The waiting page shows all remaining players and whether each player is ready.
+- Ready players go to a local waiting page while unready players stay in allocation.
+- The waiting page shows all remaining players in two columns: `READY` and `WAITING`.
 - All players can see readiness status, not only the host.
 - The host can advance only after every remaining player is ready.
 - If the host-authoritative timer expires, the host randomly completes allocation for every unready player using the same random completion rules as local mode.
