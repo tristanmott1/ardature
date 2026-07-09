@@ -310,7 +310,6 @@ export function startDraft(players: GamePlayer[], config: GameConfig) {
     startIndex: draftStartIndex(originalTurnOrder.length, config.draftStyle, TERRITORY_IDS.length),
     step: 0,
     ownership: createOwnershipMap(),
-    pendingTerritoryId: null,
     resultTerritoryId: null,
     resultPlayerId: null,
     timerRemainingMs: timerMs(config.pickTimeLimit),
@@ -396,20 +395,6 @@ export function updateArmyMarker(state: GameState, playerId: string, marker: Arm
   };
 }
 
-export function selectAllocationTerritory(state: GameState, playerId: string, territoryId: string | null): GameState {
-  if (!state.allocation || (territoryId && state.draft?.ownership[territoryId] !== playerId)) {
-    return state;
-  }
-
-  return {
-    ...state,
-    allocation: {
-      ...state.allocation,
-      selectedTerritoryId: territoryId,
-    },
-  };
-}
-
 export function adjustTerritoryTroop(state: GameState, playerId: string, territoryId: string, troopType: TroopType, delta: 1 | -1): GameState {
   const allocation = state.allocation;
   const ownership = state.draft?.ownership;
@@ -471,7 +456,6 @@ export function finishAllocationForPlayer(state: GameState, playerId: string): G
     allocation: {
       ...nextAllocation,
       currentIndex: nextIndex,
-      selectedTerritoryId: null,
     },
   };
 }
@@ -484,10 +468,7 @@ export function startGameMapAfterAllocation(state: GameState): GameState {
   return {
     ...state,
     phase: "gameMap",
-    allocation: {
-      ...state.allocation,
-      selectedTerritoryId: null,
-    },
+    allocation: state.allocation,
   };
 }
 
@@ -603,7 +584,6 @@ export function confirmTerritoryPick(state: GameState, territoryId: string, now:
   const draft = clearDraftTimer({
     ...state.draft,
     ownership,
-    pendingTerritoryId: null,
     resultTerritoryId: state.mode === "local" ? territoryId : null,
     resultPlayerId: state.mode === "local" ? player.id : null,
     step: nextStep,
@@ -655,7 +635,6 @@ export function removePlayerFromDraft(state: GameState, playerId: string): GameS
             ownerId === playerId ? null : ownerId,
           ]),
         ),
-        pendingTerritoryId: null,
         resultTerritoryId: null,
         resultPlayerId: null,
       }
@@ -828,7 +807,6 @@ function createAllocationState(players: GamePlayer[], ownership: TerritoryOwnerM
     originalPlayerCount: players.length,
     order: players.map((player) => player.id),
     currentIndex: 0,
-    selectedTerritoryId: null,
     timerRemainingMs: troopTimerMs(config.troopAllocationTimeLimit),
     timerEndsAt: null,
     playerAllocations,
@@ -913,7 +891,6 @@ function removePlayerFromAllocation(state: GameState, playerId: string): GameSta
     ...state.allocation,
     order: [...state.allocation.order.filter((id) => id !== playerId), ...secondTurns],
     currentIndex: Math.min(state.allocation.currentIndex, Math.max(0, state.allocation.order.length - 2)),
-    selectedTerritoryId: null,
     playerAllocations,
   };
 
@@ -923,7 +900,6 @@ function removePlayerFromAllocation(state: GameState, playerId: string): GameSta
     draft: {
       ...state.draft,
       ownership,
-      pendingTerritoryId: null,
       resultTerritoryId: null,
       resultPlayerId: null,
     },
@@ -964,7 +940,6 @@ function markAllocationReady(allocation: AllocationState, playerId: string): All
 
   return {
     ...allocation,
-    selectedTerritoryId: null,
     playerAllocations: {
       ...allocation.playerAllocations,
       [playerId]: {
@@ -1026,7 +1001,6 @@ function randomFillAllocation(allocation: AllocationState, ownership: TerritoryO
 
   return {
     ...allocation,
-    selectedTerritoryId: null,
     playerAllocations: {
       ...allocation.playerAllocations,
       [playerId]: {
@@ -1137,7 +1111,6 @@ function normalizeDraft(value: unknown): DraftState | null {
     startIndex: Number.isInteger(draft.startIndex) ? Math.max(0, draft.startIndex ?? 0) : 0,
     step: Number.isInteger(draft.step) ? Math.max(0, draft.step ?? 0) : 0,
     ownership,
-    pendingTerritoryId: typeof draft.pendingTerritoryId === "string" ? draft.pendingTerritoryId : null,
     resultTerritoryId: typeof draft.resultTerritoryId === "string" ? draft.resultTerritoryId : null,
     resultPlayerId: typeof draft.resultPlayerId === "string" ? draft.resultPlayerId : null,
     timerRemainingMs: typeof draft.timerRemainingMs === "number" ? draft.timerRemainingMs : null,
@@ -1203,7 +1176,6 @@ function normalizeAllocation(value: unknown): AllocationState | null {
     originalPlayerCount: Number.isInteger(allocation.originalPlayerCount) ? Math.max(2, Math.min(6, allocation.originalPlayerCount ?? 2)) : 2,
     order: allocation.order.filter((id): id is string => typeof id === "string"),
     currentIndex: Number.isInteger(allocation.currentIndex) ? Math.max(0, allocation.currentIndex ?? 0) : 0,
-    selectedTerritoryId: typeof allocation.selectedTerritoryId === "string" ? allocation.selectedTerritoryId : null,
     timerRemainingMs: typeof allocation.timerRemainingMs === "number" ? allocation.timerRemainingMs : null,
     timerEndsAt: null,
     playerAllocations,

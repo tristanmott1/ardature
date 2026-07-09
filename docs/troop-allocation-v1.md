@@ -83,6 +83,7 @@ Allocation rules:
 
 - A player may select only territories they own.
 - Selecting a territory highlights it. If automatic focus is enabled, the map also focuses on that territory.
+- The selected allocation territory is local UI state. In sync mode, selecting a territory for allocation does not highlight or focus any other device.
 - Every owned territory must have at least one troop total before the player can finish.
 - Allocation uses the shared colored game top bar: X on the left, current player name prominent near the left, timer near pause when present, and pause on the right in local mode or for the sync host.
 - The selected territory controls show two compact icon rows: remaining troops for adding and troops on the selected territory for removing.
@@ -94,6 +95,7 @@ Allocation rules:
 - This rule guarantees that every empty territory can still receive at least one troop.
 - During allocation, troop-count circles appear on all territories owned by the allocating player.
 - Territory marker positions come from generated territory visual centers, not from old territory seed points.
+- Sync allocation updates share actual troop placement, army build, and readiness data only. They do not include selected-territory inspection state.
 
 Random completion rules:
 

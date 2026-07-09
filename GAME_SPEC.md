@@ -768,7 +768,7 @@ The confirmation popup is a compact bottom sheet with the territory name and can
 
 The result popup uses the exact same compact bottom-sheet footprint and also keeps the shared game top bar visible. In local mode, it auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
 
-In sync mode, another player's pending selection never moves, focuses, or highlights your map. Confirmed picks are synced as ownership changes; each device turns that local observation into its own small drafted notification. The next player's turn starts immediately on that player's device. The result popup also auto-dismisses after about one second and can be dismissed early.
+In sync mode, pending selections are local-only. Another player's pending selection is not synced, never moves or focuses your map, and never highlights on your device. Confirmed picks are synced as ownership changes; each device turns that local observation into its own small drafted notification. The next player's turn starts immediately on that player's device. The result popup also auto-dismisses after about one second and can be dismissed early.
 
 The compact draft controls show the active player's draft progress as confirmed picks over expected final picks, such as `3 / 11`. The expected final pick count is computed from the current draft style, frozen turn order, active players, and remaining territories.
 
@@ -778,7 +778,7 @@ Timer behavior:
 - If a timed pick expires with no confirmation popup open, a random remaining territory is chosen for the active player.
 - If pick time is unlimited, there is no timer and no automatic draft selection.
 - If local mode pauses during an active pick or confirmation popup, the active timer and pending choice are preserved.
-- If sync mode pauses during an active pick or confirmation popup, the pending pick is discarded and that player's turn starts over on resume.
+- If sync mode pauses during an active pick or confirmation popup, any local pending pick is discarded and that player's turn starts over on resume.
 
 After all territories are drafted, the app enters the troop allocation phase. It does not remain on an ownership-only post-draft review screen.
 
@@ -799,7 +799,7 @@ Territory allocation:
 
 - The player allocates all available troops to owned territories.
 - Only owned territories are selectable.
-- Selecting an owned territory highlights it. If automatic focus is enabled, the map also focuses on that territory.
+- Selecting an owned territory highlights it locally. If automatic focus is enabled, the map also focuses on that territory locally.
 - The controls show icon-only troop totals for the selected territory and icon-only remaining troop totals.
 - The player may remove troops from the selected territory.
 - The player may add remaining troops to the selected territory only when enough total remaining troops are preserved to place at least one troop on every still-empty owned territory.

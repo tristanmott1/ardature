@@ -137,7 +137,11 @@ async function runSourceChecks() {
   assert(appSource.includes("pauseSyncGame"), "App has sync pause semantics.");
   assert(appSource.includes("syncDraftNoticeFromOwnershipChange"), "App creates local sync draft notices from ownership changes.");
   assert(appSource.includes("onCloseRef") && appSource.includes("resultKey"), "Draft result auto-dismiss is stable across parent re-renders.");
-  assert(appSource.includes("viewerSelectedTerritoryId") && appSource.includes("selectedTerritoryId={viewerSelectedTerritoryId}"), "App keeps draft focus viewer-local.");
+  assert(appSource.includes("pendingDraftTerritoryId") && appSource.includes("allocationSelectedTerritoryId") && appSource.includes("gameMapSelectedTerritoryId"), "App keeps map selections in local UI state.");
+  assert(!gameTypesSource.includes("pendingTerritoryId") && !gameStateSource.includes("pendingTerritoryId"), "Shared draft state does not store pending visual selection.");
+  assert(!gameTypesSource.includes("selectedTerritoryId") && !gameStateSource.includes("selectedTerritoryId: null") && !gameStateSource.includes("allocation.selectedTerritoryId"), "Shared allocation state does not store selected visual territory.");
+  assert(!syncMessagesSource.includes("draftPending"), "Sync messages do not share pending draft selections.");
+  assert(!syncMessagesSource.includes('type: "allocationUpdate";\n      allocation: PlayerAllocation;') || !syncMessagesSource.includes("selectedTerritoryId"), "Allocation sync messages do not include selected territory UI state.");
   assert(!showDraftPanelSource(appSource).includes("viewerPendingTerritory") && !showDraftPanelSource(appSource).includes("blockingResultTerritory") && !showDraftPanelSource(appSource).includes("noticeTerritory"), "Draft top bar stays visible during confirmation and notifications.");
   assert(appSource.includes("RotateCcw") && appSource.includes("restartPausedGame"), "Pause can restart to setup without closing transports.");
   assert(!appSource.includes('closeLabel="End game"'), "Pause modal does not use a close X to end the game.");

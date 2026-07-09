@@ -44,7 +44,6 @@ export type DraftState = {
   startIndex: number;
   step: number;
   ownership: TerritoryOwnerMap;
-  pendingTerritoryId: string | null;
   resultTerritoryId: string | null;
   resultPlayerId: string | null;
   timerRemainingMs: number | null;
@@ -65,7 +64,6 @@ export type AllocationState = {
   originalPlayerCount: number;
   order: string[];
   currentIndex: number;
-  selectedTerritoryId: string | null;
   timerRemainingMs: number | null;
   timerEndsAt: number | null;
   playerAllocations: Record<string, PlayerAllocation>;

@@ -11,10 +11,6 @@ export type ArdatureSyncMessage =
       color?: PlayerColor | null;
     }
   | {
-      type: "draftPending";
-      territoryId: string | null;
-    }
-  | {
       type: "draftConfirm";
       territoryId: string;
     }
@@ -37,7 +33,6 @@ export function isArdatureSyncMessage(value: unknown): value is ArdatureSyncMess
   const message = value as Partial<ArdatureSyncMessage>;
   return message.type === "gameState" ||
     message.type === "profileUpdate" ||
-    message.type === "draftPending" ||
     message.type === "draftConfirm" ||
     message.type === "allocationUpdate" ||
     message.type === "quit" ||

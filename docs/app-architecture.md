@@ -224,7 +224,7 @@ Invisible topmost territory shapes used for taps/clicks. It should receive point
 
 The background component is rendered but not selectable.
 
-Draft confirmation and result UI should use matching compact bottom sheets. The shared game top bar remains visible above the map during confirmation, draft result notifications, sync notifications, and troop allocation controls. It is hidden only when there is intentionally no active turn, such as a local in-between handoff screen. Territory emphasis belongs on the map: only the active drafting viewer receives selected-territory fill for the pending pick. If automatic focus is enabled, that viewer also focuses the pending territory. Passive sync viewers should not focus or highlight another player's pending selection. While a confirmation sheet is open, the active drafter can tap another remaining territory to replace the pending pick, or tap the map background to cancel it.
+Draft confirmation and result UI should use matching compact bottom sheets. The shared game top bar remains visible above the map during confirmation, draft result notifications, sync notifications, and troop allocation controls. It is hidden only when there is intentionally no active turn, such as a local in-between handoff screen. Territory emphasis belongs on the map: only the active drafting viewer receives selected-territory fill for the pending pick. If automatic focus is enabled, that viewer also focuses the pending territory. Pending picks are local UI state and are never sent through sync state or messages. Passive sync viewers should not receive, focus, or highlight another player's pending selection. While a confirmation sheet is open, the active drafter can tap another remaining territory to replace the pending pick, or tap the map background to cancel it.
 
 ## Territory State
 
@@ -256,7 +256,7 @@ Before draft ownership is assigned, playable territories render with the backgro
 
 During draft, allocation, and read-only map phases, playable territory fills are derived from ownership. Owned territories use the owner's unique player color, and unowned territories use the background color. The background component always uses the background skin and is not selectable.
 
-During allocation, only the allocating player's owned territories are selectable. During the read-only game map, only the current viewer's own territories are selectable. Selecting one of your own territories shows that territory's troop breakdown in the controls section. Opponent territories are never selectable in the read-only game map.
+During allocation, only the allocating player's owned territories are selectable. During the read-only game map, only the current viewer's own territories are selectable. Selecting one of your own territories shows that territory's troop breakdown in the controls section. Opponent territories are never selectable in the read-only game map. Allocation and read-only selected territory IDs are local UI state; sync shares only the actual troop allocation data and confirmed ownership.
 
 Territory troop data should track heavy, cavalry, elite, and leader counts. The leader is wizard for light-side colors and witch-king for dark-side colors; army-build mixture math only applies to heavy/cavalry/elite.
 
@@ -276,7 +276,7 @@ Sync mode should be copied and adapted from Qwixx rather than literally reused:
 - Ardatúrë-specific payload kinds and compact QR prefixes.
 - Host-authoritative setup, draft, timer, ownership, pause, reconnect, and removal state.
 
-The host is always one of the players and owns the canonical game state. Joiners send requests and render the latest host state. Joiners can edit their own unlocked name/color during setup, while the host can edit any name/color and lock or unlock those fields. During sync allocation, the host owns the canonical allocation timer and advances only after every remaining player is ready or after timeout random-completion.
+The host is always one of the players and owns the canonical game state. Joiners send requests and render the latest host state. Joiners can edit their own unlocked name/color during setup, while the host can edit any name/color and lock or unlock those fields. During sync draft, joiners send only confirmed draft picks, not pending selection previews. During sync allocation, joiners send actual allocation updates, not selected-territory UI state. The host owns the canonical allocation timer and advances only after every remaining player is ready or after timeout random-completion.
 
 During sync draft, graceful quit and ungraceful disconnect are separate:
 

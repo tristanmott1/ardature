@@ -54,7 +54,6 @@ import {
   remainingTroops,
   removePlayerFromDraft,
   saveLocalGame,
-  selectAllocationTerritory,
   startDraft,
   startAllocation,
   startGameMapAfterAllocation,
@@ -150,6 +149,9 @@ function App() {
   const [pausedReturnPhase, setPausedReturnPhase] = useState<AppPhase | null>(null);
   const [resetCameraKey, setResetCameraKey] = useState(0);
   const [autoFocusEnabled, setAutoFocusEnabled] = useState(() => readMapPreferences().autoFocusEnabled);
+  const [pendingDraftTerritoryId, setPendingDraftTerritoryId] = useState<string | null>(null);
+  const [allocationSelectedTerritoryId, setAllocationSelectedTerritoryId] = useState<string | null>(null);
+  const [gameMapSelectedTerritoryId, setGameMapSelectedTerritoryId] = useState<string | null>(null);
   const hostTransportRef = useRef<SyncHostTransport | null>(null);
   const joinTransportRef = useRef<SyncJoinTransport | null>(null);
   const previousPhaseRef = useRef(game.phase);
@@ -172,11 +174,11 @@ function App() {
     : localPlayerId;
   const canControlActivePlayer = game.mode === "local" || (game.mode === "sync" && active?.id === localPlayerId);
   const viewerSelectedTerritoryId = game.phase === "draft"
-    ? canControlActivePlayer ? game.draft?.pendingTerritoryId ?? null : null
+    ? canControlActivePlayer ? pendingDraftTerritoryId : null
     : game.phase === "allocation" && allocationPlayerId
-      ? game.allocation?.selectedTerritoryId ?? null
+      ? allocationSelectedTerritoryId
       : game.phase === "gameMap"
-        ? game.allocation?.selectedTerritoryId ?? null
+        ? gameMapSelectedTerritoryId
         : null;
   const territoryStates = useMemo(
     () => createTerritoryStates(game.players, ownership, viewerSelectedTerritoryId),
@@ -199,8 +201,8 @@ function App() {
   const noticePlayer = syncDraftNotice
     ? game.players.find((player) => player.id === syncDraftNotice.playerId) ?? null
     : null;
-  const viewerPendingTerritory = viewerSelectedTerritoryId
-    ? generatedMapData.territories.find((territory) => territory.id === viewerSelectedTerritoryId) ?? null
+  const viewerPendingTerritory = pendingDraftTerritoryId
+    ? generatedMapData.territories.find((territory) => territory.id === pendingDraftTerritoryId) ?? null
     : null;
   const timerRemaining = game.phase === "draft" && game.draft?.timerEndsAt
     ? Math.max(0, game.draft.timerEndsAt - now)
@@ -256,10 +258,54 @@ function App() {
   }, [localPlayerId]);
 
   useEffect(() => {
-    if (game.phase !== "draft") {
+    const isPausedLocalDraft = game.mode === "local" && game.phase === "paused" && Boolean(game.draft) && !game.allocation;
+    if (game.phase !== "draft" && !isPausedLocalDraft) {
       setSyncDraftNotice(null);
+      setPendingDraftTerritoryId(null);
+    }
+  }, [game.allocation, game.draft, game.mode, game.phase]);
+
+  useEffect(() => {
+    if (game.phase !== "allocation") {
+      setAllocationSelectedTerritoryId(null);
     }
   }, [game.phase]);
+
+  useEffect(() => {
+    if (game.phase !== "gameMap") {
+      setGameMapSelectedTerritoryId(null);
+    }
+  }, [game.phase]);
+
+  useEffect(() => {
+    if (!pendingDraftTerritoryId) {
+      return;
+    }
+
+    if (!canControlActivePlayer || !canPickTerritory(game, pendingDraftTerritoryId)) {
+      setPendingDraftTerritoryId(null);
+    }
+  }, [canControlActivePlayer, game, pendingDraftTerritoryId]);
+
+  useEffect(() => {
+    if (!allocationSelectedTerritoryId) {
+      return;
+    }
+
+    if (!allocationPlayerId || ownership[allocationSelectedTerritoryId] !== allocationPlayerId) {
+      setAllocationSelectedTerritoryId(null);
+    }
+  }, [allocationPlayerId, allocationSelectedTerritoryId, ownership]);
+
+  useEffect(() => {
+    if (!gameMapSelectedTerritoryId) {
+      return;
+    }
+
+    if (!gameMapViewerId || ownership[gameMapSelectedTerritoryId] !== gameMapViewerId) {
+      setGameMapSelectedTerritoryId(null);
+    }
+  }, [gameMapSelectedTerritoryId, gameMapViewerId, ownership]);
 
   useEffect(() => {
     if (game.mode === "local") {
@@ -352,11 +398,28 @@ function App() {
         return current;
       }
 
-      return current.draft.pendingTerritoryId
-        ? confirmTerritoryPick(current, current.draft.pendingTerritoryId, Date.now())
+      return pendingDraftTerritoryId && canPickTerritory(current, pendingDraftTerritoryId)
+        ? confirmTerritoryPick(current, pendingDraftTerritoryId, Date.now())
         : randomPickForActivePlayer(current, Date.now());
     });
-  }, [game.mode, game.phase, game.draft?.timerEndsAt, now, syncRole]);
+  }, [game.mode, game.phase, game.draft?.timerEndsAt, now, pendingDraftTerritoryId, syncRole]);
+
+  useEffect(() => {
+    if (
+      game.mode !== "sync" ||
+      syncRole !== "joiner" ||
+      !pendingDraftTerritoryId ||
+      !canControlActivePlayer ||
+      game.phase !== "draft" ||
+      !game.draft?.timerEndsAt ||
+      game.draft.timerEndsAt > now
+    ) {
+      return;
+    }
+
+    joinTransportRef.current?.send({ type: "draftConfirm", territoryId: pendingDraftTerritoryId });
+    setPendingDraftTerritoryId(null);
+  }, [canControlActivePlayer, game.draft?.timerEndsAt, game.mode, game.phase, now, pendingDraftTerritoryId, syncRole]);
 
   useEffect(() => {
     if (game.mode === "sync" && syncRole !== "host") {
@@ -648,23 +711,6 @@ function App() {
       return;
     }
 
-    if (rawMessage.type === "draftPending") {
-      setGame((current) => {
-        if (activePlayer(current)?.id !== playerId || !current.draft || current.phase !== "draft") {
-          return current;
-        }
-
-        return {
-          ...current,
-          draft: {
-            ...current.draft,
-            pendingTerritoryId: rawMessage.territoryId,
-          },
-        };
-      });
-      return;
-    }
-
     if (rawMessage.type === "draftConfirm") {
       setGame((current) => activePlayer(current)?.id === playerId
         ? confirmTerritoryPick(current, rawMessage.territoryId, Date.now())
@@ -905,12 +951,16 @@ function App() {
 
   function pressTerritory(territoryId: string) {
     if (game.phase === "allocation" && allocationPlayerId) {
-      setGame((current) => selectAllocationTerritory(current, allocationPlayerId, territoryId));
+      if (ownership[territoryId] === allocationPlayerId) {
+        setAllocationSelectedTerritoryId(territoryId);
+      }
       return;
     }
 
     if (game.phase === "gameMap" && gameMapViewerId) {
-      setGame((current) => selectAllocationTerritory(current, gameMapViewerId, territoryId));
+      if (ownership[territoryId] === gameMapViewerId) {
+        setGameMapSelectedTerritoryId(territoryId);
+      }
       return;
     }
 
@@ -918,50 +968,28 @@ function App() {
       return;
     }
 
-    if (game.mode === "sync" && syncRole === "joiner") {
-      joinTransportRef.current?.send({ type: "draftPending", territoryId });
-    }
-
-    setGame((current) => current.draft
-      ? {
-          ...current,
-          draft: {
-            ...current.draft,
-            pendingTerritoryId: territoryId,
-          },
-        }
-      : current);
+    setPendingDraftTerritoryId(territoryId);
   }
 
   function cancelPendingPick() {
-    if (game.mode === "sync" && syncRole === "joiner") {
-      joinTransportRef.current?.send({ type: "draftPending", territoryId: null });
-    }
-
-    setGame((current) => current.draft
-      ? {
-          ...current,
-          draft: {
-            ...current.draft,
-            pendingTerritoryId: null,
-          },
-        }
-      : current);
+    setPendingDraftTerritoryId(null);
   }
 
   function confirmPendingPick() {
-    if (!game.draft?.pendingTerritoryId) {
+    if (!pendingDraftTerritoryId) {
       return;
     }
 
     if (game.mode === "sync" && syncRole === "joiner") {
-      joinTransportRef.current?.send({ type: "draftConfirm", territoryId: game.draft.pendingTerritoryId });
+      joinTransportRef.current?.send({ type: "draftConfirm", territoryId: pendingDraftTerritoryId });
+      setPendingDraftTerritoryId(null);
       return;
     }
 
-    setGame((current) => current.draft?.pendingTerritoryId
-      ? confirmTerritoryPick(current, current.draft.pendingTerritoryId, Date.now())
+    setGame((current) => pendingDraftTerritoryId
+      ? confirmTerritoryPick(current, pendingDraftTerritoryId, Date.now())
       : current);
+    setPendingDraftTerritoryId(null);
   }
 
   function changeArmyMarker(marker: ArmyMarker) {
@@ -981,11 +1009,11 @@ function App() {
   }
 
   function adjustSelectedTroop(troopType: TroopType, delta: 1 | -1) {
-    if (!allocationPlayerId || !game.allocation?.selectedTerritoryId) {
+    if (!allocationPlayerId || !allocationSelectedTerritoryId) {
       return;
     }
 
-    setGame((current) => adjustTerritoryTroop(current, allocationPlayerId, game.allocation?.selectedTerritoryId ?? "", troopType, delta));
+    setGame((current) => adjustTerritoryTroop(current, allocationPlayerId, allocationSelectedTerritoryId, troopType, delta));
   }
 
   function finishCurrentAllocation() {
@@ -993,6 +1021,7 @@ function App() {
       return;
     }
 
+    setAllocationSelectedTerritoryId(null);
     setGame((current) => finishAllocationForPlayer(current, allocationPlayerId));
   }
 
@@ -1001,20 +1030,13 @@ function App() {
   }
 
   function startLocalAllocationTurn() {
+    setAllocationSelectedTerritoryId(null);
     setGame((current) => beginAllocationTurn(current));
   }
 
   function changeGameMapViewer(playerId: string) {
     setLocalPlayerId(playerId);
-    setGame((current) => current.allocation
-      ? {
-          ...current,
-          allocation: {
-            ...current.allocation,
-            selectedTerritoryId: null,
-          },
-        }
-      : current);
+    setGameMapSelectedTerritoryId(null);
   }
 
   function changeAutoFocusEnabled(enabled: boolean) {
@@ -1042,6 +1064,11 @@ function App() {
       return;
     }
 
+    if (game.mode === "sync") {
+      setPendingDraftTerritoryId(null);
+    }
+    setAllocationSelectedTerritoryId(null);
+    setGameMapSelectedTerritoryId(null);
     setPausedReturnPhase(game.phase === "gameMap" ? "gameMap" : null);
 
     setGame((current) => {
@@ -1062,7 +1089,6 @@ function App() {
           allocation: current.mode === "sync"
             ? {
                 ...current.allocation,
-                selectedTerritoryId: null,
                 timerEndsAt: null,
                 timerRemainingMs: current.allocation.timerRemainingMs,
               }
@@ -1077,7 +1103,6 @@ function App() {
           allocation: current.allocation
             ? {
                 ...current.allocation,
-                selectedTerritoryId: null,
                 timerEndsAt: null,
               }
             : current.allocation,
@@ -1244,6 +1269,7 @@ function App() {
           onPause={pauseDraft}
           ownership={ownership}
           player={allocationPlayer}
+          selectedTerritoryId={allocationSelectedTerritoryId}
           timerRemaining={timerRemaining}
         />
       ) : null}
@@ -1257,8 +1283,8 @@ function App() {
           onPause={pauseDraft}
           onViewerChange={changeGameMapViewer}
           players={game.players}
-          selectedTerritoryId={game.allocation?.selectedTerritoryId ?? null}
-          troopBreakdown={game.allocation?.selectedTerritoryId ? territoryTroops(game.allocation, game.allocation.selectedTerritoryId) : null}
+          selectedTerritoryId={gameMapSelectedTerritoryId}
+          troopBreakdown={gameMapSelectedTerritoryId ? territoryTroops(game.allocation, gameMapSelectedTerritoryId) : null}
         />
       ) : null}
 
@@ -1722,6 +1748,7 @@ function AllocationPanel({
   onPause,
   ownership,
   player,
+  selectedTerritoryId,
   timerRemaining,
 }: {
   allocation: GameState["allocation"];
@@ -1733,6 +1760,7 @@ function AllocationPanel({
   onPause: () => void;
   ownership: TerritoryOwnerMap;
   player: GamePlayer;
+  selectedTerritoryId: string | null;
   timerRemaining: number | null;
 }) {
   const playerAllocation = allocation?.playerAllocations[player.id] ?? null;
@@ -1755,6 +1783,7 @@ function AllocationPanel({
           onFinish={onFinish}
           ownership={ownership}
           player={player}
+          selectedTerritoryId={selectedTerritoryId}
         />
       ) : null}
     </section>
@@ -1808,6 +1837,7 @@ function AllocationControls({
   onFinish,
   ownership,
   player,
+  selectedTerritoryId,
 }: {
   allocation: NonNullable<GameState["allocation"]>;
   canFinish: boolean;
@@ -1815,8 +1845,8 @@ function AllocationControls({
   onFinish: () => void;
   ownership: TerritoryOwnerMap;
   player: GamePlayer;
+  selectedTerritoryId: string | null;
 }) {
-  const selectedTerritoryId = allocation.selectedTerritoryId;
   const selectedTroops = selectedTerritoryId ? territoryTroops(allocation, selectedTerritoryId) : null;
   const remaining = remainingTroops(allocation, player.id);
   const selectedTerritory = generatedMapData.territories.find((territory) => territory.id === selectedTerritoryId);
@@ -2751,7 +2781,6 @@ function pauseSyncGame(state: GameState): GameState {
     draft: state.draft
       ? clearDraftTimer({
           ...state.draft,
-          pendingTerritoryId: null,
           resultTerritoryId: null,
           resultPlayerId: null,
         }, state.config)
@@ -2759,7 +2788,6 @@ function pauseSyncGame(state: GameState): GameState {
     allocation: state.allocation
       ? {
           ...state.allocation,
-          selectedTerritoryId: null,
           timerEndsAt: null,
         }
       : state.allocation,

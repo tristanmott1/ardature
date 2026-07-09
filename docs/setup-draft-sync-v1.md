@@ -117,7 +117,7 @@ Manual draft interaction:
 - The selected pending territory is highlighted on the map for the active drafting viewer using a brighter version of its current color.
 - A result popup uses the exact same compact bottom-sheet footprint and shows the player and territory name.
 - In local mode, the result popup auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
-- In sync mode, another player's pending selection never moves, focuses, or highlights your map.
+- In sync mode, pending selections are local-only. Another player's pending selection is not synced, does not move or focus your map, and does not highlight on your device.
 - In sync mode, confirmed picks are synced as ownership changes; each device turns that local observation into its own small drafted notification.
 - In sync mode, the next player's turn starts immediately on their device; the result popup also auto-dismisses after about one second and can be dismissed early.
 - The compact draft controls show the active player's draft progress as confirmed picks over expected final picks, such as `3 / 11`.
@@ -125,8 +125,8 @@ Manual draft interaction:
 - If a timed pick expires with a confirmation popup open, the selected territory is treated as confirmed.
 - If a timed pick expires with no confirmation popup open, the host/local device randomly chooses one remaining territory for the active player.
 - If pick time is unlimited, there is no timer and no automatic draft selection.
-- If local mode pauses during an active pick or confirmation popup, the timer and pending choice are preserved.
-- If sync mode pauses during an active pick or confirmation popup, the pending choice is discarded and that player's turn starts over when the game resumes.
+- If local mode pauses during an active pick or confirmation popup, the timer and pending choice are preserved locally.
+- If sync mode pauses during an active pick or confirmation popup, any local pending choice is discarded and that player's turn starts over when the game resumes.
 
 Draft ownership map:
 
@@ -242,6 +242,8 @@ Reusable map modes for this milestone:
 - Draft ownership map: pan and zoom; no selection.
 
 The map renderer should continue using generated map data, shared SVG coordinates, static ink, territory fill paths, hit targets, and territory focus bounds. Draft ownership coloring should replace the old sandbox skin picker behavior.
+
+Draft pending picks, allocation selected territories, and read-only map inspection are local presentation state. Sync state contains confirmed ownership, timers, player state, readiness, and troop allocations, but it does not contain another device's current visual selection.
 
 ## Implementation Order
 
