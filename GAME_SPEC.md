@@ -746,11 +746,11 @@ Draft selection flow:
 3. Confirming assigns the territory immediately and colors it with the owner's player color.
 4. Show a result popup naming the player and drafted territory.
 
-The confirmation popup shows the territory name and the generated territory shape filled with the map background color.
+The confirmation popup is a compact bottom sheet with the territory name and cancel/confirm controls. The pending territory itself is highlighted on the map for the active drafting viewer.
 
-The result popup shows the territory name and the generated territory shape filled with the drafting player's color. In local mode, it auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
+The result popup uses the same compact bottom-sheet footprint. In local mode, it auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
 
-In sync mode, the next player's turn starts immediately on that player's device. The result popup also auto-dismisses after about one second and can be dismissed early.
+In sync mode, another player's pending selection never moves, focuses, or white-fills your map. The next player's turn starts immediately on that player's device. The result popup also auto-dismisses after about one second and can be dismissed early.
 
 Timer behavior:
 

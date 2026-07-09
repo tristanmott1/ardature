@@ -190,7 +190,7 @@ Invisible topmost territory shapes used for taps/clicks. It should receive point
 
 The background component is rendered but not selectable.
 
-Shape-based draft modals reuse the same generated territory fill paths as the map. They measure the rendered path bounds in the browser only to frame the modal SVG; they do not introduce another geometry model or hand-authored territory shapes.
+Draft confirmation and result UI should use compact bottom sheets. Territory emphasis belongs on the map: only the active drafting viewer receives selected-territory fill/focus for the pending pick. Passive sync viewers should not focus or white-fill another player's pending selection.
 
 ## Territory State
 

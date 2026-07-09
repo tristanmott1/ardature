@@ -1,4 +1,4 @@
-import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
 import {
@@ -59,7 +59,7 @@ import {
 } from "./game/setupPreferences";
 import { generatedMapData } from "./map/generated/mapData";
 import { MapView } from "./map/components/MapView";
-import type { GeneratedTerritoryData, MapBounds } from "./map/mapTypes";
+import type { GeneratedTerritoryData } from "./map/mapTypes";
 import { isArdatureSyncMessage } from "./sync/syncMessages";
 import { SyncHostTransport, SyncJoinTransport, type SyncConnectionStatus, type SyncWireMessage } from "./sync/syncTransport";
 
@@ -119,10 +119,11 @@ function App() {
   const latestLocalPlayerIdRef = useRef(localPlayerId);
   const active = activePlayer(game);
   const ownership = game.draft?.ownership ?? createOwnershipMap();
-  const selectedTerritoryId = game.draft?.pendingTerritoryId ?? null;
+  const canControlActivePlayer = game.mode === "local" || (game.mode === "sync" && active?.id === localPlayerId);
+  const viewerSelectedTerritoryId = canControlActivePlayer ? game.draft?.pendingTerritoryId ?? null : null;
   const territoryStates = useMemo(
-    () => createTerritoryStates(game.players, ownership, selectedTerritoryId),
-    [game.players, ownership, selectedTerritoryId],
+    () => createTerritoryStates(game.players, ownership, viewerSelectedTerritoryId),
+    [game.players, ownership, viewerSelectedTerritoryId],
   );
   const remainingCount = game.draft ? remainingTerritoryIds(game.draft.ownership).length : generatedMapData.territories.length;
   const blockingResultTerritory = game.draft?.resultTerritoryId
@@ -140,22 +141,21 @@ function App() {
   const noticePlayer = noticeKey && noticeKey !== dismissedNoticeKey && game.draft?.noticePlayerId
     ? game.players.find((player) => player.id === game.draft?.noticePlayerId) ?? null
     : null;
-  const pendingTerritory = game.draft?.pendingTerritoryId
-    ? generatedMapData.territories.find((territory) => territory.id === game.draft?.pendingTerritoryId) ?? null
+  const viewerPendingTerritory = viewerSelectedTerritoryId
+    ? generatedMapData.territories.find((territory) => territory.id === viewerSelectedTerritoryId) ?? null
     : null;
   const timerRemaining = game.phase === "draft" && game.draft?.timerEndsAt
     ? Math.max(0, game.draft.timerEndsAt - now)
     : game.draft?.timerRemainingMs ?? null;
   const canControlSetup = game.mode === "local" || syncRole === "host";
-  const canControlActivePlayer = game.mode === "local" || (game.mode === "sync" && active?.id === localPlayerId);
   const canPick = game.phase === "draft" &&
     canControlActivePlayer &&
     Boolean(active) &&
     !game.draft?.pendingTerritoryId &&
     !game.draft?.resultTerritoryId;
-  const canShowConfirm = Boolean(pendingTerritory && active && canControlActivePlayer);
+  const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
   const isModalOpen = Boolean(
-    pendingTerritory ||
+    viewerPendingTerritory ||
     blockingResultTerritory ||
     noticeTerritory ||
     syncCameraMode ||
@@ -163,7 +163,7 @@ function App() {
     game.phase === "paused",
   );
   const showDraftControls = game.phase === "draft" &&
-    !pendingTerritory &&
+    !viewerPendingTerritory &&
     !blockingResultTerritory &&
     !noticeTerritory &&
     !syncCameraMode &&
@@ -907,7 +907,7 @@ function App() {
         mapData={generatedMapData}
         onTerritoryPress={canPick ? pressTerritory : undefined}
         resetCameraKey={resetCameraKey}
-        selectedTerritoryId={selectedTerritoryId}
+        selectedTerritoryId={viewerSelectedTerritoryId}
         showZoomOutControl={!isModalOpen}
         territoryStates={territoryStates}
       />
@@ -975,19 +975,17 @@ function App() {
         <ReviewPanel onExit={returnHome} players={game.players} />
       ) : null}
 
-      {canShowConfirm && pendingTerritory && active ? (
+      {canShowConfirm && viewerPendingTerritory && active ? (
         <ConfirmPickDialog
-          fillColor="#ffffff"
           onCancel={cancelPendingPick}
           onConfirm={confirmPendingPick}
-          territory={pendingTerritory}
+          territory={viewerPendingTerritory}
         />
       ) : null}
 
       {blockingResultTerritory && blockingResultPlayer ? (
         <PickResultDialog
           activePlayer={blockingResultPlayer}
-          fillColor={colorCss(blockingResultPlayer.color)}
           onClose={nextDraftTurn}
           territory={blockingResultTerritory}
         />
@@ -996,7 +994,6 @@ function App() {
       {noticeTerritory && noticePlayer ? (
         <PickResultDialog
           activePlayer={noticePlayer}
-          fillColor={colorCss(noticePlayer.color)}
           onClose={dismissNotice}
           territory={noticeTerritory}
         />
@@ -1396,21 +1393,18 @@ function ReviewPanel({ onExit, players }: { onExit: () => void; players: GamePla
 }
 
 function ConfirmPickDialog({
-  fillColor,
   onCancel,
   onConfirm,
   territory,
 }: {
-  fillColor: string;
   onCancel: () => void;
   onConfirm: () => void;
   territory: GeneratedTerritoryData;
 }) {
   return (
-    <div className="modal-scrim">
-      <section className="modal-panel pick-modal" role="dialog" aria-label="Confirm territory">
+    <div className="draft-sheet-scrim">
+      <section className="modal-panel draft-sheet" role="dialog" aria-label="Confirm territory">
         <h2>{territory.name}</h2>
-        <TerritoryShapePreview fillColor={fillColor} territory={territory} />
         <div className="modal-actions">
           <button className="icon-button danger large" type="button" onClick={onCancel} aria-label="Cancel pick">
             <X size={24} />
@@ -1426,12 +1420,10 @@ function ConfirmPickDialog({
 
 function PickResultDialog({
   activePlayer,
-  fillColor,
   onClose,
   territory,
 }: {
   activePlayer: GamePlayer;
-  fillColor: string;
   onClose: () => void;
   territory: GeneratedTerritoryData;
 }) {
@@ -1451,55 +1443,12 @@ function PickResultDialog({
   }, [closeOnce]);
 
   return (
-    <div className="modal-scrim pick-result-scrim" onClick={closeOnce}>
-      <section className="modal-panel pick-modal pick-result-modal" role="status" aria-live="polite">
+    <div className="draft-sheet-scrim pick-result-scrim" onClick={closeOnce}>
+      <section className="modal-panel draft-sheet pick-result-modal" role="status" aria-live="polite">
         <p className="muted">{activePlayer.name} drafted</p>
         <h2>{territory.name}</h2>
-        <TerritoryShapePreview fillColor={fillColor} territory={territory} />
       </section>
     </div>
-  );
-}
-
-function TerritoryShapePreview({
-  fillColor,
-  territory,
-}: {
-  fillColor: string;
-  territory: GeneratedTerritoryData;
-}) {
-  const shapeRef = useRef<SVGGElement>(null);
-  const [viewBox, setViewBox] = useState(() => viewBoxFromBounds(territory.focusBounds));
-
-  useLayoutEffect(() => {
-    const shape = shapeRef.current;
-
-    if (!shape) {
-      return;
-    }
-
-    // Fit the raw generated territory paths tightly inside the modal SVG.
-    try {
-      const box = shape.getBBox();
-      const padding = Math.max(box.width, box.height) * 0.08;
-      setViewBox(`${box.x - padding} ${box.y - padding} ${box.width + padding * 2} ${box.height + padding * 2}`);
-    } catch {
-      setViewBox(viewBoxFromBounds(territory.focusBounds));
-    }
-  }, [territory]);
-
-  return (
-    <svg className="territory-preview-shape" viewBox={viewBox} aria-hidden="true">
-      <g ref={shapeRef}>
-        {territory.fillPaths.map((path, index) => (
-          <path
-            d={path}
-            fill={fillColor}
-            key={index}
-          />
-        ))}
-      </g>
-    </svg>
   );
 }
 
@@ -1940,10 +1889,6 @@ function colorCss(color: PlayerColor | null) {
     default:
       return "#efe9d9";
   }
-}
-
-function viewBoxFromBounds(bounds: MapBounds) {
-  return `${bounds.minX} ${bounds.minY} ${bounds.maxX - bounds.minX} ${bounds.maxY - bounds.minY}`;
 }
 
 export default App;

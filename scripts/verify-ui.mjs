@@ -109,6 +109,7 @@ async function runSourceChecks() {
   assert(appSource.includes("SyncHostTransport") && appSource.includes("SyncJoinTransport"), "App wires the QR sync transport.");
   assert(appSource.includes("pauseSyncGame"), "App has sync pause semantics.");
   assert(appSource.includes("noticeTerritoryId"), "App supports nonblocking sync draft notices.");
+  assert(appSource.includes("viewerSelectedTerritoryId") && appSource.includes("selectedTerritoryId={viewerSelectedTerritoryId}"), "App keeps draft focus viewer-local.");
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
@@ -317,14 +318,21 @@ async function runLocalDraftChecks(page) {
   await clickTerritory(page, "shire");
   const confirmDialog = page.getByRole("dialog", { name: "Confirm territory" });
   await confirmDialog.waitFor();
+  const confirmBox = await confirmDialog.boundingBox();
+  const viewport = page.viewportSize();
+  assert(confirmBox && viewport && confirmBox.y > viewport.height * 0.55, "Confirm sheet appears at the bottom.");
   assert((await page.getByRole("button", { name: "Zoom out" }).count()) === 0, "Confirm modal hides the zoom-out control.");
   assert(await confirmDialog.getByRole("heading", { name: "Shire" }).isVisible(), "Confirm modal shows the territory name.");
-  assert((await confirmDialog.locator(".territory-preview-shape path").count()) > 0, "Confirm modal shows the territory shape.");
+  assert((await confirmDialog.locator(".territory-preview-shape").count()) === 0, "Confirm sheet has no territory preview.");
+  assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Pending territory is selected on the map.");
+  assert((await page.locator('[data-territory-fill="shire"] [data-territory-fill-piece="shire"]').first().getAttribute("fill")) === "#ffffff", "Pending territory is filled white on the map.");
   await page.getByRole("button", { name: "Confirm pick" }).click();
   const resultDialog = page.getByRole("status");
   await resultDialog.waitFor();
+  const resultBox = await resultDialog.boundingBox();
+  assert(confirmBox && resultBox && Math.abs(confirmBox.width - resultBox.width) < 1, "Result sheet matches confirm sheet width.");
   assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
-  assert((await resultDialog.locator(".territory-preview-shape path").count()) > 0, "Result modal shows the territory shape.");
+  assert((await resultDialog.locator(".territory-preview-shape").count()) === 0, "Result sheet has no territory preview.");
   await page.getByText("41 left").waitFor();
   assertFullMapViewBox(await viewBox(page), size, "Local result dismissal zooms back out to the full map.");
 

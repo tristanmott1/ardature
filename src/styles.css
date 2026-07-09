@@ -116,16 +116,6 @@ button:focus-visible,
     opacity 140ms ease;
 }
 
-.territory-fill.selected {
-  filter: brightness(1.14) saturate(0.82);
-}
-
-.territory-selected-wash {
-  fill: rgba(255, 255, 255, 0.24);
-  stroke: none;
-  pointer-events: none;
-}
-
 .static-map-ink {
   pointer-events: none;
 }
@@ -657,24 +647,41 @@ select {
   overflow: auto;
 }
 
-.pick-modal {
-  width: min(360px, calc(100vw - 28px));
+.draft-sheet-scrim {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 20;
+  display: grid;
+  justify-items: center;
+  padding: 0 14px;
+  pointer-events: none;
+}
+
+.draft-sheet {
+  width: min(320px, calc(100vw - 28px));
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.draft-sheet h2 {
+  font-size: 1.05rem;
+}
+
+.draft-sheet .modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
-.pick-modal h2 {
-  font-size: 1.14rem;
-}
-
-.territory-preview-shape {
-  display: block;
+.draft-sheet .icon-button {
   width: 100%;
-  height: min(46dvh, 310px);
-  overflow: visible;
 }
 
 .pick-result-scrim {
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .pick-result-modal {

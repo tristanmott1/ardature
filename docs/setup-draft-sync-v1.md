@@ -105,9 +105,11 @@ Manual draft interaction:
 - The active player picks by selecting a remaining territory on the map.
 - Selecting a territory opens a confirmation popup with cancel and confirm controls.
 - Once confirmed, the territory becomes owned by that player and immediately uses that player's color.
-- The confirmation popup shows the selected territory name and a raw generated territory shape filled with the map background color.
-- A result popup shows the player, territory name, and the same raw generated territory shape filled with the drafting player's color.
+- The confirmation popup is a compact bottom sheet with the selected territory name and cancel/confirm controls.
+- The selected pending territory is highlighted on the map for the active drafting viewer.
+- A result popup uses the same compact bottom-sheet footprint and shows the player and territory name.
 - In local mode, the result popup auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
+- In sync mode, another player's pending selection never moves, focuses, or white-fills your map. The only shared draft feedback for other players is the small drafted notification.
 - In sync mode, the next player's turn starts immediately on their device; the result popup also auto-dismisses after about one second and can be dismissed early.
 - If a timed pick expires with a confirmation popup open, the selected territory is treated as confirmed.
 - If a timed pick expires with no confirmation popup open, the host/local device randomly chooses one remaining territory for the active player.
@@ -220,7 +222,7 @@ Reusable map modes for this milestone:
 - Setup/review: pan and zoom only.
 - Draft active pick: pan, zoom, and selectable remaining territories.
 - Draft inactive player or non-owning sync device: pan and zoom; no valid pick action.
-- Confirmation popup: map remains visible; pending pick is confirmed or canceled by a shape-based popup.
+- Confirmation popup: map remains visible; pending pick is confirmed or canceled by a compact bottom sheet.
 - Post-draft review: pan and zoom; no selection.
 
 The map renderer should continue using generated map data, shared SVG coordinates, static ink, territory fill paths, hit targets, and territory focus bounds. Draft and review ownership coloring should replace the old sandbox skin picker behavior.
