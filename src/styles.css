@@ -56,11 +56,22 @@ button:focus-visible,
   background: var(--map-paper);
 }
 
+.app-shell.draft-layout {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .map-shell {
   position: absolute;
   inset: 0;
   overflow: hidden;
   touch-action: none;
+}
+
+.draft-layout .map-shell {
+  position: relative;
+  inset: auto;
+  min-height: 0;
 }
 
 .map-svg {
@@ -146,8 +157,7 @@ button:focus-visible,
 
 .home-panel,
 .sync-entry-panel,
-.setup-panel,
-.pause-panel {
+.setup-panel {
   top: max(12px, env(safe-area-inset-top));
   display: grid;
   gap: 12px;
@@ -177,6 +187,26 @@ button:focus-visible,
   align-items: center;
   justify-content: space-between;
   padding: 8px;
+}
+
+.draft-layout .draft-panel {
+  position: relative;
+  top: auto;
+  left: auto;
+  z-index: 12;
+  width: 100%;
+  max-width: none;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: var(--map-paper);
+  box-shadow: 0 3px 14px rgba(24, 24, 27, 0.1);
+  transform: none;
+  backdrop-filter: none;
+  padding:
+    max(8px, env(safe-area-inset-top))
+    max(10px, env(safe-area-inset-right))
+    8px
+    max(10px, env(safe-area-inset-left));
 }
 
 .panel-header,
@@ -580,14 +610,6 @@ select {
   background: rgba(24, 24, 27, 0.18);
 }
 
-.notice-scrim {
-  position: fixed;
-  left: 50%;
-  bottom: max(12px, env(safe-area-inset-bottom));
-  z-index: 18;
-  transform: translateX(-50%);
-}
-
 .modal-panel {
   position: relative;
   display: grid;
@@ -602,6 +624,40 @@ select {
   backdrop-filter: blur(12px);
 }
 
+.pause-modal {
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow: auto;
+}
+
+.pick-modal {
+  width: min(360px, calc(100vw - 28px));
+  gap: 10px;
+}
+
+.pick-modal h2 {
+  font-size: 1.14rem;
+}
+
+.territory-preview-shape {
+  display: block;
+  width: 100%;
+  height: min(46dvh, 310px);
+  overflow: visible;
+}
+
+.territory-preview-shape path {
+  vector-effect: non-scaling-stroke;
+}
+
+.pick-result-scrim {
+  cursor: pointer;
+}
+
+.pick-result-modal {
+  pointer-events: none;
+}
+
 .decision-modal {
   width: min(300px, calc(100vw - 32px));
 }
@@ -614,16 +670,6 @@ select {
 
 .decision-modal .icon-button {
   width: 100%;
-}
-
-.notice-scrim .modal-panel {
-  width: min(300px, calc(100vw - 24px));
-}
-
-.modal-close-button {
-  position: absolute;
-  top: 8px;
-  right: 8px;
 }
 
 .scanner-modal {
@@ -668,7 +714,7 @@ select {
 @media (max-width: 520px) {
   .setup-panel,
   .sync-entry-panel,
-  .pause-panel {
+  .pause-modal {
     width: calc(100vw - 16px);
     padding: 10px;
   }

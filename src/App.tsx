@@ -1,8 +1,7 @@
-import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
 import {
-  ArrowRight,
   ChevronDown,
   Check,
   GripVertical,
@@ -53,6 +52,7 @@ import type {
 } from "./game/gameTypes";
 import { generatedMapData } from "./map/generated/mapData";
 import { MapView } from "./map/components/MapView";
+import type { GeneratedTerritoryData, MapBounds } from "./map/mapTypes";
 import { isArdatureSyncMessage } from "./sync/syncMessages";
 import { SyncHostTransport, SyncJoinTransport, type SyncConnectionStatus, type SyncWireMessage } from "./sync/syncTransport";
 
@@ -146,6 +146,12 @@ function App() {
     !game.draft?.pendingTerritoryId &&
     !game.draft?.resultTerritoryId;
   const canShowConfirm = Boolean(pendingTerritory && active && canControlActivePlayer);
+  const showDraftControls = game.phase === "draft" &&
+    !pendingTerritory &&
+    !blockingResultTerritory &&
+    !noticeTerritory &&
+    !syncCameraMode &&
+    !isEndGamePromptOpen;
 
   useEffect(() => {
     latestGameRef.current = game;
@@ -814,7 +820,23 @@ function App() {
   }
 
   return (
-    <main className="app-shell" data-app-phase={game.phase} data-sync-role={syncRole ?? "none"}>
+    <main
+      className={`app-shell${showDraftControls ? " draft-layout" : ""}`}
+      data-app-phase={game.phase}
+      data-draft-controls={showDraftControls ? "visible" : "hidden"}
+      data-sync-role={syncRole ?? "none"}
+    >
+      {showDraftControls ? (
+        <DraftPanel
+          activePlayer={active}
+          canPause={game.mode === "local" || syncRole === "host"}
+          onExit={returnHome}
+          onPause={pauseDraft}
+          remainingCount={remainingCount}
+          timerRemaining={timerRemaining}
+        />
+      ) : null}
+
       <MapView
         mapData={generatedMapData}
         onTerritoryPress={canPick ? pressTerritory : undefined}
@@ -867,17 +889,6 @@ function App() {
         />
       ) : null}
 
-      {game.phase === "draft" ? (
-        <DraftPanel
-          activePlayer={active}
-          canPause={game.mode === "local" || syncRole === "host"}
-          onExit={returnHome}
-          onPause={pauseDraft}
-          remainingCount={remainingCount}
-          timerRemaining={timerRemaining}
-        />
-      ) : null}
-
       {game.phase === "paused" ? (
         <PausePanel
           canRemove={game.mode === "local" || syncRole === "host"}
@@ -897,28 +908,28 @@ function App() {
 
       {canShowConfirm && pendingTerritory && active ? (
         <ConfirmPickDialog
-          activePlayer={active}
+          fillColor={generatedMapData.backgroundColor}
           onCancel={cancelPendingPick}
           onConfirm={confirmPendingPick}
-          territoryName={pendingTerritory.name}
+          territory={pendingTerritory}
         />
       ) : null}
 
       {blockingResultTerritory && blockingResultPlayer ? (
         <PickResultDialog
           activePlayer={blockingResultPlayer}
-          mode="local"
+          fillColor={colorCss(blockingResultPlayer.color)}
           onClose={nextDraftTurn}
-          territoryName={blockingResultTerritory.name}
+          territory={blockingResultTerritory}
         />
       ) : null}
 
       {noticeTerritory && noticePlayer ? (
         <PickResultDialog
           activePlayer={noticePlayer}
-          mode="sync"
+          fillColor={colorCss(noticePlayer.color)}
           onClose={dismissNotice}
-          territoryName={noticeTerritory.name}
+          territory={noticeTerritory}
         />
       ) : null}
 
@@ -1266,28 +1277,30 @@ function PausePanel({
   remainingCount: number;
 }) {
   return (
-    <section className="hud-panel pause-panel">
-      <PanelHeader title="Paused" onClose={onExit} closeLabel="End game" />
-      <p className="muted">{remainingCount} territories remain.</p>
-      <div className="player-list paused-list">
-        {players.map((player) => (
-          <article className="player-row compact-row" key={player.id}>
-            <span className="player-dot" style={{ background: colorCss(player.color) }} />
-            <strong>{player.name}</strong>
-            {mode === "sync" ? <span className="connection-label">{player.connectionStatus}</span> : null}
-            {canRemove ? (
-              <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
-                <Trash2 size={16} />
-              </button>
-            ) : null}
-          </article>
-        ))}
-      </div>
-      <button className="primary icon-text-button wide-button" type="button" onClick={onResume} disabled={!canResume || players.length < 2}>
-        <Play size={20} />
-        Resume
-      </button>
-    </section>
+    <div className="modal-scrim">
+      <section className="modal-panel pause-modal" role="dialog" aria-label="Paused">
+        <PanelHeader title="Paused" onClose={onExit} closeLabel="End game" />
+        <p className="muted">{remainingCount} territories remain.</p>
+        <div className="player-list paused-list">
+          {players.map((player) => (
+            <article className="player-row compact-row" key={player.id}>
+              <span className="player-dot" style={{ background: colorCss(player.color) }} />
+              <strong>{player.name}</strong>
+              {mode === "sync" ? <span className="connection-label">{player.connectionStatus}</span> : null}
+              {canRemove ? (
+                <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
+                  <Trash2 size={16} />
+                </button>
+              ) : null}
+            </article>
+          ))}
+        </div>
+        <button className="primary icon-text-button wide-button" type="button" onClick={onResume} disabled={!canResume || players.length < 2}>
+          <Play size={20} />
+          Resume
+        </button>
+      </section>
+    </div>
   );
 }
 
@@ -1310,21 +1323,21 @@ function ReviewPanel({ onExit, players }: { onExit: () => void; players: GamePla
 }
 
 function ConfirmPickDialog({
-  activePlayer,
+  fillColor,
   onCancel,
   onConfirm,
-  territoryName,
+  territory,
 }: {
-  activePlayer: GamePlayer;
+  fillColor: string;
   onCancel: () => void;
   onConfirm: () => void;
-  territoryName: string;
+  territory: GeneratedTerritoryData;
 }) {
   return (
     <div className="modal-scrim">
-      <section className="modal-panel" role="dialog" aria-label="Confirm territory">
-        <p className="muted">{activePlayer.name}</p>
-        <h2>{territoryName}</h2>
+      <section className="modal-panel pick-modal" role="dialog" aria-label="Confirm territory">
+        <h2>{territory.name}</h2>
+        <TerritoryShapePreview fillColor={fillColor} territory={territory} />
         <div className="modal-actions">
           <button className="icon-button danger large" type="button" onClick={onCancel} aria-label="Cancel pick">
             <X size={24} />
@@ -1340,25 +1353,83 @@ function ConfirmPickDialog({
 
 function PickResultDialog({
   activePlayer,
-  mode,
+  fillColor,
   onClose,
-  territoryName,
+  territory,
 }: {
   activePlayer: GamePlayer;
-  mode: "local" | "sync";
+  fillColor: string;
   onClose: () => void;
-  territoryName: string;
+  territory: GeneratedTerritoryData;
 }) {
+  const closedRef = useRef(false);
+  const closeOnce = useCallback(() => {
+    if (closedRef.current) {
+      return;
+    }
+
+    closedRef.current = true;
+    onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(closeOnce, 1000);
+    return () => window.clearTimeout(timeout);
+  }, [closeOnce]);
+
   return (
-    <div className={mode === "sync" ? "notice-scrim" : "modal-scrim"}>
-      <section className="modal-panel" role="status" aria-live="polite">
-        <button className="modal-close-button icon-button" type="button" onClick={onClose} aria-label={mode === "local" ? "Next player" : "Dismiss"}>
-          {mode === "local" ? <ArrowRight size={24} /> : <X size={18} />}
-        </button>
+    <div className="modal-scrim pick-result-scrim" onClick={closeOnce}>
+      <section className="modal-panel pick-modal pick-result-modal" role="status" aria-live="polite">
         <p className="muted">{activePlayer.name} drafted</p>
-        <h2>{territoryName}</h2>
+        <h2>{territory.name}</h2>
+        <TerritoryShapePreview fillColor={fillColor} territory={territory} />
       </section>
     </div>
+  );
+}
+
+function TerritoryShapePreview({
+  fillColor,
+  territory,
+}: {
+  fillColor: string;
+  territory: GeneratedTerritoryData;
+}) {
+  const shapeRef = useRef<SVGGElement>(null);
+  const [viewBox, setViewBox] = useState(() => viewBoxFromBounds(territory.focusBounds));
+
+  useLayoutEffect(() => {
+    const shape = shapeRef.current;
+
+    if (!shape) {
+      return;
+    }
+
+    // Fit the raw generated territory paths tightly inside the modal SVG.
+    try {
+      const box = shape.getBBox();
+      const padding = Math.max(box.width, box.height) * 0.08;
+      setViewBox(`${box.x - padding} ${box.y - padding} ${box.width + padding * 2} ${box.height + padding * 2}`);
+    } catch {
+      setViewBox(viewBoxFromBounds(territory.focusBounds));
+    }
+  }, [territory]);
+
+  return (
+    <svg className="territory-preview-shape" viewBox={viewBox} aria-hidden="true">
+      <g ref={shapeRef}>
+        {territory.fillPaths.map((path, index) => (
+          <path
+            d={path}
+            fill={fillColor}
+            key={index}
+            stroke="#111111"
+            strokeLinejoin="round"
+            strokeWidth="34"
+          />
+        ))}
+      </g>
+    </svg>
   );
 }
 
@@ -1800,6 +1871,10 @@ function colorCss(color: PlayerColor | null) {
     default:
       return "#efe9d9";
   }
+}
+
+function viewBoxFromBounds(bounds: MapBounds) {
+  return `${bounds.minX} ${bounds.minY} ${bounds.maxX - bounds.minX} ${bounds.maxY - bounds.minY}`;
 }
 
 export default App;

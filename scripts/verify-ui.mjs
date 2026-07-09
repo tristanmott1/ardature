@@ -222,22 +222,37 @@ async function runLocalDraftChecks(page) {
   assertViewBoxInside(await viewBox(page), size, "Initial draft viewBox stays inside the map.");
   assert((await page.locator("[data-territory-fill]").count()) === 42, "Map renders 42 territory fill groups.");
   assert((await page.locator("[data-territory-hit]").count()) === 42, "Draft renders 42 hit targets.");
+  const controlsBox = await page.locator(".draft-panel").boundingBox();
+  const mapBox = await page.locator(".map-shell").boundingBox();
+  assert(controlsBox && mapBox && mapBox.y >= controlsBox.y + controlsBox.height - 1, "Draft controls sit above the map.");
   assert(
     await page.locator(".static-map-ink").evaluate((node) => getComputedStyle(node).pointerEvents === "none"),
     "Static ink layer is pointer inert.",
   );
 
   await clickTerritory(page, "shire");
-  await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
+  const confirmDialog = page.getByRole("dialog", { name: "Confirm territory" });
+  await confirmDialog.waitFor();
+  assert(await confirmDialog.getByRole("heading", { name: "Shire" }).isVisible(), "Confirm modal shows the territory name.");
+  assert((await confirmDialog.locator(".territory-preview-shape path").count()) > 0, "Confirm modal shows the territory shape.");
   await page.getByRole("button", { name: "Confirm pick" }).click();
-  await page.getByRole("status").waitFor();
-  await page.getByRole("button", { name: "Next player" }).click();
+  const resultDialog = page.getByRole("status");
+  await resultDialog.waitFor();
+  assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
+  assert((await resultDialog.locator(".territory-preview-shape path").count()) > 0, "Result modal shows the territory shape.");
   await page.getByText("41 left").waitFor();
 
+  await clickTerritory(page, "bree");
+  await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
+  await page.getByRole("button", { name: "Confirm pick" }).click();
+  await page.locator(".pick-result-scrim").click();
+  await page.getByText("40 left").waitFor();
+
   await page.getByRole("button", { name: "Pause draft" }).click();
-  await page.getByRole("heading", { name: "Paused" }).waitFor();
+  await page.getByRole("dialog", { name: "Paused" }).waitFor();
+  assert((await page.locator(".draft-panel").count()) === 0, "Pause hides draft controls.");
   await page.getByRole("button", { name: "Resume" }).click();
-  await page.getByText("41 left").waitFor();
+  await page.getByText("40 left").waitFor();
 
   const box = await page.locator(".map-svg").boundingBox();
   assert(box, "Map SVG has a bounding box.");

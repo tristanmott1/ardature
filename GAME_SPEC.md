@@ -1,8 +1,8 @@
-# Ardatúrë Game Specification
+# ArdatÃºrÃ« Game Specification
 
-This document is the source of truth for the Ardatúrë game while it is being designed and built. Rule, screen, state, sync, and deployment decisions should be reflected here before or alongside implementation changes.
+This document is the source of truth for the ArdatÃºrÃ« game while it is being designed and built. Rule, screen, state, sync, and deployment decisions should be reflected here before or alongside implementation changes.
 
-Ardatúrë is a private, personal-use, Lord of the Rings themed, Risk-like territory conquest game for phones. The app is intended to be hosted as a static GitHub Pages PWA, with local pass-and-play and offline nearby-device sync.
+ArdatÃºrÃ« is a private, personal-use, Lord of the Rings themed, Risk-like territory conquest game for phones. The app is intended to be hosted as a static GitHub Pages PWA, with local pass-and-play and offline nearby-device sync.
 
 ## Product Goal
 
@@ -744,11 +744,13 @@ Draft selection flow:
 1. Select a remaining territory.
 2. Show a confirmation popup with cancel and confirm controls.
 3. Confirming assigns the territory immediately and colors it with the owner's player color.
-4. Show a result popup naming the drafted territory.
+4. Show a result popup naming the player and drafted territory.
 
-In local mode, the result popup includes a next arrow. The next player's timer starts only after that arrow is pressed.
+The confirmation popup shows the territory name and the generated territory shape filled with the map background color.
 
-In sync mode, the result popup is dismissible but has no next arrow. The next player's turn starts immediately on that player's device.
+The result popup shows the territory name and the generated territory shape filled with the drafting player's color. In local mode, it auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
+
+In sync mode, the next player's turn starts immediately on that player's device. The result popup also auto-dismisses after about one second and can be dismissed early.
 
 Timer behavior:
 
@@ -767,7 +769,7 @@ Local pause is a true pause of the single-device draft:
 
 - If the pick timer is running, it freezes with the remaining time preserved.
 - If a confirmation popup is open, the pending selected territory stays pending.
-- If the result/next-player popup is open, no timer is running and the same popup remains.
+- If the result popup is open, no timer is running and the same popup remains.
 - On resume, the same player continues from the same state.
 - Local pause has no disconnected status, reconnect status, or QR reconnect controls.
 - Local players can be removed while paused.
@@ -1100,7 +1102,7 @@ Suggested build order:
 3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, draft style, pick timer, and troop allocation timer.
 4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, ownership assignment, and post-draft review.
 5. Implement local draft UI and local persistence through setup, draft, manual pause, player removal, end-game confirmation, refresh restore, and review.
-6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardatúrë-specific payload names and prefixes.
+6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using ArdatÃºrÃ«-specific payload names and prefixes.
 7. Implement sync setup with host/join flows, joiner editable name/color, host edit/lock/unlock, duplicate-color blocking, host roster controls, and setup broadcasts.
 8. Implement sync draft as host-authoritative state: host timers, pick requests, confirmed picks, random fallback picks, broadcasts, and read-only views for inactive devices.
 9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, QR reconnect fallback, and unpause validation.

@@ -1,6 +1,6 @@
 # Setup, Draft, And Sync V1
 
-This milestone replaces the temporary map sandbox with the first real Ardatúrë game flow. The map stays central throughout the app, with setup, configuration, draft prompts, pause state, and review state shown as panels or overlays around the shared map.
+This milestone replaces the temporary map sandbox with the first real ArdatÃºrÃ« game flow. The map stays central throughout the app, with setup, configuration, draft prompts, pause state, and review state shown as panels or overlays around the shared map.
 
 ## Target Flow
 
@@ -15,7 +15,7 @@ Troop selection, troop allocation, full turns, fog of war, combat, and later rul
 Home has two modes:
 
 - Local: one device owns the whole game and is passed around.
-- Sync: nearby devices connect with the same QR/WebRTC handshake shape as `../qwixx`, copied and renamed for Ardatúrë rather than literally reused.
+- Sync: nearby devices connect with the same QR/WebRTC handshake shape as `../qwixx`, copied and renamed for ArdatÃºrÃ« rather than literally reused.
 
 The old color-selection sandbox is no longer a user-facing mode. Its map features remain important and should be reused throughout the real app: pan, zoom, selected-territory focus, hit targets, and map-layer rendering.
 
@@ -27,7 +27,6 @@ Use familiar icons instead of text-heavy buttons wherever possible:
 
 - `X` for cancel, dismiss, remove, quit, and close.
 - check mark for confirm, ready, and start-valid actions.
-- arrow for next-player handoff in local draft.
 - shuffle for randomizing turn order.
 - drag handle for manual ordering.
 - lock and unlock for host-controlled player fields.
@@ -103,9 +102,10 @@ Manual draft interaction:
 - The active player picks by selecting a remaining territory on the map.
 - Selecting a territory opens a confirmation popup with cancel and confirm controls.
 - Once confirmed, the territory becomes owned by that player and immediately uses that player's color.
-- A result popup shows which territory was drafted.
-- In local mode, the result popup includes a next arrow; the next player's timer starts only after that arrow is pressed.
-- In sync mode, the next player's turn starts immediately on their device; the result popup is dismissible and has no next arrow.
+- The confirmation popup shows the selected territory name and a raw generated territory shape filled with the map background color.
+- A result popup shows the player, territory name, and the same raw generated territory shape filled with the drafting player's color.
+- In local mode, the result popup auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
+- In sync mode, the next player's turn starts immediately on their device; the result popup also auto-dismisses after about one second and can be dismissed early.
 - If a timed pick expires with a confirmation popup open, the selected territory is treated as confirmed.
 - If a timed pick expires with no confirmation popup open, the host/local device randomly chooses one remaining territory for the active player.
 - If local mode pauses during an active pick or confirmation popup, the timer and pending choice are preserved.
@@ -129,7 +129,7 @@ Local pause is a true pause of the single-device draft:
 
 - If the pick timer is running, it freezes with the remaining time preserved.
 - If a confirmation popup is open, the pending selected territory stays pending.
-- If the result/next-player popup is open, no timer is running and the same popup remains.
+- If the result popup is open, no timer is running and the same popup remains.
 - On resume, the same player continues from the same state.
 - Local pause has no disconnected or reconnecting state.
 - Local pause has no QR/reconnect controls.
@@ -171,7 +171,7 @@ The sync transport should be copied and adapted from Qwixx:
 - QR host offer.
 - QR joiner answer.
 - camera scanner with native QR detection when available and JavaScript fallback.
-- project-specific Ardatúrë payload kinds and compact QR prefixes.
+- project-specific ArdatÃºrÃ« payload kinds and compact QR prefixes.
 
 Sync reconnect and pause:
 
@@ -210,14 +210,14 @@ Local mode uses the same draft engine as sync mode, but without network messages
 
 ## Map Behavior
 
-The app should be a map-first shell with panels and modals layered above it.
+The app should be a map-first shell. During active draft turns, compact controls sit in an opaque top section and the map fills the space below without sliding underneath them. When controls are hidden by pause, confirmation, result, scanner, or exit modals, the map can use the full screen behind the modal.
 
 Reusable map modes for this milestone:
 
 - Setup/review: pan and zoom only.
 - Draft active pick: pan, zoom, and selectable remaining territories.
 - Draft inactive player or non-owning sync device: pan and zoom; no valid pick action.
-- Confirmation popup: map remains visible; pending pick is confirmed or canceled by the popup.
+- Confirmation popup: map remains visible; pending pick is confirmed or canceled by a shape-based popup.
 - Post-draft review: pan and zoom; no selection.
 
 The map renderer should continue using generated map data, shared SVG coordinates, static ink, territory fill paths, hit targets, and territory focus bounds. Draft and review ownership coloring should replace the old sandbox skin picker behavior.
@@ -231,7 +231,7 @@ Build this milestone in this order:
 3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, draft style, pick timer, and troop allocation timer.
 4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, ownership assignment, and post-draft review.
 5. Implement local draft UI and local persistence through setup, draft, manual pause, player removal, end-game confirmation, refresh restore, and review.
-6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardatúrë-specific payload names and prefixes.
+6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using ArdatÃºrÃ«-specific payload names and prefixes.
 7. Implement sync setup with host/join flows, joiner editable name/color, host edit/lock/unlock, duplicate-color blocking, host roster controls, and setup broadcasts.
 8. Implement sync draft as host-authoritative state: host timers, pick requests, confirmed picks, random fallback picks, broadcasts, and read-only views for inactive devices.
 9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, QR reconnect fallback, and unpause validation.

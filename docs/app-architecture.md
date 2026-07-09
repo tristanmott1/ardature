@@ -1,6 +1,6 @@
 # App Architecture
 
-Ardatúrë is a static GitHub Pages PWA, organized similarly to the sibling `../qwixx` app: Vite, React, TypeScript, a web manifest, a service worker, and QR/WebRTC sync. The first screen should be the usable game surface, not a landing page.
+ArdatÃºrÃ« is a static GitHub Pages PWA, organized similarly to the sibling `../qwixx` app: Vite, React, TypeScript, a web manifest, a service worker, and QR/WebRTC sync. The first screen should be the usable game surface, not a landing page.
 
 ## Top-Level Structure
 
@@ -46,7 +46,7 @@ The exact file list can evolve, but the boundaries should stay clear:
 - `maps/` owns the drawing-to-geometry pipeline.
 - `src/map/` owns map rendering and map-specific UI.
 - `src/game/` owns game state, reducers, and rules.
-- `src/sync/` owns Qwixx-style local network synchronization adapted for Ardatúrë.
+- `src/sync/` owns Qwixx-style local network synchronization adapted for ArdatÃºrÃ«.
 
 ## Map Data Flow
 
@@ -96,7 +96,7 @@ Source drawings and extraction rules are the only places geometry should be fixe
 
 ## App Flow
 
-The app should be a map-first shell. The map is normally present, while setup, configuration, draft confirmation, pause state, reconnect state, and review state appear as panels or modals over the shared map.
+The app should be a map-first shell. The map is normally present, while setup, configuration, draft confirmation, pause state, reconnect state, and review state appear as panels or modals around the shared map. During active draft turns, the controls use an opaque top section and the map fills the remaining space instead of sliding underneath the controls.
 
 The first real gameplay milestone is documented in `setup-draft-sync-v1.md`. Its phase order is:
 
@@ -190,6 +190,8 @@ Invisible topmost territory shapes used for taps/clicks. It should receive point
 
 The background component is rendered but not selectable.
 
+Shape-based draft modals reuse the same generated territory fill paths as the map. They measure the rendered path bounds in the browser only to frame the modal SVG; they do not introduce another geometry model or hand-authored territory shapes.
+
 ## Territory State
 
 The initial app-level map state can be small:
@@ -227,7 +229,7 @@ Sync mode should be copied and adapted from Qwixx rather than literally reused:
 - WebRTC data channels.
 - QR host offers.
 - QR joiner answers.
-- Ardatúrë-specific payload kinds and compact QR prefixes.
+- ArdatÃºrÃ«-specific payload kinds and compact QR prefixes.
 - Host-authoritative setup, draft, timer, ownership, pause, reconnect, and removal state.
 
 The host is always one of the players and owns the canonical game state. Joiners send requests and render the latest host state. Joiners can edit their own unlocked name/color during setup, while the host can edit any name/color and lock or unlock those fields.
