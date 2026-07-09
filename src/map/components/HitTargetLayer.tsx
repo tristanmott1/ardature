@@ -1,21 +1,51 @@
-import { type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, useRef } from "react";
+import { type PointerEvent as ReactPointerEvent, useRef } from "react";
 import type { GeneratedMapData } from "../mapTypes";
 
+type PendingPress = {
+  pointerId: number;
+  territoryId: string;
+  clientX: number;
+  clientY: number;
+};
+
+const PRESS_MOVE_THRESHOLD = 5;
+
 export function HitTargetLayer({
-  isImmediatePress,
   isClickSuppressed,
   mapData,
   onTerritoryPress,
 }: {
-  isImmediatePress?: () => boolean;
   isClickSuppressed?: () => boolean;
   mapData: GeneratedMapData;
   onTerritoryPress: (territoryId: string) => void;
 }) {
   const skipClickRef = useRef(false);
+  const pendingPressRef = useRef<PendingPress | null>(null);
 
-  function pressImmediately(event: ReactMouseEvent<SVGGElement> | ReactPointerEvent<SVGGElement>, territoryId: string) {
-    if (skipClickRef.current || !isImmediatePress?.() || isClickSuppressed?.()) {
+  function startPress(event: ReactPointerEvent<SVGGElement>, territoryId: string) {
+    if (isClickSuppressed?.()) {
+      return;
+    }
+
+    pendingPressRef.current = {
+      pointerId: event.pointerId,
+      territoryId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    };
+  }
+
+  function finishPress(event: ReactPointerEvent<SVGGElement>, territoryId: string) {
+    const pendingPress = pendingPressRef.current;
+    pendingPressRef.current = null;
+
+    if (!pendingPress || pendingPress.pointerId !== event.pointerId || pendingPress.territoryId !== territoryId || isClickSuppressed?.()) {
+      return;
+    }
+
+    const moved = Math.hypot(event.clientX - pendingPress.clientX, event.clientY - pendingPress.clientY);
+
+    if (moved > PRESS_MOVE_THRESHOLD) {
       return;
     }
 
@@ -44,8 +74,11 @@ export function HitTargetLayer({
               onTerritoryPress(territory.id);
             }
           }}
-          onMouseDown={(event) => pressImmediately(event, territory.id)}
-          onPointerDown={(event) => pressImmediately(event, territory.id)}
+          onPointerCancel={() => {
+            pendingPressRef.current = null;
+          }}
+          onPointerDown={(event) => startPress(event, territory.id)}
+          onPointerUp={(event) => finishPress(event, territory.id)}
           onKeyDown={(event) => {
             if (isClickSuppressed?.()) {
               return;

@@ -153,6 +153,8 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
   assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
   assert(mapViewSource.includes("onMapPress"), "Map view supports map-background presses.");
+  assert(mapViewSource.includes("startedOnTerritory") && !mapViewSource.includes("isImmediatePress"), "Map view does not capture territory-originated desktop clicks.");
+  assert(mapViewSource.includes("stopCameraControlEvent"), "Map camera controls stop pointer and wheel propagation.");
   assert(mapViewSource.includes("Maximize") && mapViewSource.includes("Return to map view"), "Map view uses a corner-only return-to-map control.");
   assert(mapViewSource.includes("Crosshair") && mapViewSource.includes("Disable automatic focus") && mapViewSource.includes("Enable automatic focus"), "Map view exposes an auto-focus toggle.");
   assert(mapPreferencesSource.includes("ardature.mapPreferences.v1") && mapPreferencesSource.includes("autoFocusEnabled: false"), "Map preferences persist auto-focus with a default-off state.");
@@ -167,6 +169,7 @@ async function runSourceChecks() {
   assert(!appSource.includes("troop-step-grid") && !appSource.includes("troop-stepper"), "Old troop stepper markup is removed.");
   assert(!stylesSource.includes(".troop-step-grid") && !stylesSource.includes(".troop-stepper"), "Old troop stepper styles are removed.");
   assert(!stylesSource.includes(".army-triangle text"), "Army triangle does not style text labels.");
+  assert(!mapViewSource.includes("isImmediatePress") && !mapViewSource.includes("pressImmediately"), "Old immediate territory press workaround is removed.");
   assert(indexSource.includes("./app-icons/icon-192.png") && indexSource.includes("./app-icons/apple-touch-icon.png"), "Index references organized app icons.");
   assert(manifestSource.includes("app-icons/icon-192.png") && manifestSource.includes("app-icons/icon-512.png"), "Manifest references organized app icons.");
   assert(serviceWorkerSource.includes("./app-icons/icon-192.png") && serviceWorkerSource.includes("./app-icons/icon-512.png"), "Service worker caches organized app icons.");
@@ -200,6 +203,24 @@ function generatedViewport(source, name) {
 
   assert(Object.values(viewport).every(Number.isFinite), `Generated ${name} is finite.`);
   return viewport;
+}
+
+function generatedTerritoryCenter(source, territoryId) {
+  const lineBreak = "\\r?\\n";
+  const pattern = new RegExp(`id: "${territoryId}",${lineBreak}      name: "[^"]+",${lineBreak}      regionId: "[^"]+",${lineBreak}      center: \\{ x: ([^,]+), y: ([^ }]+) \\},`);
+  const match = source.match(pattern);
+
+  if (!match) {
+    throw new Error(`Missing generated center for ${territoryId}.`);
+  }
+
+  const point = {
+    x: Number(match[1]),
+    y: Number(match[2]),
+  };
+
+  assert(Number.isFinite(point.x) && Number.isFinite(point.y), `Generated center for ${territoryId} is finite.`);
+  return point;
 }
 
 async function viewBox(page) {
@@ -281,6 +302,31 @@ async function waitForViewBox(page, expected) {
   );
 }
 
+async function mapPointToScreen(page, point) {
+  return page.evaluate((mapPoint) => {
+    const svg = document.querySelector(".map-svg");
+
+    if (!(svg instanceof SVGSVGElement)) {
+      throw new Error("Missing map SVG.");
+    }
+
+    const matrix = svg.getScreenCTM();
+
+    if (!matrix) {
+      throw new Error("Missing map screen matrix.");
+    }
+
+    const svgPoint = svg.createSVGPoint();
+    svgPoint.x = mapPoint.x;
+    svgPoint.y = mapPoint.y;
+    const screenPoint = svgPoint.matrixTransform(matrix);
+    return {
+      x: screenPoint.x,
+      y: screenPoint.y,
+    };
+  }, point);
+}
+
 async function clickTerritory(page, territoryId) {
   await page.evaluate((id) => {
     const target = document.querySelector(`[data-territory-hit="${id}"]`);
@@ -303,6 +349,20 @@ async function clickMapBackground(page) {
 
     target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
   });
+}
+
+function assertBoxEquals(actual, expected, message) {
+  const epsilon = 0.001;
+
+  assert(
+    actual &&
+    expected &&
+    Math.abs(actual.x - expected.x) <= epsilon &&
+    Math.abs(actual.y - expected.y) <= epsilon &&
+    Math.abs(actual.width - expected.width) <= epsilon &&
+    Math.abs(actual.height - expected.height) <= epsilon,
+    message,
+  );
 }
 
 async function setPlayerName(page, index, name) {
@@ -560,6 +620,67 @@ async function runLocalDraftChecks(page) {
   );
 }
 
+async function runDesktopMapInteractionChecks(page) {
+  console.log("Checking desktop map interaction");
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const shireCenter = generatedTerritoryCenter(mapDataSource, "shire");
+
+  await page.goto(baseUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForSelector("[data-background-piece]");
+  await startLocalSnakeDraft(page);
+
+  const shireScreen = await mapPointToScreen(page, shireCenter);
+  const hitTerritory = await page.evaluate((point) => {
+    return document.elementFromPoint(point.x, point.y)?.closest("[data-territory-hit]")?.getAttribute("data-territory-hit");
+  }, shireScreen);
+  assert(hitTerritory === "shire", "Generated Shire center maps to the Shire hit target.");
+
+  const returnButtonBox = await page.getByRole("button", { name: "Return to map view" }).boundingBox();
+  const focusButtonBox = await page.getByRole("button", { name: "Enable automatic focus" }).boundingBox();
+  const beforeClickViewBox = await viewBox(page);
+
+  await page.mouse.click(shireScreen.x, shireScreen.y);
+  await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
+  assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Real desktop click selects a territory.");
+  assertViewBoxEquals(await viewBox(page), parseViewBox(beforeClickViewBox), "Default-off auto-focus keeps desktop click from moving the camera.");
+  assertBoxEquals(await page.getByRole("button", { name: "Return to map view" }).boundingBox(), returnButtonBox, "Return-to-map control stays anchored after desktop click.");
+  assertBoxEquals(await page.getByRole("button", { name: "Enable automatic focus" }).boundingBox(), focusButtonBox, "Auto-focus control stays anchored after desktop click.");
+
+  await page.getByRole("button", { name: "Cancel pick" }).click();
+  await page.getByRole("dialog", { name: "Confirm territory" }).waitFor({ state: "detached" });
+
+  const beforeDragViewBox = await viewBox(page);
+  await page.mouse.move(shireScreen.x, shireScreen.y);
+  await page.mouse.down();
+  await page.mouse.move(shireScreen.x + 70, shireScreen.y + 24);
+  await page.mouse.up();
+  await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeDragViewBox);
+  assert((await page.getByRole("dialog", { name: "Confirm territory" }).count()) === 0, "Desktop drag pans instead of selecting.");
+  assertBoxEquals(await page.getByRole("button", { name: "Return to map view" }).boundingBox(), returnButtonBox, "Return-to-map control stays anchored after desktop drag.");
+  assertBoxEquals(await page.getByRole("button", { name: "Enable automatic focus" }).boundingBox(), focusButtonBox, "Auto-focus control stays anchored after desktop drag.");
+
+  const beforeWheelViewBox = await viewBox(page);
+  const svgBox = await page.locator(".map-svg").boundingBox();
+  assert(svgBox, "Map SVG has a desktop bounding box.");
+  await page.locator(".map-svg").dispatchEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    clientX: svgBox.x + svgBox.width / 2,
+    clientY: svgBox.y + svgBox.height / 2,
+    deltaY: -500,
+  });
+  await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeWheelViewBox);
+  assertBoxEquals(await page.getByRole("button", { name: "Return to map view" }).boundingBox(), returnButtonBox, "Return-to-map control stays anchored after desktop wheel zoom.");
+  assertBoxEquals(await page.getByRole("button", { name: "Enable automatic focus" }).boundingBox(), focusButtonBox, "Auto-focus control stays anchored after desktop wheel zoom.");
+
+  const beforeControlClickViewBox = await viewBox(page);
+  await page.getByRole("button", { name: "Enable automatic focus" }).click();
+  assertViewBoxEquals(await viewBox(page), parseViewBox(beforeControlClickViewBox), "Auto-focus control does not pan or zoom the map.");
+  assert((await page.locator('[data-territory-fill-state="selected"]').count()) === 0, "Auto-focus control does not select a territory.");
+}
+
 async function runRandomAllocationChecks(page) {
   console.log("Checking random draft allocation");
   await page.goto(baseUrl);
@@ -703,6 +824,9 @@ async function main() {
     mobile.setDefaultTimeout(10000);
     await runSetupPreferenceChecks(mobile);
     await runLocalDraftChecks(mobile);
+    const desktop = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    desktop.setDefaultTimeout(10000);
+    await runDesktopMapInteractionChecks(desktop);
     await runRandomAllocationChecks(mobile);
     await runSyncEntryChecks(mobile);
 

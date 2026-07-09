@@ -109,7 +109,10 @@ export function MapView({
       return;
     }
 
-    event.currentTarget.setPointerCapture(event.pointerId);
+    if (!startedOnTerritory(event) && !event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+
     pointersRef.current.set(event.pointerId, { id: event.pointerId, clientX: event.clientX, clientY: event.clientY });
   }
 
@@ -205,6 +208,10 @@ export function MapView({
 
   function toggleAutoFocus() {
     onAutoFocusChange?.(!autoFocusEnabled);
+  }
+
+  function stopCameraControlEvent(event: ReactPointerEvent<HTMLButtonElement> | WheelEvent<HTMLButtonElement>) {
+    event.stopPropagation();
   }
 
   function startFocusAnimation(targetViewport: MapViewport) {
@@ -362,7 +369,6 @@ export function MapView({
           {onTerritoryPress ? (
             <HitTargetLayer
               isClickSuppressed={() => suppressClickRef.current}
-              isImmediatePress={() => isAnimatingRef.current}
               mapData={mapData}
               onTerritoryPress={onTerritoryPress}
             />
@@ -371,7 +377,14 @@ export function MapView({
       </svg>
       {showCameraControls && !isAnimating ? (
         <>
-          <button className="map-camera-control map-zoom-out" type="button" onClick={returnToMapView} aria-label="Return to map view">
+          <button
+            aria-label="Return to map view"
+            className="map-camera-control map-zoom-out"
+            onClick={returnToMapView}
+            onPointerDown={stopCameraControlEvent}
+            onWheel={stopCameraControlEvent}
+            type="button"
+          >
             <Maximize size={34} strokeWidth={2.2} />
           </button>
           <button
@@ -380,6 +393,8 @@ export function MapView({
             className="map-camera-control map-auto-focus"
             data-enabled={autoFocusEnabled ? "true" : "false"}
             onClick={toggleAutoFocus}
+            onPointerDown={stopCameraControlEvent}
+            onWheel={stopCameraControlEvent}
             type="button"
           >
             <Crosshair size={31} strokeWidth={2.2} />
@@ -388,6 +403,10 @@ export function MapView({
       ) : null}
     </div>
   );
+}
+
+function startedOnTerritory(event: ReactPointerEvent<SVGSVGElement>) {
+  return event.target instanceof Element && Boolean(event.target.closest("[data-territory-hit]"));
 }
 
 function fitBoundsToAspect(bounds: MapBounds, aspect: number): MapViewport {
