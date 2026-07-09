@@ -52,7 +52,7 @@ The app should follow the sibling `../qwixx/` structure where practical:
 - Territory: one node on the map graph.
 - Region: a named group of territories with a reinforcement bonus when fully owned by one player.
 - Border: an adjacency edge between two territories.
-- Troop: a unit in a territory. Each player has three troop classes.
+- Troop: a unit in a territory. Each player has three mixture troop classes plus one leader troop in their base army.
 - Spy: a non-troop, player-owned capability used in the spy phase.
 - Preparedness: a player's predicted mixture of the opponent's troop classes, selected on a triangle interface.
 - Effectiveness: a score from 0 to 10 derived from prediction accuracy and arrow challenge performance.
@@ -75,7 +75,7 @@ Each player color must be unique. Territory ownership is always shown by color.
 
 ### Troop Equivalence
 
-Each side has three troop classes. The classes correspond exactly across sides:
+Each side has three mixture troop classes. The classes correspond exactly across sides:
 
 | Light troop | Dark troop | Role |
 | --- | --- | --- |
@@ -83,11 +83,13 @@ Each side has three troop classes. The classes correspond exactly across sides:
 | Rohirrim | Warg | Middle quantity, middle arrow challenge |
 | Elf | Uruk-hai | Fewest, easiest arrow challenge |
 
-All rules should refer internally to the three abstract troop classes:
+Rules that use troop mixtures should refer internally to the three abstract mixture classes:
 
 - Heavy: dwarf/orc.
 - Cavalry: rohirrim/warg.
 - Elite: elf/uruk-hai.
+
+Each player also has a leader troop: wizard for light-side colors and witch-king for dark-side colors. The leader is allocated like a troop, but it is not part of mixture prediction or the heavy/cavalry/elite triangle.
 
 The UI should render the appropriate side-specific names and art for each player.
 
@@ -108,13 +110,13 @@ Setup has these stages:
 2. Enter and configure players.
 3. Choose host-controlled setup options.
 4. Draft or assign territories.
-5. Review the completed territory draft.
-6. Allocate starting troops.
+5. Allocate starting troops.
+6. Enter the read-only game map.
 7. Begin the first turn.
 
 The host determines setup options.
 
-The first gameplay implementation milestone stops after territory draft review. Troop allocation and turn play are documented for the full game but are not part of that milestone.
+The setup/draft milestone stopped after territory draft review. The next gameplay implementation milestone is troop allocation, documented in `docs/troop-allocation-v1.md`. Full turns are still out of scope for the troop allocation milestone.
 
 ### Setup Options
 
@@ -125,11 +127,11 @@ The setup state should allow:
 - Draft style: random, round robin, or snake.
 - Draft pick time limit for round robin and snake: none, 5 seconds, 10 seconds, or 15 seconds.
 - Troop allocation time limit: none, 1 minute, 2 minutes, 3 minutes, 4 minutes, or 5 minutes.
-- Starting troop counts by troop class.
+- Starting troop budget by original player count.
 - Reinforcement formula constants.
 - Region bonus definitions.
 
-The first setup/draft milestone exposes player colors, turn order, draft style, draft pick timer, and troop allocation timer. Starting troop counts, reinforcement constants, and region bonuses may remain hard-coded until troop allocation and turn phases are built.
+The setup/draft milestone exposes player colors, turn order, draft style, draft pick timer, and troop allocation timer. The troop allocation milestone uses the configured allocation timer and the starting troop budget rules documented below. Reinforcement constants and region bonuses may remain hard-coded until turn phases are built.
 
 ### Territory Assignment
 
@@ -147,17 +149,33 @@ The draft engine should store progress rather than precomputing one fixed pick q
 
 ### Initial Troop Allocation
 
-After all territories have owners, each player allocates starting troops to their own territories.
+After all territories have owners, the app enters initial troop allocation. The exact implementation source of truth for this milestone is `docs/troop-allocation-v1.md`.
 
 Rules:
 
-- Each player receives a starting pool of heavy, cavalry, and elite troops.
-- The exact starting pool is a tunable constant based on player count.
+- Each player first chooses an army mixture using a reusable triangle component.
+- The triangle uses barycentric coordinates for army building.
+- Light-side colors (`green`, `blue`, `yellow`) use dwarf, rohirrim, and elf icons.
+- Dark-side colors (`red`, `purple`, `black`) use orc, warg, and uruk-hai icons.
+- Light-side colors also receive a wizard leader. Dark-side colors also receive a witch-king leader.
+- The gameplay mixture troop classes are heavy, cavalry, and elite.
+- The leader troop is not part of the triangle mixture and allocates like any other troop.
+- Original player count determines budget: 2 players `40`, 3 players `35`, 4 players `30`, 5 players `25`, 6 players `20`.
+- The leader troop costs `1` budget and is guaranteed exactly once in each player's base army.
+- The effective triangle budget is `startingBudget - 1`.
+- Troop costs are heavy `0.8`, cavalry `1.0`, and elite `1.2`.
+- The adjusted triangle troop count is `round(effectiveTriangleBudget / weightedCostPerTroop)`.
+- Rounded heavy/cavalry/elite counts must be corrected so their sum exactly equals the adjusted triangle troop count.
 - Every owned territory must contain at least one troop total before the game can begin.
-- Troops may be allocated in any mixture unless a future rule adds limits.
 - A player may not place troops on another player's territory.
+- During allocation, troop-count circles appear on all territories owned by the allocating player.
+- Territory marker positions come from generated visual centers marked by large green circles in the territory drawing.
 
-In local mode, allocation should use pass screens between players. In sync mode, each player can allocate privately on their own device, with the host validating completeness.
+In local mode, allocation uses pass-and-play turns in configured turn order, skipping removed players. The allocation timer includes both army build and territory placement. If the timer expires, the app locks the current army mixture, randomly allocates remaining troops, shows a brief message, and advances through a handoff screen.
+
+In sync mode, every player allocates at the same time. The host owns the canonical allocation timer. Players press ready when done and cannot manually unready. The waiting page shows every remaining player's ready status to all devices. The host can advance only after every remaining player is ready. If the timer expires, the host randomly completes allocation for every unready player.
+
+If a player is removed during allocation, their territories and troops are redistributed to remaining players using the exact redistribution rules in `docs/troop-allocation-v1.md`. Additional troops received from a removed player are additive and do not alter the recipient's army-build budget.
 
 ## Map and Regions
 
@@ -640,8 +658,8 @@ Expected top-level views:
 4. Sync join flow.
 5. Territory draft.
 6. Sync paused reconnect lobby.
-7. Post-draft review map.
-8. Initial troop allocation.
+7. Initial troop allocation.
+8. Read-only game map.
 9. Main map / turn view.
 10. Spy phase.
 11. Reinforcement phase.
@@ -762,7 +780,68 @@ Timer behavior:
 - If local mode pauses during an active pick or confirmation popup, the active timer and pending choice are preserved.
 - If sync mode pauses during an active pick or confirmation popup, the pending pick is discarded and that player's turn starts over on resume.
 
-After all territories are drafted, the app immediately shows a read-only ownership map. The milestone stops there.
+After all territories are drafted, the app enters the troop allocation phase. It does not remain on an ownership-only post-draft review screen.
+
+### Initial Troop Allocation View
+
+Initial troop allocation is a required game phase after draft and before the read-only game map.
+
+Army build:
+
+- The current player chooses a heavy/cavalry/elite mixture with the reusable triangle component.
+- The current player's side also gives them exactly one wizard or witch-king leader.
+- The triangle marker starts in the center.
+- The army-build triangle uses barycentric coordinates and allows true `0%` troop classes.
+- The UI shows live troop counts while the marker moves.
+- Submitting the army build locks that player's base heavy/cavalry/elite troop counts plus their guaranteed leader.
+
+Territory allocation:
+
+- The player allocates all available troops to owned territories.
+- Only owned territories are selectable.
+- Selecting an owned territory focuses the map on that territory.
+- The controls show icon-only troop totals for the selected territory and icon-only remaining troop totals.
+- The player may remove troops from the selected territory.
+- The player may add remaining troops to the selected territory only when enough total remaining troops are preserved to place at least one troop on every still-empty owned territory.
+- The player can finish only when all owned territories contain at least one troop and no troops remain unallocated.
+
+Local allocation:
+
+- Players allocate one at a time in configured turn order, skipping removed players.
+- Each player completes army build and territory allocation before the next player starts.
+- The allocation timer includes army build and territory allocation.
+- If time expires, the current army mixture is locked if needed and the rest of that player's troops are randomly allocated.
+- After time expiration, the app briefly says `The remainder of your troops have been randomly allocated.`
+- A handoff screen hides one player's allocation before the next player begins.
+
+Sync allocation:
+
+- All players allocate simultaneously on their own devices.
+- The host owns the canonical allocation timer.
+- Players press ready when finished.
+- Ready players go to a waiting page.
+- Ready is final unless another player is removed and redistribution affects that player.
+- The waiting page shows all remaining players and whether each one is ready.
+- The host can advance only when every remaining player is ready.
+- If time expires, the host randomly completes allocation for every unready player.
+
+### Read-Only Game Map
+
+After all remaining players have allocated troops, the app enters a read-only game map.
+
+Visibility rules:
+
+- Ownership is visible to everyone.
+- A viewer sees total troop counts on their own territories.
+- A viewer can select only their own territories.
+- Selecting one of your own territories shows its heavy/cavalry/elite/leader breakdown in the top controls section.
+- Opponent territories are not selectable.
+- Opponent territories connected to any of the viewer's territories show total troop count only.
+- Opponent territories not connected to any of the viewer's territories show ownership only.
+- Visibility connections use all gameplay connections from `maps/territory-key.md`, including both land and ship connections.
+- Visibility connections are independent of physical shared borders in generated geometry.
+
+Local mode uses a temporary current-viewer dropdown at the top of the read-only map. Changing the dropdown changes the viewer perspective. Sync mode uses the device's local player as the viewer, including on the host device.
 
 ### Pause And Player Removal
 
@@ -790,6 +869,22 @@ Sync host pause is a synchronization reset:
 - The host can remove players while paused.
 
 In both modes, removing a player during draft clears that player's territories and returns them to the remaining territory pool. If fewer than 2 players remain, the game ends and returns to home.
+
+During allocation, removing a player redistributes that player's territories and troops:
+
+- If fewer than 2 players remain, the game ends and returns home.
+- If the removed player has submitted an army build, use that mixture plus that player's guaranteed leader.
+- If the removed player has not submitted an army build, force a uniform mixture with that player's effective triangle budget plus that player's guaranteed leader.
+- Existing troop placements on the removed player's territories do not matter.
+- The removed player's territories and troops are decoupled before redistribution.
+- Remaining players are shuffled.
+- Removed territories are shuffled.
+- Removed troops are expanded into individual troop items and shuffled.
+- Territories are redistributed in round-robin order using the shuffled player order.
+- Troops are redistributed in round-robin order using the same shuffled player order, starting over at the beginning.
+- In sync mode, every recipient becomes unready and can rearrange all troops across all current territories.
+- In local mode, recipients who already completed allocation receive second allocation turns appended to the end of the local allocation order and can rearrange all troops across all current territories.
+- Additional troops received from a removed player are additive. They do not increase or alter the recipient's army-build budget.
 
 ### Sync Pause And Reconnect
 
@@ -875,6 +970,7 @@ Player-to-host events should include:
 - Lobby edits allowed to that player.
 - Territory draft selection.
 - Initial troop allocation submission.
+- Initial troop allocation ready state.
 - Spy target or skip.
 - Reinforcement troop choice and placement.
 - Attack declaration.
@@ -977,6 +1073,7 @@ type TerritoryState = {
     heavy: number;
     cavalry: number;
     elite: number;
+    leader: number;
   };
 };
 ```
@@ -1089,7 +1186,7 @@ The following decisions are intentionally open:
 - Exact map layout.
 - Region names and territory membership.
 - Region bonus values and troop classes.
-- Starting troop counts by player count.
+- Future tuning of starting troop budgets and troop costs.
 - Territory-count reinforcement formula.
 - Preparedness floor value.
 - Prediction accuracy formula.
@@ -1109,22 +1206,27 @@ Suggested build order:
 1. Replace the sandbox page state with real app phases, shared game types, setup state, draft state, ownership state, and persistence keys.
 2. Convert the current map sandbox components into reusable map modes for read-only, draft picking, and territory focus.
 3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, draft style, pick timer, and troop allocation timer.
-4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, ownership assignment, and post-draft review.
-5. Implement local draft UI and local persistence through setup, draft, manual pause, player removal, end-game confirmation, refresh restore, and review.
+4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, and ownership assignment.
+5. Implement local draft UI and local persistence through setup, draft, manual pause, player removal, end-game confirmation, and refresh restore.
 6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardatúrë-specific payload names and prefixes.
 7. Implement sync setup with host/join flows, joiner editable name/color, host edit/lock/unlock, duplicate-color blocking, host roster controls, and setup broadcasts.
 8. Implement sync draft as host-authoritative state: host timers, pick requests, confirmed picks, random fallback picks, broadcasts, and read-only views for inactive devices.
 9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, QR reconnect fallback, and unpause validation.
-10. Update verification to cover local setup/draft/pause/review, sync handshake/setup, sync draft, timeout behavior, pause/reconnect behavior, persistence recovery, and map interaction modes.
-11. Implement initial troop allocation.
-12. Implement turn phases without combat minigames.
-13. Implement attack declaration and battle state.
-14. Implement prediction triangle.
-15. Implement arrow challenge.
-16. Implement effectiveness and weighted dice.
-17. Implement casualty sampling and post-battle reveals.
-18. Implement fortify.
-19. Implement elimination and game over.
+10. Update verification to cover local setup/draft/pause, sync handshake/setup, sync draft, timeout behavior, pause/reconnect behavior, persistence recovery, and map interaction modes.
+11. Generate territory visual centers from the large green circles in the territory drawing.
+12. Implement army-build triangle, troop budget calculation, and exact rounded troop counts.
+13. Implement local troop allocation, allocation timeout random completion, and pass-and-play handoff.
+14. Implement sync troop allocation, ready/waiting state, host-authoritative timeout completion, and allocation pause/reconnect.
+15. Implement allocation player-removal redistribution for local and sync.
+16. Implement read-only game map with viewer-specific troop visibility.
+17. Implement turn phases without combat minigames.
+18. Implement attack declaration and battle state.
+19. Implement prediction triangle.
+20. Implement arrow challenge.
+21. Implement effectiveness and weighted dice.
+22. Implement casualty sampling and post-battle reveals.
+23. Implement fortify.
+24. Implement elimination and game over.
 
 ## Verification Checklist
 
@@ -1132,12 +1234,17 @@ Before considering the first playable version complete:
 
 - Verify local setup supports 2 to 6 players, names, unique colors, turn order, draft style, draft timer, and troop allocation timer.
 - Verify sync setup supports Qwixx-style QR handshake, host lobby, joiner lobby, name/color edits, host locks, duplicate-color blocking, and host-authoritative setup state.
-- Verify local and sync drafts support snake, round-robin, random simulation, timed picks, confirmation timeout, random timeout fallback, and post-draft review.
+- Verify local and sync drafts support snake, round-robin, random simulation, timed picks, confirmation timeout, random timeout fallback, and transition into troop allocation.
 - Verify local pause preserves the active pick timer, pending confirmation, and result popup state, and supports player removal without reconnect state.
 - Verify sync pause/reconnect supports manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, QR reconnect fallback, and unpause validation.
 - Verify every territory is assigned to exactly one player before troop allocation.
-- Verify troop allocation requires at least one troop per owned territory.
-- Verify viewer-specific fog of war for owned, adjacent enemy, and distant enemy territories.
+- Verify territory visual centers are generated from the large green circles in the territory drawing and are used for troop-count circles.
+- Verify army-build triangle barycentric coordinates, leader budget reservation, effective triangle budget calculation, and rounded troop count correction.
+- Verify troop allocation requires at least one troop per owned territory and prevents placements that would make that impossible.
+- Verify local allocation uses configured turn order, pass-and-play handoff screens, allocation timer, timeout random completion, and second allocation turns after redistribution.
+- Verify sync allocation uses simultaneous private allocation, host-authoritative timer, ready/waiting state visible to all players, and host advance only when all remaining players are ready.
+- Verify allocation player removal redistributes territories and troops exactly as specified, unreadying affected sync players and adding second allocation turns for affected local players.
+- Verify read-only game map visibility for own territories, connected opponent territories, and distant opponent territories, using all gameplay connections including ship connections.
 - Verify spy success, spy failure, spy loss, and spy intel clearing after the spy phase.
 - Verify reinforcements can be placed only on owned territories.
 - Verify attacks enforce adjacency, leave-one-behind, and source-target once-per-turn rules.

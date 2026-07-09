@@ -1,16 +1,18 @@
 # Setup, Draft, And Sync V1
 
-This milestone replaces the temporary map sandbox with the first real Ardatúrë game flow. The map stays central throughout the app, with setup, configuration, draft prompts, pause state, and review state shown as panels or overlays around the shared map.
+This milestone replaces the temporary map sandbox with setup, configuration, draft prompts, pause state, reconnect state, and draft ownership state shown as panels or overlays around the shared map.
+
+This document remains the source of truth for setup, sync lobby, territory draft, draft pause/reconnect, and draft ownership mechanics. The current app flow continues into troop allocation, which is documented in `troop-allocation-v1.md`.
 
 ## Target Flow
 
-The first implemented game flow is:
+This milestone's original implemented flow was:
 
 ```text
-Home -> Setup and configuration -> Territory draft -> Post-draft review map
+Home -> Setup and configuration -> Territory draft -> Draft ownership map
 ```
 
-Troop selection, troop allocation, full turns, fog of war, combat, and later rule phases are out of scope for this milestone. When the draft is complete, the app shows a read-only ownership map and stops there.
+Troop selection, troop allocation, full turns, fog of war, combat, and later rule phases are out of scope for this historical milestone. In the current planned flow, the app continues from draft into troop allocation.
 
 Home has two modes:
 
@@ -121,9 +123,9 @@ Manual draft interaction:
 - If local mode pauses during an active pick or confirmation popup, the timer and pending choice are preserved.
 - If sync mode pauses during an active pick or confirmation popup, the pending choice is discarded and that player's turn starts over when the game resumes.
 
-Post-draft review:
+Draft ownership map:
 
-- The app immediately shows a read-only map with all owned territories in player colors.
+- The historical setup/draft milestone immediately showed a read-only map with all owned territories in player colors.
 - There is no territory selection, color picker, or troop marker behavior yet.
 - Pan and zoom remain available.
 
@@ -228,13 +230,13 @@ The app should be a map-first shell. During active draft turns, compact controls
 
 Reusable map modes for this milestone:
 
-- Setup/review: pan and zoom only.
+- Setup/draft ownership map: pan and zoom only.
 - Draft active pick: pan, zoom, and selectable remaining territories.
 - Draft inactive player or non-owning sync device: pan and zoom; no valid pick action.
 - Confirmation popup: map remains visible; pending pick is confirmed, canceled by the bottom sheet, canceled by tapping the map background, or replaced by tapping another remaining territory.
-- Post-draft review: pan and zoom; no selection.
+- Draft ownership map: pan and zoom; no selection.
 
-The map renderer should continue using generated map data, shared SVG coordinates, static ink, territory fill paths, hit targets, and territory focus bounds. Draft and review ownership coloring should replace the old sandbox skin picker behavior.
+The map renderer should continue using generated map data, shared SVG coordinates, static ink, territory fill paths, hit targets, and territory focus bounds. Draft ownership coloring should replace the old sandbox skin picker behavior.
 
 ## Implementation Order
 
@@ -243,12 +245,12 @@ Build this milestone in this order:
 1. Replace the sandbox page state with real app phases, shared game types, setup state, draft state, ownership state, and persistence keys.
 2. Convert the current map sandbox components into reusable map modes for read-only, draft picking, and territory focus.
 3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, draft style, pick timer, and troop allocation timer.
-4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, ownership assignment, and post-draft review.
-5. Implement local draft UI and local persistence through setup, draft, manual pause, player removal, end-game confirmation, refresh restore, and review.
+4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, and ownership assignment.
+5. Implement local draft UI and local persistence through setup, draft, manual pause, player removal, end-game confirmation, refresh restore, and draft ownership state.
 6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardatúrë-specific payload names and prefixes.
 7. Implement sync setup with host/join flows, joiner editable name/color, host edit/lock/unlock, duplicate-color blocking, host roster controls, and setup broadcasts.
 8. Implement sync draft as host-authoritative state: host timers, pick requests, confirmed picks, random fallback picks, broadcasts, and read-only views for inactive devices.
 9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, QR reconnect fallback, and unpause validation.
-10. Update verification to cover local setup/draft/pause/review, sync handshake/setup, sync draft, timeout behavior, pause/reconnect behavior, persistence recovery, and map interaction modes.
+10. Update verification to cover local setup/draft/pause, sync handshake/setup, sync draft, timeout behavior, pause/reconnect behavior, persistence recovery, and map interaction modes.
 
 Do not build troop allocation, spy, reinforcements, attacks, fortify, or fog of war in this milestone.

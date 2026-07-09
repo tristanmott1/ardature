@@ -7,10 +7,12 @@ This directory contains planning and implementation notes for the app. The exist
 - `../GAME_SPEC.md`: overall game rules, modes, setup, combat, and long-term product behavior.
 - `../maps/README.md`: map source drawings, generated geometry, previews, and extraction workflow.
 - `app-architecture.md`: planned PWA directory structure, app data flow, and map rendering architecture.
-- `setup-draft-sync-v1.md`: first real gameplay milestone for local/sync setup, territory draft, pause/reconnect, and post-draft review.
+- `setup-draft-sync-v1.md`: setup, sync lobby, territory draft, draft pause/reconnect, and draft ownership mechanics.
+- `troop-allocation-v1.md`: next gameplay milestone for army building, troop allocation, allocation pause/removal, and viewer-specific read-only map visibility.
 
 ## Documentation Rules
 
 - Major structure, state, sync, and map-pipeline decisions should be documented before or alongside implementation.
 - The source drawings and `maps/territory-key.md` define map geometry and gameplay connections. If generated geometry is wrong, fix the drawings, thresholds, or extraction method directly. Do not add one-off synthetic geometry or custom divider patches in app code.
 - Generated app data should be derived from canonical map artifacts, not hand-authored separately.
+
