@@ -68,6 +68,12 @@ type SyncRole = "host" | "joiner" | null;
 
 type SyncCameraMode = "hostOffer" | "joinAnswer" | null;
 
+type SyncDraftNotice = {
+  key: string;
+  playerId: string;
+  territoryId: string;
+};
+
 type BarcodeDetectorResult = {
   rawValue: string;
 };
@@ -108,7 +114,7 @@ function App() {
   const [syncCameraMode, setSyncCameraMode] = useState<SyncCameraMode>(null);
   const [syncMessage, setSyncMessage] = useState("");
   const [isAcceptingAnswer, setIsAcceptingAnswer] = useState(false);
-  const [dismissedNoticeKey, setDismissedNoticeKey] = useState("");
+  const [syncDraftNotice, setSyncDraftNotice] = useState<SyncDraftNotice | null>(null);
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
   const [isEndGamePromptOpen, setIsEndGamePromptOpen] = useState(false);
   const [resetCameraKey, setResetCameraKey] = useState(0);
@@ -134,14 +140,11 @@ function App() {
   const blockingResultPlayer = game.draft?.resultPlayerId
     ? game.players.find((player) => player.id === game.draft?.resultPlayerId) ?? null
     : null;
-  const noticeKey = game.draft?.noticeTerritoryId && game.draft.noticePlayerId
-    ? `${game.draft.noticePlayerId}:${game.draft.noticeTerritoryId}`
-    : "";
-  const noticeTerritory = noticeKey && noticeKey !== dismissedNoticeKey && game.draft?.noticeTerritoryId
-    ? generatedMapData.territories.find((territory) => territory.id === game.draft?.noticeTerritoryId) ?? null
+  const noticeTerritory = syncDraftNotice
+    ? generatedMapData.territories.find((territory) => territory.id === syncDraftNotice.territoryId) ?? null
     : null;
-  const noticePlayer = noticeKey && noticeKey !== dismissedNoticeKey && game.draft?.noticePlayerId
-    ? game.players.find((player) => player.id === game.draft?.noticePlayerId) ?? null
+  const noticePlayer = syncDraftNotice
+    ? game.players.find((player) => player.id === syncDraftNotice.playerId) ?? null
     : null;
   const viewerPendingTerritory = viewerSelectedTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === viewerSelectedTerritoryId) ?? null
@@ -171,6 +174,14 @@ function App() {
     !isEndGamePromptOpen;
 
   useEffect(() => {
+    const notice = syncDraftNoticeFromOwnershipChange(latestGameRef.current, game);
+    if (notice) {
+      setSyncDraftNotice({
+        ...notice,
+        key: `${notice.playerId}:${notice.territoryId}:${Date.now()}`,
+      });
+    }
+
     latestGameRef.current = game;
   }, [game]);
 
@@ -550,7 +561,16 @@ function App() {
   }, []);
 
   const handleJoinerMessage = useCallback((_playerId: string, rawMessage: SyncWireMessage) => {
-    if (!isArdatureSyncMessage(rawMessage) || rawMessage.type !== "gameState") {
+    if (!isArdatureSyncMessage(rawMessage)) {
+      return;
+    }
+
+    if (rawMessage.type === "hostQuit") {
+      resetAppToHome();
+      return;
+    }
+
+    if (rawMessage.type !== "gameState") {
       return;
     }
 
@@ -857,10 +877,18 @@ function App() {
   }
 
   function endGame() {
+    if (game.mode === "sync" && syncRole === "host") {
+      hostTransportRef.current?.broadcast({ type: "hostQuit" });
+    }
+
     if (game.mode === "sync" && syncRole === "joiner") {
       joinTransportRef.current?.send({ type: "quit" });
     }
 
+    resetAppToHome();
+  }
+
+  function resetAppToHome() {
     endSyncTransports();
     clearLocalGame();
     setSyncEntryOpen(false);
@@ -869,14 +897,13 @@ function App() {
     setSyncQrText("");
     setSyncAnswerText("");
     setSyncMessage("");
+    setSyncDraftNotice(null);
     setIsEndGamePromptOpen(false);
     setGame(createInitialGameState());
   }
 
   function dismissNotice() {
-    if (noticeKey) {
-      setDismissedNoticeKey(noticeKey);
-    }
+    setSyncDraftNotice(null);
   }
 
   function endSyncTransports() {
@@ -989,6 +1016,7 @@ function App() {
         <PickResultDialog
           activePlayer={blockingResultPlayer}
           onClose={nextDraftTurn}
+          resultKey={`local:${blockingResultPlayer.id}:${blockingResultTerritory.id}`}
           territory={blockingResultTerritory}
         />
       ) : null}
@@ -997,6 +1025,7 @@ function App() {
         <PickResultDialog
           activePlayer={noticePlayer}
           onClose={dismissNotice}
+          resultKey={syncDraftNotice?.key ?? `sync:${noticePlayer.id}:${noticeTerritory.id}`}
           territory={noticeTerritory}
         />
       ) : null}
@@ -1423,26 +1452,35 @@ function ConfirmPickDialog({
 function PickResultDialog({
   activePlayer,
   onClose,
+  resultKey,
   territory,
 }: {
   activePlayer: GamePlayer;
   onClose: () => void;
+  resultKey: string;
   territory: GeneratedTerritoryData;
 }) {
   const closedRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   const closeOnce = useCallback(() => {
     if (closedRef.current) {
       return;
     }
 
     closedRef.current = true;
-    onClose();
-  }, [onClose]);
+    onCloseRef.current();
+  }, []);
 
   useEffect(() => {
+    closedRef.current = false;
     const timeout = window.setTimeout(closeOnce, 1000);
     return () => window.clearTimeout(timeout);
-  }, [closeOnce]);
+  }, [closeOnce, resultKey]);
 
   return (
     <div className="draft-sheet-scrim pick-result-scrim" onClick={closeOnce}>
@@ -1823,10 +1861,29 @@ function pauseSyncGame(state: GameState): GameState {
       pendingTerritoryId: null,
       resultTerritoryId: null,
       resultPlayerId: null,
-      noticeTerritoryId: null,
-      noticePlayerId: null,
     }, state.config),
   };
+}
+
+function syncDraftNoticeFromOwnershipChange(previous: GameState, next: GameState): Omit<SyncDraftNotice, "key"> | null {
+  if (previous.mode !== "sync" || next.mode !== "sync" || !previous.draft || !next.draft || next.phase !== "draft") {
+    return null;
+  }
+
+  // Treat a newly owned territory as a local drafted notification.
+  for (const territory of generatedMapData.territories) {
+    const previousOwner = previous.draft.ownership[territory.id];
+    const nextOwner = next.draft.ownership[territory.id];
+
+    if (!previousOwner && nextOwner) {
+      return {
+        playerId: nextOwner,
+        territoryId: territory.id,
+      };
+    }
+  }
+
+  return null;
 }
 
 function markSyncPlayerStatus(state: GameState, playerId: string, connectionStatus: GamePlayer["connectionStatus"]): GameState {

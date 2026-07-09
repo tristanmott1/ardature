@@ -110,12 +110,14 @@ Manual draft interaction:
 - The selected pending territory is highlighted on the map for the active drafting viewer.
 - A result popup uses the exact same compact bottom-sheet footprint and shows the player and territory name.
 - In local mode, the result popup auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
-- In sync mode, another player's pending selection never moves, focuses, or white-fills your map. The only shared draft feedback for other players is the small drafted notification.
+- In sync mode, another player's pending selection never moves, focuses, or white-fills your map.
+- In sync mode, confirmed picks are synced as ownership changes; each device turns that local observation into its own small drafted notification.
 - In sync mode, the next player's turn starts immediately on their device; the result popup also auto-dismisses after about one second and can be dismissed early.
 - The compact draft controls show the active player's draft progress as confirmed picks over expected final picks, such as `3 / 11`.
 - The expected final pick count is computed from the current draft style, frozen turn order, active players, and remaining territories.
 - If a timed pick expires with a confirmation popup open, the selected territory is treated as confirmed.
 - If a timed pick expires with no confirmation popup open, the host/local device randomly chooses one remaining territory for the active player.
+- If pick time is unlimited, there is no timer and no automatic draft selection.
 - If local mode pauses during an active pick or confirmation popup, the timer and pending choice are preserved.
 - If sync mode pauses during an active pick or confirmation popup, the pending choice is discarded and that player's turn starts over when the game resumes.
 
@@ -195,6 +197,7 @@ Graceful quit and ungraceful disconnect are different:
 
 - Graceful quit during sync draft sends a quit message. The host removes that player, clears their territories, returns those territories to the remaining pool, pauses the draft, then shows the pause page without that player.
 - Ungraceful disconnect keeps the player in the game as disconnected, keeps their territories owned, forces pause, and allows automatic reconnect.
+- If the host intentionally ends the game, it sends a host-quit message so joiners return home instead of remaining in a disconnected game.
 - Automatic reconnect should behave like Qwixx where possible.
 - If automatic reconnect does not work, the QR handshake is the fallback.
 - During paused reconnect, a joiner scans the host QR, sees the game information and disconnected player names, chooses their own disconnected player slot, generates an answer QR, and the host scans it.

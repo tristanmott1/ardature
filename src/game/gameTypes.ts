@@ -37,8 +37,6 @@ export type DraftState = {
   pendingTerritoryId: string | null;
   resultTerritoryId: string | null;
   resultPlayerId: string | null;
-  noticeTerritoryId: string | null;
-  noticePlayerId: string | null;
   timerRemainingMs: number | null;
   timerEndsAt: number | null;
 };

@@ -88,8 +88,11 @@ async function launchBrowser() {
 async function runSourceChecks() {
   console.log("Checking sources");
   const appSource = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const gameStateSource = await readFile(new URL("../src/game/gameState.ts", import.meta.url), "utf8");
+  const gameTypesSource = await readFile(new URL("../src/game/gameTypes.ts", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapViewSource = await readFile(new URL("../src/map/components/MapView.tsx", import.meta.url), "utf8");
+  const syncMessagesSource = await readFile(new URL("../src/sync/syncMessages.ts", import.meta.url), "utf8");
   const syncTransportSource = await readFile(new URL("../src/sync/syncTransport.ts", import.meta.url), "utf8");
   const mapWidth = generatedNumber(mapDataSource, "width");
   const mapHeight = generatedNumber(mapDataSource, "height");
@@ -119,8 +122,12 @@ async function runSourceChecks() {
   }
   assert(appSource.includes("SyncHostTransport") && appSource.includes("SyncJoinTransport"), "App wires the QR sync transport.");
   assert(appSource.includes("pauseSyncGame"), "App has sync pause semantics.");
-  assert(appSource.includes("noticeTerritoryId"), "App supports nonblocking sync draft notices.");
+  assert(appSource.includes("syncDraftNoticeFromOwnershipChange"), "App creates local sync draft notices from ownership changes.");
+  assert(appSource.includes("onCloseRef") && appSource.includes("resultKey"), "Draft result auto-dismiss is stable across parent re-renders.");
   assert(appSource.includes("viewerSelectedTerritoryId") && appSource.includes("selectedTerritoryId={viewerSelectedTerritoryId}"), "App keeps draft focus viewer-local.");
+  assert(syncMessagesSource.includes('type: "hostQuit"') && syncMessagesSource.includes('message.type === "hostQuit"'), "Sync messages include host quit.");
+  assert(!gameTypesSource.includes("noticeTerritoryId") && !gameTypesSource.includes("noticePlayerId"), "Shared draft state does not store local notices.");
+  assert(!gameStateSource.includes("timerMs(state.config.pickTimeLimit) ?? 0") && gameStateSource.includes('draft: state.mode === "sync" ? beginDraftTimer'), "Sync draft timers preserve unlimited pick time.");
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");

@@ -165,8 +165,6 @@ export function startDraft(players: GamePlayer[], config: GameConfig) {
     pendingTerritoryId: null,
     resultTerritoryId: null,
     resultPlayerId: null,
-    noticeTerritoryId: null,
-    noticePlayerId: null,
     timerRemainingMs: timerMs(config.pickTimeLimit),
     timerEndsAt: null,
   };
@@ -230,8 +228,6 @@ export function confirmTerritoryPick(state: GameState, territoryId: string, now:
     pendingTerritoryId: null,
     resultTerritoryId: state.mode === "local" ? territoryId : null,
     resultPlayerId: state.mode === "local" ? player.id : null,
-    noticeTerritoryId: state.mode === "sync" ? territoryId : null,
-    noticePlayerId: state.mode === "sync" ? player.id : null,
     step: nextStep,
   }, state.config);
 
@@ -243,19 +239,13 @@ export function confirmTerritoryPick(state: GameState, territoryId: string, now:
         ...draft,
         resultTerritoryId: null,
         resultPlayerId: null,
-        noticeTerritoryId: null,
-        noticePlayerId: null,
       },
     };
   }
 
   return {
     ...state,
-    draft: {
-      ...draft,
-      timerRemainingMs: timerMs(state.config.pickTimeLimit),
-      timerEndsAt: state.mode === "sync" ? now + (timerMs(state.config.pickTimeLimit) ?? 0) : null,
-    },
+    draft: state.mode === "sync" ? beginDraftTimer(draft, state.config, now) : draft,
   };
 }
 
@@ -286,8 +276,6 @@ export function removePlayerFromDraft(state: GameState, playerId: string): GameS
         pendingTerritoryId: null,
         resultTerritoryId: null,
         resultPlayerId: null,
-        noticeTerritoryId: null,
-        noticePlayerId: null,
       }
     : null;
 
@@ -480,8 +468,6 @@ function normalizeDraft(value: unknown): DraftState | null {
     pendingTerritoryId: typeof draft.pendingTerritoryId === "string" ? draft.pendingTerritoryId : null,
     resultTerritoryId: typeof draft.resultTerritoryId === "string" ? draft.resultTerritoryId : null,
     resultPlayerId: typeof draft.resultPlayerId === "string" ? draft.resultPlayerId : null,
-    noticeTerritoryId: typeof draft.noticeTerritoryId === "string" ? draft.noticeTerritoryId : null,
-    noticePlayerId: typeof draft.noticePlayerId === "string" ? draft.noticePlayerId : null,
     timerRemainingMs: typeof draft.timerRemainingMs === "number" ? draft.timerRemainingMs : null,
     timerEndsAt: null,
   };

@@ -20,6 +20,9 @@ export type ArdatureSyncMessage =
     }
   | {
       type: "quit";
+    }
+  | {
+      type: "hostQuit";
     };
 
 export function isArdatureSyncMessage(value: unknown): value is ArdatureSyncMessage {
@@ -32,5 +35,6 @@ export function isArdatureSyncMessage(value: unknown): value is ArdatureSyncMess
     message.type === "profileUpdate" ||
     message.type === "draftPending" ||
     message.type === "draftConfirm" ||
-    message.type === "quit";
+    message.type === "quit" ||
+    message.type === "hostQuit";
 }
