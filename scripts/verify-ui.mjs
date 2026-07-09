@@ -126,7 +126,7 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
   assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
   assert(mapViewSource.includes("onMapPress"), "Map view supports map-background presses.");
-  assert(mapViewSource.includes("Fullscreen") && mapViewSource.includes("Return to map view"), "Map view uses a return-to-map control.");
+  assert(mapViewSource.includes("Maximize") && mapViewSource.includes("Return to map view"), "Map view uses a corner-only return-to-map control.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
 }
 

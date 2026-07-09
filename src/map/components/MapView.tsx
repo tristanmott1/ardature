@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Fullscreen } from "lucide-react";
+import { Maximize } from "lucide-react";
 import { HitTargetLayer } from "./HitTargetLayer";
 import { StaticMapInk } from "./StaticMapInk";
 import { TerritoryFillLayer } from "./TerritoryFillLayer";
@@ -357,7 +357,7 @@ export function MapView({
       </svg>
       {showMapViewControl ? (
         <button className="map-zoom-out" type="button" onClick={returnToMapView} aria-label="Return to map view">
-          <Fullscreen size={34} strokeWidth={2.2} />
+          <Maximize size={34} strokeWidth={2.2} />
         </button>
       ) : null}
     </div>
