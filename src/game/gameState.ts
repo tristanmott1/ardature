@@ -457,9 +457,7 @@ export function finishAllocationForPlayer(state: GameState, playerId: string): G
 
   const nextAllocation = clearAllocationTimer(markAllocationReady(allocation, playerId), state.config);
   if (state.mode === "sync") {
-    return allAllocationsReady(nextAllocation, state.players)
-      ? { ...state, phase: "gameMap", allocation: nextAllocation }
-      : { ...state, phase: "allocationWaiting", allocation: nextAllocation };
+    return { ...state, phase: "allocationWaiting", allocation: nextAllocation };
   }
 
   const nextIndex = nextLocalAllocationIndex(nextAllocation, state.players);
@@ -473,6 +471,21 @@ export function finishAllocationForPlayer(state: GameState, playerId: string): G
     allocation: {
       ...nextAllocation,
       currentIndex: nextIndex,
+      selectedTerritoryId: null,
+    },
+  };
+}
+
+export function startGameMapAfterAllocation(state: GameState): GameState {
+  if (!state.allocation || !allAllocationsReady(state.allocation, state.players)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    phase: "gameMap",
+    allocation: {
+      ...state.allocation,
       selectedTerritoryId: null,
     },
   };

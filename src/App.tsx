@@ -57,6 +57,7 @@ import {
   selectAllocationTerritory,
   startDraft,
   startAllocation,
+  startGameMapAfterAllocation,
   submitArmyBuild,
   territoryTroopTotal,
   territoryTroops,
@@ -379,9 +380,7 @@ function App() {
           }
         }
 
-        return next.allocation && current.players.every((player) => next.allocation?.playerAllocations[player.id]?.ready)
-          ? { ...next, phase: "gameMap" }
-          : next;
+        return { ...next, phase: "allocationWaiting" };
       }
 
       return allocationPlayerId
@@ -687,9 +686,7 @@ function App() {
           },
         };
 
-        return current.players.every((player) => allocation.playerAllocations[player.id]?.ready)
-          ? { ...current, phase: "gameMap", allocation }
-          : { ...current, allocation };
+        return { ...current, allocation };
       });
       return;
     }
@@ -999,6 +996,10 @@ function App() {
     setGame((current) => finishAllocationForPlayer(current, allocationPlayerId));
   }
 
+  function startAllocatedGame() {
+    setGame((current) => startGameMapAfterAllocation(current));
+  }
+
   function startLocalAllocationTurn() {
     setGame((current) => beginAllocationTurn(current));
   }
@@ -1306,6 +1307,8 @@ function App() {
           localPlayer={allocationPlayer}
           players={game.players}
           allocation={game.allocation}
+          canAdvance={syncRole === "host" && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
+          onAdvance={startAllocatedGame}
         />
       ) : null}
 
@@ -1837,11 +1840,15 @@ function HandoffPanel({ onContinue, player }: { onContinue: () => void; player: 
 
 function AllocationWaitingPanel({
   allocation,
+  canAdvance,
   localPlayer,
+  onAdvance,
   players,
 }: {
   allocation: GameState["allocation"];
+  canAdvance: boolean;
   localPlayer: GamePlayer;
+  onAdvance: () => void;
   players: GamePlayer[];
 }) {
   return (
@@ -1857,6 +1864,11 @@ function AllocationWaitingPanel({
             </article>
           ))}
         </div>
+        {canAdvance ? (
+          <button className="primary icon-text-button wide-button" type="button" onClick={onAdvance} aria-label="Start game">
+            <Check size={20} />
+          </button>
+        ) : null}
       </section>
     </div>
   );
