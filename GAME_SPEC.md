@@ -1,8 +1,8 @@
-# Ardature Game Specification
+# Ardatúrë Game Specification
 
-This document is the source of truth for the Ardature game while it is being designed and built. Rule, screen, state, sync, and deployment decisions should be reflected here before or alongside implementation changes.
+This document is the source of truth for the Ardatúrë game while it is being designed and built. Rule, screen, state, sync, and deployment decisions should be reflected here before or alongside implementation changes.
 
-Ardature is a private, personal-use, Lord of the Rings themed, Risk-like territory conquest game for phones. The app is intended to be hosted as a static GitHub Pages PWA, with local pass-and-play and offline nearby-device sync.
+Ardatúrë is a private, personal-use, Lord of the Rings themed, Risk-like territory conquest game for phones. The app is intended to be hosted as a static GitHub Pages PWA, with local pass-and-play and offline nearby-device sync.
 
 ## Product Goal
 
@@ -1100,7 +1100,7 @@ Suggested build order:
 3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, draft style, pick timer, and troop allocation timer.
 4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, ownership assignment, and post-draft review.
 5. Implement local draft UI and local persistence through setup, draft, manual pause, player removal, end-game confirmation, refresh restore, and review.
-6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardature-specific payload names and prefixes.
+6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardatúrë-specific payload names and prefixes.
 7. Implement sync setup with host/join flows, joiner editable name/color, host edit/lock/unlock, duplicate-color blocking, host roster controls, and setup broadcasts.
 8. Implement sync draft as host-authoritative state: host timers, pick requests, confirmed picks, random fallback picks, broadcasts, and read-only views for inactive devices.
 9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, QR reconnect fallback, and unpause validation.

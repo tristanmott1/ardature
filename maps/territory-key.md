@@ -1,6 +1,6 @@
 # Territory Key
 
-This file is the source of truth for the Ardature Middle-earth territory map.
+This file is the source of truth for the Ardatúrë Middle-earth territory map.
 
 The map has 6 regions and 42 territories:
 

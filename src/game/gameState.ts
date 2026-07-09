@@ -14,8 +14,8 @@ import type {
 } from "./gameTypes";
 
 export const PLAYER_COLORS: PlayerColor[] = ["green", "blue", "yellow", "red", "purple", "black"];
-export const PICK_TIME_LIMITS: PickTimeLimit[] = [0, 5, 10, 15];
-export const TROOP_ALLOCATION_TIME_LIMITS: TroopAllocationTimeLimit[] = [0, 60, 120, 180, 240, 300];
+export const PICK_TIME_LIMITS: PickTimeLimit[] = [5, 10, 15, 0];
+export const TROOP_ALLOCATION_TIME_LIMITS: TroopAllocationTimeLimit[] = [60, 120, 180, 240, 300, 0];
 export const LOCAL_GAME_KEY = "ardature.localGame.v1";
 
 const DEFAULT_CONFIG: GameConfig = {
@@ -330,18 +330,18 @@ export function timerMs(limit: PickTimeLimit) {
 
 export function secondsLabel(value: number | null) {
   if (!value) {
-    return "None";
+    return "Unlimited";
   }
 
   return `${Math.ceil(value / 1000)}s`;
 }
 
 export function formatTimerOption(seconds: PickTimeLimit) {
-  return seconds === 0 ? "None" : `${seconds}s`;
+  return seconds === 0 ? "Unlimited" : `${seconds}s`;
 }
 
 export function formatTroopTimerOption(seconds: TroopAllocationTimeLimit) {
-  return seconds === 0 ? "None" : `${seconds / 60}m`;
+  return seconds === 0 ? "Unlimited" : `${seconds / 60}m`;
 }
 
 export function saveLocalGame(state: GameState) {

@@ -1,6 +1,6 @@
 # Map Assets
 
-This directory contains the source references and generated geometry for the Ardature map.
+This directory contains the source references and generated geometry for the Ardatúrë map.
 
 ## Source Files
 

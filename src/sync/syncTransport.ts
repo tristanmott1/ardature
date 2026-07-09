@@ -602,7 +602,7 @@ export class SyncJoinTransport {
     const offer = parseSyncOffer(value);
 
     if (!offer) {
-      throw new Error("this is not an Ardature host QR.");
+      throw new Error("this is not an Ardatúrë host QR.");
     }
 
     const peerConnection = createPeerConnection();

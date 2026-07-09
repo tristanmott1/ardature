@@ -1,6 +1,6 @@
 # App Architecture
 
-Ardature is a static GitHub Pages PWA, organized similarly to the sibling `../qwixx` app: Vite, React, TypeScript, a web manifest, a service worker, and QR/WebRTC sync. The first screen should be the usable game surface, not a landing page.
+Ardatúrë is a static GitHub Pages PWA, organized similarly to the sibling `../qwixx` app: Vite, React, TypeScript, a web manifest, a service worker, and QR/WebRTC sync. The first screen should be the usable game surface, not a landing page.
 
 ## Top-Level Structure
 
@@ -46,7 +46,7 @@ The exact file list can evolve, but the boundaries should stay clear:
 - `maps/` owns the drawing-to-geometry pipeline.
 - `src/map/` owns map rendering and map-specific UI.
 - `src/game/` owns game state, reducers, and rules.
-- `src/sync/` owns Qwixx-style local network synchronization adapted for Ardature.
+- `src/sync/` owns Qwixx-style local network synchronization adapted for Ardatúrë.
 
 ## Map Data Flow
 
@@ -227,7 +227,7 @@ Sync mode should be copied and adapted from Qwixx rather than literally reused:
 - WebRTC data channels.
 - QR host offers.
 - QR joiner answers.
-- Ardature-specific payload kinds and compact QR prefixes.
+- Ardatúrë-specific payload kinds and compact QR prefixes.
 - Host-authoritative setup, draft, timer, ownership, pause, reconnect, and removal state.
 
 The host is always one of the players and owns the canonical game state. Joiners send requests and render the latest host state. Joiners can edit their own unlocked name/color during setup, while the host can edit any name/color and lock or unlock those fields.

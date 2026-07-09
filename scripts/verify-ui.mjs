@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+﻿import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -109,7 +109,7 @@ async function runSourceChecks() {
   assert(appSource.includes("SyncHostTransport") && appSource.includes("SyncJoinTransport"), "App wires the QR sync transport.");
   assert(appSource.includes("pauseSyncGame"), "App has sync pause semantics.");
   assert(appSource.includes("noticeTerritoryId"), "App supports nonblocking sync draft notices.");
-  assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardature QR payloads.");
+  assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
   assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
@@ -190,7 +190,14 @@ async function setPlayerName(page, index, name) {
 }
 
 async function setPlayerColor(page, index, color) {
-  await page.locator(".player-row").nth(index).getByRole("button", { name: color }).click();
+  const row = page.locator(".player-row").nth(index);
+
+  await row.getByRole("button", { name: /color/i }).click();
+  await row.getByRole("menuitemradio", { name: colorLabel(color) }).click();
+}
+
+function colorLabel(color) {
+  return color.charAt(0).toUpperCase() + color.slice(1);
 }
 
 async function startLocalSnakeDraft(page) {
@@ -199,7 +206,7 @@ async function startLocalSnakeDraft(page) {
   await setPlayerColor(page, 0, "green");
   await setPlayerName(page, 1, "Gimli");
   await setPlayerColor(page, 1, "blue");
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await page.getByRole("button", { name: "Start game" }).click();
   await page.waitForSelector("[data-territory-hit]");
 }
 
@@ -256,8 +263,8 @@ async function runRandomReviewChecks(page) {
   await setPlayerColor(page, 0, "yellow");
   await setPlayerName(page, 1, "Sauron");
   await setPlayerColor(page, 1, "red");
-  await page.getByRole("button", { name: "Random" }).click();
-  await page.getByRole("button", { name: "Draft", exact: true }).click();
+  await page.getByRole("button", { name: "Random", exact: true }).click();
+  await page.getByRole("button", { name: "Start game" }).click();
   await page.waitForSelector('.app-shell[data-app-phase="review"]');
   assert((await page.locator("[data-territory-hit]").count()) === 0, "Review map has no territory hit targets.");
   assert((await page.locator('[data-territory-fill][data-territory-skin="background"]').count()) < 42, "Random draft colors territories.");
@@ -270,12 +277,18 @@ async function runSyncEntryChecks(page) {
   await page.reload();
   await page.getByRole("button", { name: "Sync" }).click();
   await page.getByLabel("Sync player name").fill("Galadriel");
-  await page.locator(".sync-entry-panel").getByRole("button", { name: "purple" }).click();
+  await page.getByRole("button", { name: "Sync player color" }).click();
+  await page.getByRole("menuitemradio", { name: "Purple" }).click();
   await page.getByRole("button", { name: "Host" }).click();
   await page.waitForSelector(".qr-code svg", { timeout: 10000 });
   assert((await page.locator(".player-row").count()) === 1, "Host lobby starts with the host player.");
-  assert(await page.getByRole("button", { name: "Draft", exact: true }).isDisabled(), "Sync host cannot start with one player.");
+  assert(await page.getByRole("button", { name: "Start game" }).isDisabled(), "Sync host cannot start with one player.");
   assert((await page.locator("[data-sync-role='host']").count()) === 1, "App records host sync role.");
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("dialog", { name: "End this game and return home?" }).waitFor();
+  assert((await page.getByRole("dialog", { name: "End this game and return home?" }).getByRole("button").count()) === 2, "Exit confirmation has two icon buttons.");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.waitForSelector("[data-sync-role='host']");
 }
 
 async function main() {
@@ -295,13 +308,11 @@ async function main() {
     const browser = await launchBrowser();
     const mobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
     mobile.setDefaultTimeout(10000);
-    mobile.on("dialog", (dialog) => dialog.accept());
     await runLocalDraftChecks(mobile);
     await mobile.screenshot({ path: outputPath("draft-local-mobile.png") });
 
     const desktop = await browser.newPage({ deviceScaleFactor: 1, viewport: { width: 1100, height: 820 } });
     desktop.setDefaultTimeout(10000);
-    desktop.on("dialog", (dialog) => dialog.accept());
     await runRandomReviewChecks(desktop);
     await desktop.screenshot({ path: outputPath("draft-review-desktop.png") });
     await runSyncEntryChecks(desktop);

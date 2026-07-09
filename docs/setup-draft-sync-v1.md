@@ -1,6 +1,6 @@
 # Setup, Draft, And Sync V1
 
-This milestone replaces the temporary map sandbox with the first real Ardature game flow. The map stays central throughout the app, with setup, configuration, draft prompts, pause state, and review state shown as panels or overlays around the shared map.
+This milestone replaces the temporary map sandbox with the first real Ardatúrë game flow. The map stays central throughout the app, with setup, configuration, draft prompts, pause state, and review state shown as panels or overlays around the shared map.
 
 ## Target Flow
 
@@ -15,7 +15,7 @@ Troop selection, troop allocation, full turns, fog of war, combat, and later rul
 Home has two modes:
 
 - Local: one device owns the whole game and is passed around.
-- Sync: nearby devices connect with the same QR/WebRTC handshake shape as `../qwixx`, copied and renamed for Ardature rather than literally reused.
+- Sync: nearby devices connect with the same QR/WebRTC handshake shape as `../qwixx`, copied and renamed for Ardatúrë rather than literally reused.
 
 The old color-selection sandbox is no longer a user-facing mode. Its map features remain important and should be reused throughout the real app: pan, zoom, selected-territory focus, hit targets, and map-layer rendering.
 
@@ -171,7 +171,7 @@ The sync transport should be copied and adapted from Qwixx:
 - QR host offer.
 - QR joiner answer.
 - camera scanner with native QR detection when available and JavaScript fallback.
-- project-specific Ardature payload kinds and compact QR prefixes.
+- project-specific Ardatúrë payload kinds and compact QR prefixes.
 
 Sync reconnect and pause:
 
@@ -231,7 +231,7 @@ Build this milestone in this order:
 3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, draft style, pick timer, and troop allocation timer.
 4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, ownership assignment, and post-draft review.
 5. Implement local draft UI and local persistence through setup, draft, manual pause, player removal, end-game confirmation, refresh restore, and review.
-6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardature-specific payload names and prefixes.
+6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardatúrë-specific payload names and prefixes.
 7. Implement sync setup with host/join flows, joiner editable name/color, host edit/lock/unlock, duplicate-color blocking, host roster controls, and setup broadcasts.
 8. Implement sync draft as host-authoritative state: host timers, pick requests, confirmed picks, random fallback picks, broadcasts, and read-only views for inactive devices.
 9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, QR reconnect fallback, and unpause validation.

@@ -1,4 +1,4 @@
-# Ardature Docs
+# Ardatúrë Docs
 
 This directory contains planning and implementation notes for the app. The existing `GAME_SPEC.md` remains the high-level game rules and product source of truth. The `maps/` directory keeps its own source-art and generation documentation.
 

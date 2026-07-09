@@ -1,4 +1,4 @@
-# Ardature
+# Ardatúrë
 
 A static GitHub Pages PWA for a Middle-earth territory game.
 

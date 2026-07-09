@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
 import {
   ArrowRight,
+  ChevronDown,
   Check,
   GripVertical,
   Pause,
@@ -91,7 +92,7 @@ function App() {
   const [now, setNow] = useState(() => Date.now());
   const [syncEntryOpen, setSyncEntryOpen] = useState(false);
   const [syncName, setSyncName] = useState("");
-  const [syncColor, setSyncColor] = useState<PlayerColor | null>(null);
+  const [syncColor, setSyncColor] = useState<PlayerColor | null>("green");
   const [syncRole, setSyncRole] = useState<SyncRole>(null);
   const [localPlayerId, setLocalPlayerId] = useState<string | null>(null);
   const [syncQrText, setSyncQrText] = useState("");
@@ -100,6 +101,8 @@ function App() {
   const [syncMessage, setSyncMessage] = useState("");
   const [isAcceptingAnswer, setIsAcceptingAnswer] = useState(false);
   const [dismissedNoticeKey, setDismissedNoticeKey] = useState("");
+  const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
+  const [isEndGamePromptOpen, setIsEndGamePromptOpen] = useState(false);
   const hostTransportRef = useRef<SyncHostTransport | null>(null);
   const joinTransportRef = useRef<SyncJoinTransport | null>(null);
   const previousPhaseRef = useRef(game.phase);
@@ -215,6 +218,37 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!draggingPlayerId) {
+      return undefined;
+    }
+
+    const activeDraggingPlayerId = draggingPlayerId;
+
+    function handlePointerMove(event: PointerEvent) {
+      const row = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-player-id]");
+      const overPlayerId = row?.dataset.playerId;
+
+      if (overPlayerId && overPlayerId !== activeDraggingPlayerId) {
+        reorderPlayer(activeDraggingPlayerId, overPlayerId);
+      }
+    }
+
+    function handlePointerUp() {
+      setDraggingPlayerId(null);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [draggingPlayerId, game.players]);
+
   function startLocalSetup() {
     endSyncTransports();
     setSyncEntryOpen(false);
@@ -230,6 +264,7 @@ function App() {
   function openSyncEntry() {
     clearLocalGame();
     setSyncEntryOpen(true);
+    setSyncColor("green");
     setGame(createInitialGameState());
   }
 
@@ -474,7 +509,13 @@ function App() {
 
     setGame((current) => ({
       ...current,
-      players: [...current.players, createPlayer(draftName)],
+      players: [
+        ...current.players,
+        {
+          ...createPlayer(draftName),
+          color: firstAvailableColor(current.players),
+        },
+      ],
     }));
     setDraftName("");
   }
@@ -558,22 +599,30 @@ function App() {
         });
   }
 
-  function movePlayer(playerId: string, direction: -1 | 1) {
+  function reorderPlayer(playerId: string, overPlayerId: string) {
     if (!canControlSetup) {
       return;
     }
 
     setGame((current) => {
-      const index = current.players.findIndex((player) => player.id === playerId);
-      const target = index + direction;
-      if (index < 0 || target < 0 || target >= current.players.length) {
+      const fromIndex = current.players.findIndex((player) => player.id === playerId);
+      const toIndex = current.players.findIndex((player) => player.id === overPlayerId);
+
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
         return current;
       }
 
-      const players = [...current.players];
-      [players[index], players[target]] = [players[target], players[index]];
-      return { ...current, players };
+      return { ...current, players: moveItem(current.players, fromIndex, toIndex) };
     });
+  }
+
+  function beginDrag(event: ReactPointerEvent<HTMLButtonElement>, playerId: string) {
+    if (!canControlSetup) {
+      return;
+    }
+
+    event.preventDefault();
+    setDraggingPlayerId(playerId);
   }
 
   function randomizePlayers() {
@@ -726,10 +775,15 @@ function App() {
   }
 
   function returnHome() {
-    if (game.phase !== "home" && !window.confirm("End this game and return home?")) {
+    if (game.phase !== "home") {
+      setIsEndGamePromptOpen(true);
       return;
     }
 
+    endGame();
+  }
+
+  function endGame() {
     if (game.mode === "sync" && syncRole === "joiner") {
       joinTransportRef.current?.send({ type: "quit" });
     }
@@ -742,6 +796,7 @@ function App() {
     setSyncQrText("");
     setSyncAnswerText("");
     setSyncMessage("");
+    setIsEndGamePromptOpen(false);
     setGame(createInitialGameState());
   }
 
@@ -795,7 +850,7 @@ function App() {
           onAddPlayer={addPlayer}
           onBack={returnHome}
           onDraftNameChange={setDraftName}
-          onMovePlayer={movePlayer}
+          onBeginDrag={beginDrag}
           onRandomizePlayers={randomizePlayers}
           onRemovePlayer={removePlayer}
           onStartDraft={beginDraft}
@@ -803,6 +858,7 @@ function App() {
           onUpdateConfig={updateConfig}
           onUpdatePlayer={updatePlayer}
           players={game.players}
+          draggingPlayerId={draggingPlayerId}
           syncAnswerText={syncAnswerText}
           syncMessage={syncMessage}
           syncQrText={syncQrText}
@@ -873,6 +929,14 @@ function App() {
           title={syncCameraMode === "hostOffer" ? "Scan host" : "Scan answer"}
         />
       ) : null}
+
+      {isEndGamePromptOpen ? (
+        <DecisionDialog
+          message="End this game and return home?"
+          onCancel={() => setIsEndGamePromptOpen(false)}
+          onConfirm={endGame}
+        />
+      ) : null}
     </main>
   );
 }
@@ -883,8 +947,7 @@ function HomePanel({ onStartLocal, onStartSync }: { onStartLocal: () => void; on
       <div className="brand-row">
         <img src="./icon-192.png" alt="" />
         <div>
-          <h1>Ardature</h1>
-          <p>Middle-earth draft</p>
+          <h1>Ardatúrë</h1>
         </div>
       </div>
       <div className="mode-grid">
@@ -925,14 +988,20 @@ function SyncEntryPanel({
   return (
     <section className="hud-panel sync-entry-panel">
       <PanelHeader title="Sync" onClose={onBack} />
-      <input
-        aria-label="Sync player name"
-        autoComplete="off"
-        onChange={(event) => onNameChange(event.target.value)}
-        placeholder="Name"
-        value={name}
-      />
-      <ColorSwatches selectedColor={color} onSelect={onColorChange} />
+      <div className="sync-player-entry-row">
+        <input
+          aria-label="Sync player name"
+          autoComplete="off"
+          onChange={(event) => onNameChange(event.target.value)}
+          placeholder="Name"
+          value={name}
+        />
+        <ColorSelect
+          label="Sync player color"
+          selectedColor={color}
+          onSelect={onColorChange}
+        />
+      </div>
       <div className="mode-grid">
         <button className="primary icon-text-button" type="button" onClick={onHost} disabled={!ready}>
           <Wifi size={19} />
@@ -952,13 +1021,14 @@ function SetupPanel({
   canControl,
   canStart,
   config,
+  draggingPlayerId,
   draftName,
   localPlayerId,
   mode,
   onAddPlayer,
+  onBeginDrag,
   onBack,
   onDraftNameChange,
-  onMovePlayer,
   onRandomizePlayers,
   onRemovePlayer,
   onScanAnswer,
@@ -975,13 +1045,14 @@ function SetupPanel({
   canControl: boolean;
   canStart: boolean;
   config: GameConfig;
+  draggingPlayerId: string | null;
   draftName: string;
   localPlayerId: string | null;
   mode: "local" | "sync";
   onAddPlayer: () => void;
+  onBeginDrag: (event: ReactPointerEvent<HTMLButtonElement>, playerId: string) => void;
   onBack: () => void;
   onDraftNameChange: (name: string) => void;
-  onMovePlayer: (playerId: string, direction: -1 | 1) => void;
   onRandomizePlayers: () => void;
   onRemovePlayer: (playerId: string) => void;
   onScanAnswer: () => void;
@@ -1022,36 +1093,48 @@ function SetupPanel({
 
       {mode === "sync" && syncRole === "host" ? (
         <div className="sync-lobby-tools">
-          {syncQrText ? <QrPanel label="Host QR" text={syncQrText} /> : null}
-          <button className="secondary icon-text-button" type="button" onClick={onScanAnswer}>
-            <ScanLine size={18} />
-            Scan
-          </button>
+          {syncQrText ? <QrPanel text={syncQrText} /> : null}
+          <div className="setup-actions two-up">
+            <button className="secondary icon-text-button" type="button" onClick={onScanAnswer}>
+              <ScanLine size={18} />
+              Scan
+            </button>
+            <button className="secondary icon-text-button" type="button" onClick={onRandomizePlayers} disabled={!canControl || players.length < 2}>
+              <Shuffle size={18} />
+              Randomize
+            </button>
+          </div>
         </div>
       ) : null}
 
       {mode === "sync" && syncRole === "joiner" && syncAnswerText ? (
-        <QrPanel label="Answer QR" text={syncAnswerText} />
+        <QrPanel text={syncAnswerText} />
       ) : null}
 
       {syncMessage ? <p className="sync-status">{syncMessage}</p> : null}
 
       <div className="player-list">
-        {players.map((player, index) => {
+        {players.map((player) => {
           const canEditPlayer = mode === "local" || canControl || player.id === localPlayerId;
           const nameLocked = mode === "sync" && !canControl && player.nameLocked;
           const colorLocked = mode === "sync" && !canControl && player.colorLocked;
 
           return (
-            <article className="player-row" key={player.id} data-player-status={player.connectionStatus}>
-              <div className="reorder-cluster">
-                <button className="drag-handle" type="button" onClick={() => onMovePlayer(player.id, -1)} disabled={!canControl || index === 0} aria-label={`Move ${player.name} earlier`}>
-                  <GripVertical size={17} />
-                </button>
-                <button className="drag-handle down" type="button" onClick={() => onMovePlayer(player.id, 1)} disabled={!canControl || index === players.length - 1} aria-label={`Move ${player.name} later`}>
-                  <GripVertical size={17} />
-                </button>
-              </div>
+            <article
+              className={draggingPlayerId === player.id ? "player-row dragging" : "player-row"}
+              data-player-id={player.id}
+              data-player-status={player.connectionStatus}
+              key={player.id}
+            >
+              <button
+                className="drag-handle"
+                type="button"
+                onPointerDown={(event) => onBeginDrag(event, player.id)}
+                disabled={!canControl}
+                aria-label={`Move ${player.name}`}
+              >
+                <GripVertical size={18} />
+              </button>
               <input
                 aria-label={`${player.name || "Player"} name`}
                 autoComplete="off"
@@ -1064,8 +1147,9 @@ function SetupPanel({
                   <Unlock size={15} />
                 </button>
               ) : null}
-              <ColorSwatches
+              <ColorSelect
                 disabled={!canEditPlayer || colorLocked}
+                label={`${player.name || "Player"} color`}
                 selectedColor={player.color}
                 onSelect={(color) => onUpdatePlayer(player.id, { color })}
               />
@@ -1074,7 +1158,7 @@ function SetupPanel({
                   <Unlock size={15} />
                 </button>
               ) : null}
-              <span className="connection-dot" data-status={player.connectionStatus} aria-label={player.connectionStatus} />
+              {mode === "sync" ? <span className="connection-dot" data-status={player.connectionStatus} aria-label={player.connectionStatus} /> : null}
               {mode === "local" || canControl ? (
                 <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name || "player"}`}>
                   <Trash2 size={16} />
@@ -1085,41 +1169,43 @@ function SetupPanel({
         })}
       </div>
 
-      <div className="setup-actions">
-        <button className="secondary icon-text-button" type="button" onClick={onRandomizePlayers} disabled={!canControl || players.length < 2}>
-          <Shuffle size={18} />
-          Order
-        </button>
-      </div>
+      {mode === "local" ? (
+        <div className="setup-actions">
+          <button className="secondary icon-text-button" type="button" onClick={onRandomizePlayers} disabled={!canControl || players.length < 2}>
+            <Shuffle size={18} />
+            Randomize
+          </button>
+        </div>
+      ) : null}
 
       <div className="config-grid">
         <SegmentedControl
           disabled={!canControl}
-          label="Draft"
-          options={(["random", "roundRobin", "snake"] as DraftStyle[]).map((value) => ({ value, label: DRAFT_STYLE_LABELS[value] }))}
+          options={(["snake", "roundRobin", "random"] as DraftStyle[]).map((value) => ({ value, label: DRAFT_STYLE_LABELS[value] }))}
           value={config.draftStyle}
           onChange={(value) => onUpdateConfig({ draftStyle: value as DraftStyle })}
         />
-        <SegmentedControl
-          disabled={!canControl || config.draftStyle === "random"}
-          label="Pick"
-          options={PICK_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTimerOption(value) }))}
-          value={String(config.pickTimeLimit)}
-          onChange={(value) => onUpdateConfig({ pickTimeLimit: Number(value) as PickTimeLimit })}
-        />
-        <SegmentedControl
-          disabled={!canControl}
-          label="Troops"
-          options={TROOP_ALLOCATION_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTroopTimerOption(value) }))}
-          value={String(config.troopAllocationTimeLimit)}
-          onChange={(value) => onUpdateConfig({ troopAllocationTimeLimit: Number(value) as TroopAllocationTimeLimit })}
-        />
+        <div className="time-select-grid">
+          <SelectField
+            disabled={!canControl || config.draftStyle === "random"}
+            label="PICK TIME"
+            options={PICK_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTimerOption(value) }))}
+            value={String(config.pickTimeLimit)}
+            onChange={(value) => onUpdateConfig({ pickTimeLimit: Number(value) as PickTimeLimit })}
+          />
+          <SelectField
+            disabled={!canControl}
+            label="TROOP TIME"
+            options={TROOP_ALLOCATION_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTroopTimerOption(value) }))}
+            value={String(config.troopAllocationTimeLimit)}
+            onChange={(value) => onUpdateConfig({ troopAllocationTimeLimit: Number(value) as TroopAllocationTimeLimit })}
+          />
+        </div>
       </div>
 
       {canControl ? (
-        <button className="primary icon-text-button wide-button" type="button" onClick={onStartDraft} disabled={!canStart}>
+        <button className="primary icon-text-button wide-button" type="button" onClick={onStartDraft} disabled={!canStart} aria-label="Start game">
           <Check size={20} />
-          Draft
         </button>
       ) : null}
     </section>
@@ -1277,6 +1363,32 @@ function PickResultDialog({
   );
 }
 
+function DecisionDialog({
+  message,
+  onCancel,
+  onConfirm,
+}: {
+  message: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="modal-scrim">
+      <section className="modal-panel decision-modal" role="dialog" aria-label={message}>
+        <h2>{message}</h2>
+        <div className="modal-actions">
+          <button className="icon-button large" type="button" onClick={onCancel} aria-label="Cancel">
+            <X size={24} />
+          </button>
+          <button className="icon-button danger large" type="button" onClick={onConfirm} aria-label="End game">
+            <Check size={24} />
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function PanelHeader({ closeLabel = "Close", onClose, title }: { closeLabel?: string; onClose: () => void; title: string }) {
   return (
     <div className="panel-header">
@@ -1288,49 +1400,78 @@ function PanelHeader({ closeLabel = "Close", onClose, title }: { closeLabel?: st
   );
 }
 
-function ColorSwatches({
+function ColorSelect({
   disabled = false,
+  label,
   onSelect,
   selectedColor,
 }: {
   disabled?: boolean;
+  label: string;
   onSelect: (color: PlayerColor) => void;
   selectedColor: PlayerColor | null;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+
   return (
-    <div className="color-swatches" role="radiogroup" aria-label="Player color">
-      {PLAYER_COLORS.map((color) => (
-        <button
-          aria-label={color}
-          aria-pressed={selectedColor === color}
-          className={selectedColor === color ? "color-swatch selected" : "color-swatch"}
-          disabled={disabled}
-          key={color}
-          onClick={() => onSelect(color)}
-          style={{ background: colorCss(color) }}
-          type="button"
-        />
-      ))}
+    <div
+      className="color-select"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setIsOpen(false);
+        }
+      }}
+      style={{ "--selected-color": colorCss(selectedColor) } as CSSProperties}
+    >
+      <button
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        aria-label={label}
+        className="color-select-trigger"
+        disabled={disabled}
+        onClick={() => setIsOpen((current) => !current)}
+        type="button"
+      >
+        <span aria-hidden="true" />
+        <ChevronDown size={15} />
+      </button>
+      {isOpen ? (
+        <div className="color-select-menu" role="menu">
+          {PLAYER_COLORS.map((color) => (
+            <button
+              aria-label={colorLabel(color)}
+              className={selectedColor === color ? "color-select-option selected" : "color-select-option"}
+              key={color}
+              onClick={() => {
+                onSelect(color);
+                setIsOpen(false);
+              }}
+              role="menuitemradio"
+              style={{ "--option-color": colorCss(color) } as CSSProperties}
+              type="button"
+            >
+              <span aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function SegmentedControl({
   disabled = false,
-  label,
   onChange,
   options,
   value,
 }: {
   disabled?: boolean;
-  label: string;
   onChange: (value: string) => void;
   options: { label: string; value: string }[];
   value: string;
 }) {
   return (
     <div className="segmented-field">
-      <span>{label}</span>
       <div className="segmented-control">
         {options.map((option) => (
           <button
@@ -1348,7 +1489,34 @@ function SegmentedControl({
   );
 }
 
-function QrPanel({ label, text }: { label: string; text: string }) {
+function SelectField({
+  disabled = false,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  disabled?: boolean;
+  label: string;
+  onChange: (value: string) => void;
+  options: { label: string; value: string }[];
+  value: string;
+}) {
+  return (
+    <label className="select-field">
+      <span>{label}</span>
+      <select disabled={disabled} onChange={(event) => onChange(event.target.value)} value={value}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function QrPanel({ text }: { text: string }) {
   const [svg, setSvg] = useState("");
 
   useEffect(() => {
@@ -1373,8 +1541,7 @@ function QrPanel({ label, text }: { label: string; text: string }) {
 
   return (
     <div className="qr-panel">
-      <span>{label}</span>
-      {svg ? <div className="qr-code" role="img" aria-label={label} dangerouslySetInnerHTML={{ __html: svg }} /> : <div className="qr-placeholder" />}
+      {svg ? <div className="qr-code" role="img" aria-label="QR code" dangerouslySetInnerHTML={{ __html: svg }} /> : <div className="qr-placeholder" />}
     </div>
   );
 }
@@ -1586,6 +1753,35 @@ function formatQrHandshakeError(error: unknown) {
   }
 
   return `QR found, but the handshake failed. ${message}`;
+}
+
+function firstAvailableColor(players: GamePlayer[]) {
+  const usedColors = new Set(players.map((player) => player.color).filter(Boolean));
+  return PLAYER_COLORS.find((color) => !usedColors.has(color)) ?? null;
+}
+
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
+  const nextItems = [...items];
+  const [item] = nextItems.splice(fromIndex, 1);
+  nextItems.splice(toIndex, 0, item);
+  return nextItems;
+}
+
+function colorLabel(color: PlayerColor) {
+  switch (color) {
+    case "green":
+      return "Green";
+    case "blue":
+      return "Blue";
+    case "yellow":
+      return "Yellow";
+    case "red":
+      return "Red";
+    case "purple":
+      return "Purple";
+    case "black":
+      return "Black";
+  }
 }
 
 function colorCss(color: PlayerColor | null) {

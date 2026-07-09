@@ -306,7 +306,7 @@ export function MapView({
   return (
     <div className="map-shell">
       <svg
-        aria-label="Ardature map"
+        aria-label="Ardatúrë map"
         className="map-svg"
         data-map-animating={isAnimating ? "true" : "false"}
         onPointerCancel={handlePointerEnd}
