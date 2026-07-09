@@ -64,6 +64,7 @@ import {
   updateArmyMarker,
 } from "./game/gameState";
 import type {
+  AppPhase,
   ArmyMarker,
   DraftStyle,
   GameConfig,
@@ -145,6 +146,7 @@ function App() {
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
   const [isEndGamePromptOpen, setIsEndGamePromptOpen] = useState(false);
   const [isRestartGamePromptOpen, setIsRestartGamePromptOpen] = useState(false);
+  const [pausedReturnPhase, setPausedReturnPhase] = useState<AppPhase | null>(null);
   const [resetCameraKey, setResetCameraKey] = useState(0);
   const hostTransportRef = useRef<SyncHostTransport | null>(null);
   const joinTransportRef = useRef<SyncJoinTransport | null>(null);
@@ -1039,6 +1041,8 @@ function App() {
       return;
     }
 
+    setPausedReturnPhase(game.phase === "gameMap" ? "gameMap" : null);
+
     setGame((current) => {
       if (current.phase === "draft" && current.draft) {
         return current.mode === "sync"
@@ -1065,14 +1069,39 @@ function App() {
         };
       }
 
+      if (current.phase === "gameMap") {
+        return {
+          ...current,
+          phase: "paused",
+          allocation: current.allocation
+            ? {
+                ...current.allocation,
+                selectedTerritoryId: null,
+                timerEndsAt: null,
+              }
+            : current.allocation,
+        };
+      }
+
       return current;
     });
   }
 
   function resumeDraft() {
+    const returnPhase = pausedReturnPhase;
+
+    setPausedReturnPhase(null);
+
     setGame((current) => {
       if (current.phase !== "paused") {
         return current;
+      }
+
+      if (returnPhase === "gameMap") {
+        return {
+          ...current,
+          phase: "gameMap",
+        };
       }
 
       if (current.allocation) {
@@ -1187,7 +1216,7 @@ function App() {
 
   return (
     <main
-      className={`app-shell${showDraftControls || showAllocationControls || showGameMapControls ? " draft-layout" : ""}`}
+      className={`app-shell${showDraftControls || showAllocationControls || showAllocationWaiting || showGameMapControls ? " draft-layout" : ""}`}
       data-app-phase={game.phase}
       data-draft-controls={showDraftControls ? "visible" : "hidden"}
       data-sync-role={syncRole ?? "none"}
@@ -1207,7 +1236,9 @@ function App() {
         <AllocationPanel
           allocation={game.allocation}
           canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
+          canPause={game.mode === "local" || syncRole === "host"}
           onAdjustTroop={adjustSelectedTroop}
+          onExit={returnHome}
           onFinish={finishCurrentAllocation}
           onPause={pauseDraft}
           ownership={ownership}
@@ -1220,7 +1251,9 @@ function App() {
         <GameMapPanel
           localViewerId={gameMapViewerId}
           mode={game.mode}
+          canPause={game.mode === "local" || syncRole === "host"}
           onExit={returnHome}
+          onPause={pauseDraft}
           onViewerChange={changeGameMapViewer}
           players={game.players}
           selectedTerritoryId={game.allocation?.selectedTerritoryId ?? null}
@@ -1316,8 +1349,11 @@ function App() {
           localPlayer={allocationPlayer}
           players={game.players}
           allocation={game.allocation}
+          canPause={game.mode === "local" || syncRole === "host"}
           canAdvance={syncRole === "host" && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
+          onExit={returnHome}
           onAdvance={startAllocatedGame}
+          onPause={pauseDraft}
         />
       ) : null}
 
@@ -1659,21 +1695,16 @@ function DraftPanel({
   timerRemaining: number | null;
 }) {
   return (
-    <section className="hud-panel draft-panel compact-hud">
-      <button className="icon-button danger" type="button" onClick={onExit} aria-label="End game">
-        <X size={18} />
-      </button>
-      <div className="draft-status">
-        <span className="player-dot" style={{ background: colorCss(activePlayer?.color ?? null) }} />
-        <strong>{activePlayer?.name ?? "Draft"}</strong>
-        {activeDraftProgress ? <span>{activeDraftProgress.drafted} / {activeDraftProgress.total}</span> : null}
-        {timerRemaining ? <span className="timer-chip">{Math.ceil(timerRemaining / 1000)}s</span> : null}
-      </div>
-      {canPause ? (
-        <button className="icon-button" type="button" onClick={onPause} aria-label="Pause draft">
-          <Pause size={18} />
-        </button>
-      ) : null}
+    <section className="hud-panel game-stage-panel draft-panel compact-hud">
+      <GameTopBar
+        detail={activeDraftProgress ? `${activeDraftProgress.drafted} / ${activeDraftProgress.total}` : null}
+        onExit={onExit}
+        onPause={canPause ? onPause : undefined}
+        pauseLabel="Pause draft"
+        player={activePlayer}
+        timerRemaining={timerRemaining}
+        title={activePlayer?.name ?? "Draft"}
+      />
     </section>
   );
 }
@@ -1681,7 +1712,9 @@ function DraftPanel({
 function AllocationPanel({
   allocation,
   canFinish,
+  canPause,
   onAdjustTroop,
+  onExit,
   onFinish,
   onPause,
   ownership,
@@ -1690,7 +1723,9 @@ function AllocationPanel({
 }: {
   allocation: GameState["allocation"];
   canFinish: boolean;
+  canPause: boolean;
   onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
+  onExit: () => void;
   onFinish: () => void;
   onPause: () => void;
   ownership: TerritoryOwnerMap;
@@ -1700,15 +1735,15 @@ function AllocationPanel({
   const playerAllocation = allocation?.playerAllocations[player.id] ?? null;
 
   return (
-    <section className="hud-panel allocation-panel compact-hud">
-      <button className="icon-button danger" type="button" onClick={onPause} aria-label="Pause allocation">
-        <Pause size={18} />
-      </button>
-      <div className="allocation-summary">
-        <span className="player-dot" style={{ background: colorCss(player.color) }} />
-        <strong>{player.name}</strong>
-        {timerRemaining ? <span className="timer-chip">{Math.ceil(timerRemaining / 1000)}s</span> : null}
-      </div>
+    <section className="hud-panel game-stage-panel allocation-panel compact-hud">
+      <GameTopBar
+        onExit={onExit}
+        onPause={canPause ? onPause : undefined}
+        pauseLabel="Pause allocation"
+        player={player}
+        timerRemaining={timerRemaining}
+        title={player.name}
+      />
       {playerAllocation?.buildSubmitted && allocation ? (
         <AllocationControls
           allocation={allocation}
@@ -1720,6 +1755,46 @@ function AllocationPanel({
         />
       ) : null}
     </section>
+  );
+}
+
+function GameTopBar({
+  detail,
+  onExit,
+  onPause,
+  pauseLabel,
+  player,
+  timerRemaining,
+  title,
+}: {
+  detail?: string | null;
+  onExit: () => void;
+  onPause?: () => void;
+  pauseLabel?: string;
+  player: GamePlayer | null;
+  timerRemaining?: number | null;
+  title: string;
+}) {
+  const light = isLightColor(player?.color ?? null);
+
+  return (
+    <div className="game-top-bar" data-tone={light ? "light" : "dark"} style={{ "--bar-color": colorCss(player?.color ?? null) } as CSSProperties}>
+      <button className="icon-button game-top-button" type="button" onClick={onExit} aria-label="End game">
+        <X size={18} />
+      </button>
+      <div className="game-top-player">
+        <strong>{title}</strong>
+        {detail ? <span>{detail}</span> : null}
+      </div>
+      <div className="game-top-tools">
+        {timerRemaining ? <span className="timer-chip game-top-timer">{Math.ceil(timerRemaining / 1000)}s</span> : null}
+        {onPause ? (
+          <button className="icon-button game-top-button" type="button" onClick={onPause} aria-label={pauseLabel ?? "Pause"}>
+            <Pause size={18} />
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -1749,43 +1824,55 @@ function AllocationControls({
 
   return (
     <div className="allocation-controls">
-      <div className="allocation-target">
-        <strong>{selectedTerritory?.name ?? "Select a territory"}</strong>
-      </div>
       {selectedTerritoryId && selectedTroops ? (
-        <div className="troop-action-grid">
+        <>
           <div className="troop-action-row">
+            <span className="troop-row-spacer" aria-hidden="true" />
             <span className="troop-row-affordance" data-muted={canAddAny ? undefined : "true"} aria-hidden="true">
               <Plus size={17} />
             </span>
-            {TROOP_TYPES.map((troopType) => (
-              <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, 1)} disabled={!canAddType(troopType)} aria-label={`Add ${troopType}`}>
-                <TroopIconCount
-                  count={remaining[troopType]}
-                  label={`${troopName(player.color, troopType)} remaining: ${remaining[troopType]}`}
-                  player={player}
-                  troopType={troopType}
-                />
-              </button>
-            ))}
+            <div className="troop-action-icons">
+              {TROOP_TYPES.map((troopType) => (
+                <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, 1)} disabled={!canAddType(troopType)} aria-label={`Add ${troopType}`}>
+                  <TroopIconCount
+                    count={remaining[troopType]}
+                    label={`${troopName(player.color, troopType)} remaining: ${remaining[troopType]}`}
+                    player={player}
+                    troopType={troopType}
+                  />
+                </button>
+              ))}
+            </div>
+            <span className="troop-row-spacer" aria-hidden="true" />
+          </div>
+          <div className="allocation-target">
+            <strong>{selectedTerritory?.name ?? "Select a territory"}</strong>
           </div>
           <div className="troop-action-row">
+            <span className="troop-row-spacer" aria-hidden="true" />
             <span className="troop-row-affordance" data-muted={canRemoveAny ? undefined : "true"} aria-hidden="true">
               <Minus size={17} />
             </span>
-            {TROOP_TYPES.map((troopType) => (
-              <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, -1)} disabled={!canRemoveType(troopType)} aria-label={`Remove ${troopType}`}>
-                <TroopIconCount
-                  count={selectedTroops[troopType]}
-                  label={`${troopName(player.color, troopType)} on territory: ${selectedTroops[troopType]}`}
-                  player={player}
-                  troopType={troopType}
-                />
-              </button>
-            ))}
+            <div className="troop-action-icons">
+              {TROOP_TYPES.map((troopType) => (
+                <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, -1)} disabled={!canRemoveType(troopType)} aria-label={`Remove ${troopType}`}>
+                  <TroopIconCount
+                    count={selectedTroops[troopType]}
+                    label={`${troopName(player.color, troopType)} on territory: ${selectedTroops[troopType]}`}
+                    player={player}
+                    troopType={troopType}
+                  />
+                </button>
+              ))}
+            </div>
+            <span className="troop-row-spacer" aria-hidden="true" />
           </div>
+        </>
+      ) : (
+        <div className="allocation-target">
+          <strong>Select a territory</strong>
         </div>
-      ) : null}
+      )}
       <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Ready">
         <Check size={20} />
       </button>
@@ -1896,20 +1983,34 @@ function HandoffPanel({ onContinue, player }: { onContinue: () => void; player: 
 
 function AllocationWaitingPanel({
   allocation,
+  canPause,
   canAdvance,
   localPlayer,
+  onExit,
   onAdvance,
+  onPause,
   players,
 }: {
   allocation: GameState["allocation"];
+  canPause: boolean;
   canAdvance: boolean;
   localPlayer: GamePlayer;
+  onExit: () => void;
   onAdvance: () => void;
+  onPause: () => void;
   players: GamePlayer[];
 }) {
   return (
-    <div className="modal-scrim">
-      <section className="modal-panel waiting-panel" role="status">
+    <section className="hud-panel game-stage-panel allocation-waiting-panel compact-hud" role="status">
+      <GameTopBar
+        detail="ready"
+        onExit={onExit}
+        onPause={canPause ? onPause : undefined}
+        pauseLabel="Pause allocation"
+        player={localPlayer}
+        title={localPlayer.name}
+      />
+      <div className="waiting-panel">
         <h2>{localPlayer.name} ready</h2>
         <div className="player-list paused-list">
           {players.map((player) => (
@@ -1925,33 +2026,43 @@ function AllocationWaitingPanel({
             <Check size={20} />
           </button>
         ) : null}
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }
 
 function GameMapPanel({
+  canPause,
   localViewerId,
   mode,
   onExit,
+  onPause,
   onViewerChange,
   players,
   selectedTerritoryId,
   troopBreakdown,
 }: {
+  canPause: boolean;
   localViewerId: string | null;
   mode: "local" | "sync";
   onExit: () => void;
+  onPause: () => void;
   onViewerChange: (playerId: string) => void;
   players: GamePlayer[];
   selectedTerritoryId: string | null;
   troopBreakdown: TroopCounts | null;
 }) {
+  const viewer = players.find((player) => player.id === localViewerId) ?? players[0] ?? null;
+
   return (
-    <section className="hud-panel game-map-panel compact-hud">
-      <button className="icon-button danger" type="button" onClick={onExit} aria-label="Return home">
-        <X size={18} />
-      </button>
+    <section className="hud-panel game-stage-panel game-map-panel compact-hud">
+      <GameTopBar
+        onExit={onExit}
+        onPause={canPause ? onPause : undefined}
+        pauseLabel="Pause map"
+        player={viewer}
+        title={viewer?.name ?? "Map"}
+      />
       {mode === "local" ? (
         <select aria-label="Current viewer" value={localViewerId ?? ""} onChange={(event) => onViewerChange(event.target.value)}>
           {players.map((player) => (
@@ -1959,9 +2070,9 @@ function GameMapPanel({
           ))}
         </select>
       ) : (
-        <strong>{players.find((player) => player.id === localViewerId)?.name ?? "Map"}</strong>
+        <strong>{viewer?.name ?? "Map"}</strong>
       )}
-      {selectedTerritoryId && troopBreakdown ? <TroopCountRow counts={troopBreakdown} player={players.find((player) => player.id === localViewerId) ?? players[0]} /> : null}
+      {selectedTerritoryId && troopBreakdown && viewer ? <TroopCountRow counts={troopBreakdown} player={viewer} /> : null}
     </section>
   );
 }

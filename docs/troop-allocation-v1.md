@@ -84,8 +84,9 @@ Allocation rules:
 - A player may select only territories they own.
 - Selecting a territory focuses the map on that territory.
 - Every owned territory must have at least one troop total before the player can finish.
+- Allocation uses the shared colored game top bar: X on the left, current player name prominent near the left, timer near pause when present, and pause on the right in local mode or for the sync host.
 - The selected territory controls show two compact icon rows: remaining troops for adding and troops on the selected territory for removing.
-- The selected territory name is shown in bold, but its total troop count is not repeated in the controls because the map marker already shows that total.
+- The selected territory name is shown in bold between the add and remove rows, but its total troop count is not repeated in the controls because the map marker already shows that total.
 - The `+` and `-` row icons are non-clickable affordances. They are muted only when no troop in that row can currently be added or removed.
 - The circular troop icons are the action targets: tap a remaining troop icon to add one troop, or tap a selected-territory troop icon to remove one troop.
 - The player can remove any number of troops from the selected territory.

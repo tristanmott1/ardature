@@ -104,6 +104,8 @@ The draft engine should not precompute one fixed 42-pick queue. It should store 
 
 Manual draft interaction:
 
+- Game-stage screens use a shared colored top bar. The X button is always in the top-left, the current player name is bold and prominent near the left, the timer appears near the right when present, and pause appears in the top-right in local mode and for the sync host.
+- The top bar background uses the current player's color instead of a small color dot.
 - The active player picks by selecting a remaining territory on the map.
 - Selecting a territory opens a confirmation popup with cancel and confirm controls.
 - While the confirmation popup is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels the pending pick.
@@ -131,9 +133,9 @@ Draft ownership map:
 
 ## Pause And Player Removal
 
-Local and sync modes should use the same pause button placement and icon.
+Local and sync modes should use the same pause button placement and icon in the shared game top bar.
 
-- In local mode, the pause button is always visible during draft.
+- In local mode, the pause button is always visible during game-stage screens.
 - In sync mode, only the host sees the pause button.
 - In sync mode, pause is also forced by ungraceful disconnects.
 

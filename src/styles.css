@@ -196,20 +196,15 @@ button:focus-visible,
   gap: 8px;
 }
 
-.draft-panel,
-.allocation-panel,
-.game-map-panel {
+.game-stage-panel {
   top: max(10px, env(safe-area-inset-top));
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px;
+  display: grid;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
-.draft-layout .draft-panel,
-.draft-layout .allocation-panel,
-.draft-layout .game-map-panel {
+.draft-layout .game-stage-panel {
   position: relative;
   top: auto;
   left: auto;
@@ -222,17 +217,72 @@ button:focus-visible,
   box-shadow: 0 3px 14px rgba(24, 24, 27, 0.1);
   transform: none;
   backdrop-filter: none;
+  padding: 0;
+}
+
+.game-top-bar {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 54px;
   padding:
     max(8px, env(safe-area-inset-top))
     max(10px, env(safe-area-inset-right))
     8px
     max(10px, env(safe-area-inset-left));
+  color: #111111;
+  background: var(--bar-color);
+}
+
+.game-top-bar[data-tone="dark"] {
+  color: #ffffff;
+}
+
+.game-top-button {
+  width: 36px;
+  min-height: 36px;
+  color: currentColor;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.game-top-player {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.game-top-player strong {
+  overflow: hidden;
+  font-size: 1.08rem;
+  font-weight: 900;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-top-player span {
+  flex: none;
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.game-top-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: end;
+}
+
+.game-top-timer {
+  border-color: rgba(255, 255, 255, 0.24);
+  color: currentColor;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .panel-header,
 .brand-row,
-.draft-status,
-.allocation-summary,
 .mode-grid,
 .setup-actions,
 .modal-actions {
@@ -556,24 +606,14 @@ select {
   font-weight: 760;
 }
 
-.allocation-panel,
-.game-map-panel {
-  align-items: start;
-}
-
-.allocation-panel {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-.allocation-summary {
-  min-height: 38px;
-}
-
 .allocation-controls {
-  grid-column: 1 / -1;
   display: grid;
-  gap: 8px;
+  gap: 15px;
+  padding:
+    14px
+    max(10px, env(safe-area-inset-right))
+    16px
+    max(10px, env(safe-area-inset-left));
 }
 
 .army-build-scrim {
@@ -689,20 +729,22 @@ select {
   gap: 8px;
   align-items: center;
   justify-content: center;
-  min-height: 28px;
-}
-
-.troop-action-grid {
-  display: grid;
-  gap: 7px;
+  min-height: 32px;
+  font-size: 0.95rem;
 }
 
 .troop-action-row {
   display: grid;
-  grid-template-columns: 32px repeat(4, 44px);
+  grid-template-columns: 32px 32px minmax(0, auto) 72px;
   gap: 8px;
   align-items: center;
   justify-content: center;
+}
+
+.troop-action-icons {
+  display: grid;
+  grid-template-columns: repeat(4, 44px);
+  gap: 8px;
 }
 
 .troop-row-affordance {
@@ -711,6 +753,11 @@ select {
   width: 32px;
   height: 32px;
   color: #111111;
+}
+
+.troop-row-spacer {
+  width: 100%;
+  height: 32px;
 }
 
 .troop-row-affordance[data-muted="true"] {
@@ -747,6 +794,19 @@ select {
   justify-items: center;
 }
 
+.allocation-waiting-panel .waiting-panel,
+.game-map-panel > select,
+.game-map-panel > strong,
+.game-map-panel > .troop-count-row {
+  margin: 12px max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left));
+}
+
+.allocation-waiting-panel .waiting-panel {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 16px;
+}
+
 .large-dot {
   width: 24px;
   height: 24px;
@@ -754,11 +814,13 @@ select {
 
 .game-map-panel {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  justify-items: center;
+  padding-bottom: 12px;
 }
 
 .game-map-panel select {
   min-height: 38px;
+  width: min(220px, calc(100vw - 32px));
 }
 
 .connection-dot {
@@ -991,8 +1053,4 @@ select {
     padding: 0 8px;
   }
 
-  .draft-status {
-    gap: 7px;
-    font-size: 0.9rem;
-  }
 }
