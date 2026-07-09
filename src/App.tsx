@@ -721,8 +721,6 @@ function App() {
       return;
     }
 
-    setResetCameraKey((current) => current + 1);
-
     if (game.mode === "sync" && syncRole === "joiner") {
       joinTransportRef.current?.send({ type: "draftConfirm", territoryId: game.draft.pendingTerritoryId });
       return;
@@ -734,6 +732,8 @@ function App() {
   }
 
   function nextDraftTurn() {
+    setResetCameraKey((current) => current + 1);
+
     setGame((current) => current.draft
       ? {
           ...current,
@@ -1117,16 +1117,10 @@ function SetupPanel({
       {mode === "sync" && syncRole === "host" ? (
         <div className="sync-lobby-tools">
           {syncQrText ? <QrPanel text={syncQrText} /> : null}
-          <div className="setup-actions two-up">
-            <button className="secondary icon-text-button" type="button" onClick={onRandomizePlayers} disabled={!canControl || players.length < 2}>
-              <Shuffle size={18} />
-              Randomize
-            </button>
-            <button className="secondary icon-text-button" type="button" onClick={onScanAnswer}>
-              <ScanLine size={18} />
-              Scan
-            </button>
-          </div>
+          <button className="secondary icon-text-button scan-answer-button" type="button" onClick={onScanAnswer}>
+            <ScanLine size={18} />
+            Scan
+          </button>
         </div>
       ) : null}
 
@@ -1135,15 +1129,6 @@ function SetupPanel({
       ) : null}
 
       {syncMessage ? <p className="sync-status">{syncMessage}</p> : null}
-
-      {mode === "local" ? (
-        <div className="setup-actions">
-          <button className="secondary icon-text-button" type="button" onClick={onRandomizePlayers} disabled={!canControl || players.length < 2}>
-            <Shuffle size={18} />
-            Randomize
-          </button>
-        </div>
-      ) : null}
 
       <div className="player-list">
         {players.map((player) => {
@@ -1199,6 +1184,15 @@ function SetupPanel({
           );
         })}
       </div>
+
+      {mode === "local" || (mode === "sync" && syncRole === "host") ? (
+        <div className="setup-actions">
+          <button className="secondary icon-text-button" type="button" onClick={onRandomizePlayers} disabled={!canControl || players.length < 2}>
+            <Shuffle size={18} />
+            Randomize
+          </button>
+        </div>
+      ) : null}
 
       <div className="config-grid">
         <SegmentedControl

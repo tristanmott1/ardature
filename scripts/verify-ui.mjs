@@ -211,6 +211,13 @@ async function assertNoHorizontalOverflow(page, message) {
   assert(!hasOverflow, message);
 }
 
+async function assertBelow(page, upperLocator, lowerLocator, message) {
+  const upper = await upperLocator.boundingBox();
+  const lower = await lowerLocator.boundingBox();
+
+  assert(upper && lower && lower.y >= upper.y + upper.height - 1, message);
+}
+
 function colorLabel(color) {
   return color.charAt(0).toUpperCase() + color.slice(1);
 }
@@ -222,6 +229,7 @@ async function startLocalSnakeDraft(page) {
   await setPlayerName(page, 1, "Gimli");
   await setPlayerColor(page, 1, "blue");
   await assertNoHorizontalOverflow(page, "Local setup has no horizontal overflow on mobile.");
+  await assertBelow(page, page.locator(".player-list"), page.getByRole("button", { name: "Randomize" }), "Local randomize sits below player names.");
   await page.getByRole("button", { name: "Start game" }).click();
   await page.waitForSelector("[data-territory-hit]");
 }
@@ -259,7 +267,7 @@ async function runLocalDraftChecks(page) {
   assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
   assert((await resultDialog.locator(".territory-preview-shape path").count()) > 0, "Result modal shows the territory shape.");
   await page.getByText("41 left").waitFor();
-  assertFullMapViewBox(await viewBox(page), size, "Local confirm zooms back out to the full map.");
+  assertFullMapViewBox(await viewBox(page), size, "Local result dismissal zooms back out to the full map.");
 
   await clickTerritory(page, "bree");
   await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
@@ -331,6 +339,8 @@ async function runSyncEntryChecks(page) {
   await page.getByRole("menuitemradio", { name: "Purple" }).click();
   await page.getByRole("button", { name: "Host" }).click();
   await page.waitForSelector(".qr-code svg", { timeout: 10000 });
+  await assertBelow(page, page.locator(".qr-code"), page.getByRole("button", { name: "Scan" }), "Sync scan sits below the host QR.");
+  await assertBelow(page, page.locator(".player-list"), page.getByRole("button", { name: "Randomize" }), "Sync randomize sits below player names.");
   assert((await page.locator(".player-row").count()) === 1, "Host lobby starts with the host player.");
   assert(await page.getByRole("button", { name: "Start game" }).isDisabled(), "Sync host cannot start with one player.");
   assert((await page.locator("[data-sync-role='host']").count()) === 1, "App records host sync role.");

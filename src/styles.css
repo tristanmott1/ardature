@@ -183,9 +183,9 @@ button:focus-visible,
 .setup-panel {
   top: max(12px, env(safe-area-inset-top));
   display: grid;
-  gap: 12px;
+  gap: 15px;
   max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-  padding: 12px;
+  padding: 14px;
   overflow: auto;
 }
 
@@ -585,7 +585,8 @@ select {
 
 .sync-lobby-tools {
   display: grid;
-  gap: 8px;
+  gap: 12px;
+  justify-items: center;
 }
 
 .qr-panel {
@@ -599,6 +600,10 @@ select {
   aspect-ratio: 1;
   overflow: hidden;
   background: #ffffff;
+}
+
+.scan-answer-button {
+  min-width: 132px;
 }
 
 .qr-code svg {
@@ -729,7 +734,7 @@ select {
   .sync-entry-panel,
   .pause-modal {
     width: calc(100vw - 16px);
-    padding: 10px;
+    padding: 12px;
   }
 
   .sync-lobby-tools {
