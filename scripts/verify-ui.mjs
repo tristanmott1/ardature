@@ -150,15 +150,27 @@ async function runSourceChecks() {
   assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".modal-scrim"), "Map camera controls stack below modal popups.");
   assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".draft-sheet-scrim"), "Map camera controls stack below draft sheets.");
   assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".army-build-scrim"), "Map camera controls stack below army build modal.");
-  assert(syncMessagesSource.includes('type: "hostQuit"') && syncMessagesSource.includes('message.type === "hostQuit"'), "Sync messages include host quit.");
+  assert(syncMessagesSource.includes('type: "snapshot"') && syncMessagesSource.includes("revision: number"), "Sync messages use revisioned host snapshots.");
+  assert(syncMessagesSource.includes('type: "hostEnded"') && appSource.includes('type: "hostEnded"'), "Sync messages include an explicit host-ended event.");
+  assert(!syncMessagesSource.includes('type: "gameState"') && !appSource.includes('type: "gameState"'), "Old unversioned gameState sync messages are removed.");
+  assert(!syncMessagesSource.includes('type: "hostQuit"') && !appSource.includes('type: "hostQuit"'), "Old hostQuit sync messages are removed.");
+  assert(appSource.includes("SyncSessionState") && appSource.includes("syncJoinerBlocked"), "Joiners track disconnected session state outside GameState.");
+  assert(appSource.includes("lastSnapshotRevisionRef") && appSource.includes("rawMessage.revision <= lastSnapshotRevisionRef.current"), "Joiners ignore stale snapshots.");
+  assert(gameStateSource.includes("applySyncProfileUpdate") && gameStateSource.includes("applySyncDraftConfirm") && gameStateSource.includes("applySyncPlayerQuit"), "Host command application is centralized in game helpers.");
+  assert(gameStateSource.includes("SYNC_HOST_GAME_KEY") && appSource.includes("saveSyncHostGame(nextGame, localPlayerId, revision)") && appSource.includes("readSyncHostGame()"), "Sync host active games persist separately from local games.");
   assert(!gameTypesSource.includes("noticeTerritoryId") && !gameTypesSource.includes("noticePlayerId"), "Shared draft state does not store local notices.");
   assert(!gameStateSource.includes("timerMs(state.config.pickTimeLimit) ?? 0") && gameStateSource.includes('draft: state.mode === "sync" ? beginDraftTimer'), "Sync draft timers preserve unlimited pick time.");
   assert(gameStateSource.includes("expandRemovedTroops(removedTroopPool") && gameStateSource.includes('troopType === "leader" ? randomMixtureTroop() : troopType'), "Removed-player leaders are replaced by random regular troops.");
   assert(!gameTypesSource.includes("allocationWaiting"), "AppPhase does not include allocationWaiting.");
   assert(gameStateSource.includes('return { ...state, phase: "allocation", allocation: nextAllocation };'), "Sync ready keeps the shared phase in allocation.");
+  assert(gameStateSource.includes("const readyAllocation = markAllocationReady(allocation, playerId)") && gameStateSource.includes("allAllocationsReady(readyAllocation, state.players)"), "Sync ready preserves the allocation timer until every player is ready.");
+  assert(gameStateSource.includes("function completeTimedOutSyncAllocations") && appSource.includes("completeTimedOutSyncAllocations(current)"), "Sync allocation timeout uses the host-authoritative timeout completion helper.");
+  assert(gameStateSource.includes("currentPlayerAllocation.ready || currentPlayerAllocation.randomCompleted"), "Host ignores stale allocation updates after a player is ready or random-completed.");
+  assert(appSource.includes("applySyncAllocationUpdate(current, playerId, rawMessage.allocation)"), "Host allocation updates go through the sync allocation merge contract.");
   assert(gameStateSource.includes('value === "allocationWaiting" ? "allocation"'), "Old allocationWaiting saves normalize to allocation.");
   assert(appSource.includes('game.mode === "sync" && game.phase === "allocation" && localAllocationReady'), "Ready page is derived from this device's ready state.");
   assert(appSource.includes("function ReadyColumn") && appSource.includes('title="Ready"') && appSource.includes('title="Waiting"'), "Allocation ready page uses ready and waiting columns.");
+  assert(allocationWaitingTopBarSource(appSource).includes("timerRemaining={timerRemaining}"), "Allocation ready page keeps the shared timer visible.");
   assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
   assert(appSource.includes("data-qr-text") && appSource.includes("handlePaste"), "QR scanner supports paste-driven verification.");
   assert(appSource.includes("canAdvance={syncRole === \"host\"") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
@@ -217,6 +229,16 @@ function showDraftPanelSource(source) {
 
   if (!match) {
     throw new Error("Missing showDraftPanel expression.");
+  }
+
+  return match[0];
+}
+
+function allocationWaitingTopBarSource(source) {
+  const match = source.match(/\{showAllocationWaiting && allocationPlayer \? \([\s\S]*?<GameTopBar[\s\S]*?\/>\s*\) : null\}/);
+
+  if (!match) {
+    throw new Error("Missing allocation waiting top bar.");
   }
 
   return match[0];

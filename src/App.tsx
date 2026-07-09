@@ -23,17 +23,23 @@ import {
   PLAYER_COLORS,
   TROOP_ALLOCATION_TIME_LIMITS,
   TROOP_TYPES,
+  applySyncDraftConfirm,
   adjustTerritoryTroop,
   activePlayer,
   allocationComplete,
+  applySyncAllocationUpdate,
+  applySyncPlayerConnectionStatus,
+  applySyncPlayerQuit,
+  applySyncProfileUpdate,
   armyCountsForMarker,
   beginAllocationTurn,
   beginAllocationTimer,
   beginDraftTimer,
   canAddTroop,
   canPickTerritory,
-  clearDraftTimer,
   clearLocalGame,
+  clearSyncHostGame,
+  completeTimedOutSyncAllocations,
   confirmTerritoryPick,
   createInitialGameState,
   createOwnershipMap,
@@ -50,11 +56,14 @@ import {
   pauseAllocationTimer,
   randomCompleteAllocationForPlayer,
   randomPickForActivePlayer,
+  pauseSyncGame,
   readLocalGame,
+  readSyncHostGame,
   remainingTerritoryIds,
   remainingTroops,
   removePlayerFromDraft,
   saveLocalGame,
+  saveSyncHostGame,
   startDraft,
   startAllocation,
   startGameMapAfterAllocation,
@@ -95,6 +104,8 @@ import { SyncHostTransport, SyncJoinTransport, type SyncConnectionStatus, type S
 
 type SyncRole = "host" | "joiner" | null;
 
+type SyncSessionState = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected" | "hostEnded";
+
 type SyncCameraMode = "hostOffer" | "joinAnswer" | null;
 
 type SyncDraftNotice = {
@@ -130,14 +141,21 @@ const DRAFT_STYLE_LABELS: Record<DraftStyle, string> = {
 };
 
 function App() {
-  const [game, setGame] = useState<GameState>(() => readLocalGame() ?? createInitialGameState());
+  const initialSyncHostRef = useRef<ReturnType<typeof readSyncHostGame> | undefined>(undefined);
+  if (initialSyncHostRef.current === undefined) {
+    initialSyncHostRef.current = readSyncHostGame();
+  }
+
+  const restoredSyncHost = initialSyncHostRef.current;
+  const [game, setGame] = useState<GameState>(() => restoredSyncHost?.game ?? readLocalGame() ?? createInitialGameState());
   const [draftName, setDraftName] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [syncEntryOpen, setSyncEntryOpen] = useState(false);
   const [syncName, setSyncName] = useState(() => syncProfileFromPreferences().name);
   const [syncColor, setSyncColor] = useState<PlayerColor | null>(() => syncProfileFromPreferences().color ?? "green");
-  const [syncRole, setSyncRole] = useState<SyncRole>(null);
-  const [localPlayerId, setLocalPlayerId] = useState<string | null>(null);
+  const [syncRole, setSyncRole] = useState<SyncRole>(() => restoredSyncHost ? "host" : null);
+  const [syncSession, setSyncSession] = useState<SyncSessionState>(() => restoredSyncHost ? "connected" : "idle");
+  const [localPlayerId, setLocalPlayerId] = useState<string | null>(() => restoredSyncHost?.localPlayerId ?? null);
   const [syncQrText, setSyncQrText] = useState("");
   const [syncAnswerText, setSyncAnswerText] = useState("");
   const [syncCameraMode, setSyncCameraMode] = useState<SyncCameraMode>(null);
@@ -160,6 +178,8 @@ function App() {
   const latestSyncRoleRef = useRef(syncRole);
   const latestLocalPlayerIdRef = useRef(localPlayerId);
   const lastSentAllocationRef = useRef("");
+  const syncRevisionRef = useRef(restoredSyncHost?.revision ?? 0);
+  const lastSnapshotRevisionRef = useRef(0);
   const active = activePlayer(game);
   const activeDraftProgress = active ? draftProgressForPlayer(game, active.id) : null;
   const ownership = game.draft?.ownership ?? createOwnershipMap();
@@ -173,7 +193,9 @@ function App() {
   const gameMapViewerId = game.mode === "local"
     ? localPlayerId ?? game.players[0]?.id ?? null
     : localPlayerId;
-  const canControlActivePlayer = game.mode === "local" || (game.mode === "sync" && active?.id === localPlayerId);
+  const syncJoinerBlocked = game.mode === "sync" && syncRole === "joiner" && (syncSession === "reconnecting" || syncSession === "disconnected" || syncSession === "hostEnded");
+  const canSendSyncCommand = game.mode !== "sync" || syncRole !== "joiner" || syncSession === "connected";
+  const canControlActivePlayer = game.mode === "local" || (game.mode === "sync" && canSendSyncCommand && active?.id === localPlayerId);
   const viewerSelectedTerritoryId = game.phase === "draft"
     ? canControlActivePlayer ? pendingDraftTerritoryId : null
     : game.phase === "allocation" && allocationPlayerId
@@ -217,12 +239,13 @@ function App() {
         ? game.allocation?.timerRemainingMs ?? null
         : game.draft?.timerRemainingMs ?? null;
   const canControlSetup = game.mode === "local" || syncRole === "host";
-  const canDraftOnMap = game.phase === "draft" &&
+  const canDraftOnMap = !syncJoinerBlocked &&
+    game.phase === "draft" &&
     canControlActivePlayer &&
     Boolean(active) &&
     !game.draft?.resultTerritoryId;
-  const canAllocateOnMap = game.phase === "allocation" && Boolean(allocationPlayerId) && allocationBuildSubmitted && !localAllocationReady;
-  const canInspectGameMap = game.phase === "gameMap";
+  const canAllocateOnMap = !syncJoinerBlocked && game.phase === "allocation" && Boolean(allocationPlayerId) && allocationBuildSubmitted && !localAllocationReady;
+  const canInspectGameMap = !syncJoinerBlocked && game.phase === "gameMap";
   const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
   const showAllocationControls = game.phase === "allocation" && !localAllocationReady && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const showArmyBuildModal = Boolean(showAllocationControls && allocationPlayer && !allocationBuildSubmitted);
@@ -237,6 +260,7 @@ function App() {
   const canUseMapCameraControls = !Boolean(
     showArmyBuildModal ||
     syncCameraMode ||
+    syncJoinerBlocked ||
     isEndGamePromptOpen ||
     isRestartGamePromptOpen ||
     game.phase === "paused" ||
@@ -345,12 +369,12 @@ function App() {
 
   useEffect(() => {
     if (game.mode === "sync" && syncRole === "host") {
-      hostTransportRef.current?.broadcast({ type: "gameState", game });
+      broadcastSnapshot(game);
     }
-  }, [game, syncRole]);
+  }, [game, localPlayerId, syncRole]);
 
   useEffect(() => {
-    if (game.mode !== "sync" || syncRole !== "joiner" || !localPlayerId || !game.allocation) {
+    if (game.mode !== "sync" || syncRole !== "joiner" || !canSendSyncCommand || !localPlayerId || !game.allocation) {
       return;
     }
 
@@ -366,7 +390,7 @@ function App() {
 
     lastSentAllocationRef.current = serialized;
     joinTransportRef.current?.send({ type: "allocationUpdate", allocation });
-  }, [game.allocation, game.mode, localPlayerId, syncRole]);
+  }, [canSendSyncCommand, game.allocation, game.mode, localPlayerId, syncRole]);
 
   useEffect(() => {
     const previousPhase = previousPhaseRef.current;
@@ -415,6 +439,7 @@ function App() {
     if (
       game.mode !== "sync" ||
       syncRole !== "joiner" ||
+      !canSendSyncCommand ||
       !pendingDraftTerritoryId ||
       !canControlActivePlayer ||
       game.phase !== "draft" ||
@@ -426,7 +451,7 @@ function App() {
 
     joinTransportRef.current?.send({ type: "draftConfirm", territoryId: pendingDraftTerritoryId });
     setPendingDraftTerritoryId(null);
-  }, [canControlActivePlayer, game.draft?.timerEndsAt, game.mode, game.phase, now, pendingDraftTerritoryId, syncRole]);
+  }, [canControlActivePlayer, canSendSyncCommand, game.draft?.timerEndsAt, game.mode, game.phase, now, pendingDraftTerritoryId, syncRole]);
 
   useEffect(() => {
     if (game.mode === "sync" && syncRole !== "host") {
@@ -443,14 +468,7 @@ function App() {
       }
 
       if (current.mode === "sync") {
-        let next = current;
-        for (const player of current.players) {
-          if (!next.allocation?.playerAllocations[player.id]?.ready) {
-            next = randomCompleteAllocationForPlayer(next, player.id);
-          }
-        }
-
-        return { ...next, phase: "allocation" };
+        return completeTimedOutSyncAllocations(current);
       }
 
       return allocationPlayerId
@@ -499,9 +517,12 @@ function App() {
 
   function startLocalSetup() {
     endSyncTransports();
+    clearSyncHostGame();
     setSyncEntryOpen(false);
     setSyncRole(null);
+    setSyncSession("idle");
     setLocalPlayerId(null);
+    lastSentAllocationRef.current = "";
     setGame({
       ...createInitialGameState(),
       config: gameConfigFromPreferences(),
@@ -515,7 +536,15 @@ function App() {
     const profile = syncProfileFromPreferences();
 
     clearLocalGame();
+    clearSyncHostGame();
+    endSyncTransports();
+    syncRevisionRef.current = 0;
+    lastSnapshotRevisionRef.current = 0;
+    lastSentAllocationRef.current = "";
     setSyncEntryOpen(true);
+    setSyncRole(null);
+    setSyncSession("idle");
+    setLocalPlayerId(null);
     setSyncName(profile.name);
     setSyncColor(profile.color ?? "green");
     setGame({
@@ -563,7 +592,12 @@ function App() {
     endSyncTransports();
     hostTransportRef.current = hostTransport;
     clearLocalGame();
+    clearSyncHostGame();
+    syncRevisionRef.current = 0;
+    lastSnapshotRevisionRef.current = 0;
+    lastSentAllocationRef.current = "";
     setSyncRole("host");
+    setSyncSession("connected");
     setLocalPlayerId(hostPlayer.id);
     setSyncAnswerText("");
     setSyncEntryOpen(false);
@@ -645,9 +679,13 @@ function App() {
 
     const localPlayer = { ...createPlayer(name), color: syncColor };
     const joinTransport = new SyncJoinTransport({
-      onClosed: () => setSyncMessage("Host disconnected"),
+      onClosed: () => {
+        setSyncSession("disconnected");
+        setSyncMessage("Host disconnected");
+      },
       onMessage: handleJoinerMessage,
       onOpen: () => {
+        setSyncSession("connected");
         setSyncMessage("Connected");
         joinTransportRef.current?.send({
           type: "profileUpdate",
@@ -659,6 +697,7 @@ function App() {
     });
 
     setSyncCameraMode(null);
+    setSyncSession("connecting");
     setSyncMessage("QR found. Creating answer");
     try {
       const answer = await joinTransport.createAnswer(value, localPlayer);
@@ -667,7 +706,10 @@ function App() {
       joinTransportRef.current = joinTransport;
       clearLocalGame();
       setSyncRole("joiner");
+      setSyncSession("connecting");
       setLocalPlayerId(localPlayer.id);
+      lastSnapshotRevisionRef.current = 0;
+      lastSentAllocationRef.current = "";
       setSyncAnswerText(answer.answerText);
       setSyncQrText("");
       setSyncEntryOpen(false);
@@ -700,56 +742,26 @@ function App() {
     }
 
     if (rawMessage.type === "profileUpdate") {
-      setGame((current) => ({
-        ...current,
-        players: current.players.map((player) => {
-          if (player.id !== playerId) {
-            return player;
-          }
-
-          return {
-            ...player,
-            name: rawMessage.name !== undefined && !player.nameLocked ? rawMessage.name.trim() : player.name,
-            color: rawMessage.color !== undefined && !player.colorLocked ? rawMessage.color : player.color,
-            connectionStatus: "connected",
-          };
-        }),
+      setGame((current) => applySyncProfileUpdate(current, playerId, {
+        color: rawMessage.color,
+        name: rawMessage.name,
       }));
       return;
     }
 
     if (rawMessage.type === "draftConfirm") {
-      setGame((current) => activePlayer(current)?.id === playerId
-        ? confirmTerritoryPick(current, rawMessage.territoryId, Date.now())
-        : current);
+      setGame((current) => applySyncDraftConfirm(current, playerId, rawMessage.territoryId, Date.now()));
       return;
     }
 
     if (rawMessage.type === "allocationUpdate") {
-      setGame((current) => {
-        if (!current.allocation || !current.players.some((player) => player.id === playerId)) {
-          return current;
-        }
-
-        const allocation = {
-          ...current.allocation,
-          playerAllocations: {
-            ...current.allocation.playerAllocations,
-            [playerId]: rawMessage.allocation,
-          },
-        };
-
-        return { ...current, allocation };
-      });
+      setGame((current) => applySyncAllocationUpdate(current, playerId, rawMessage.allocation));
       return;
     }
 
     if (rawMessage.type === "quit") {
       hostTransportRef.current?.removePeer(playerId);
-      setGame((current) => {
-        const next = removePlayerFromDraft(current, playerId);
-        return current.phase === "draft" && next.phase !== "home" ? pauseSyncGame(next) : next;
-      });
+      setGame((current) => applySyncPlayerQuit(current, playerId));
     }
   }, []);
 
@@ -758,31 +770,36 @@ function App() {
       return;
     }
 
-    if (rawMessage.type === "hostQuit") {
+    if (rawMessage.type === "hostEnded") {
       resetAppToHome();
       return;
     }
 
-    if (rawMessage.type !== "gameState") {
+    if (rawMessage.type !== "snapshot") {
       return;
     }
 
+    if (rawMessage.revision <= lastSnapshotRevisionRef.current) {
+      return;
+    }
+
+    lastSnapshotRevisionRef.current = rawMessage.revision;
+    setSyncSession("connected");
     setGame(rawMessage.game);
   }, []);
 
   const handleHostPeerClosed = useCallback((playerId: string) => {
-    setGame((current) => markSyncPlayerStatus(current, playerId, "disconnected"));
+    setGame((current) => applySyncPlayerConnectionStatus(current, playerId, "disconnected"));
   }, []);
 
   const handleHostPeerStatus = useCallback((playerId: string, status: SyncConnectionStatus) => {
-    setGame((current) => {
-      const playerStatus = status === "connected" ? "connected" : status === "reconnecting" ? "reconnecting" : "disconnected";
-      const next = markSyncPlayerStatus(current, playerId, playerStatus);
-      return status !== "connected" && (current.phase === "draft" || current.phase === "allocation") ? pauseSyncGame(next) : next;
-    });
+    const playerStatus = status === "connected" ? "connected" : status === "reconnecting" ? "reconnecting" : "disconnected";
+
+    setGame((current) => applySyncPlayerConnectionStatus(current, playerId, playerStatus));
   }, []);
 
   const handleJoinerConnectionStatus = useCallback((status: SyncConnectionStatus) => {
+    setSyncSession(status === "connected" ? "connected" : status === "reconnecting" ? "reconnecting" : "disconnected");
     setSyncMessage(status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting" : "Disconnected");
   }, []);
 
@@ -806,6 +823,10 @@ function App() {
 
   function updatePlayer(playerId: string, updates: Partial<GamePlayer>) {
     if (game.mode === "sync" && syncRole === "joiner") {
+      if (!canSendSyncCommand) {
+        return;
+      }
+
       const player = game.players.find((candidate) => candidate.id === playerId);
 
       if (!player || player.id !== localPlayerId) {
@@ -957,6 +978,10 @@ function App() {
   }
 
   function pressTerritory(territoryId: string) {
+    if (syncJoinerBlocked) {
+      return;
+    }
+
     if (game.phase === "allocation" && allocationPlayerId) {
       if (ownership[territoryId] === allocationPlayerId) {
         setAllocationSelectedTerritoryId(territoryId);
@@ -986,6 +1011,10 @@ function App() {
     }
 
     if (game.mode === "sync" && syncRole === "joiner") {
+      if (!canSendSyncCommand) {
+        return;
+      }
+
       joinTransportRef.current?.send({ type: "draftConfirm", territoryId: pendingDraftTerritoryId });
       setPendingDraftTerritoryId(null);
       return;
@@ -998,7 +1027,7 @@ function App() {
   }
 
   function changeArmyMarker(marker: ArmyMarker) {
-    if (!allocationPlayerId) {
+    if (!allocationPlayerId || syncJoinerBlocked) {
       return;
     }
 
@@ -1006,7 +1035,7 @@ function App() {
   }
 
   function submitCurrentArmyBuild() {
-    if (!allocationPlayerId) {
+    if (!allocationPlayerId || syncJoinerBlocked) {
       return;
     }
 
@@ -1014,7 +1043,7 @@ function App() {
   }
 
   function adjustSelectedTroop(troopType: TroopType, delta: 1 | -1) {
-    if (!allocationPlayerId || !allocationSelectedTerritoryId) {
+    if (!allocationPlayerId || !allocationSelectedTerritoryId || syncJoinerBlocked) {
       return;
     }
 
@@ -1022,7 +1051,7 @@ function App() {
   }
 
   function finishCurrentAllocation() {
-    if (!allocationPlayerId) {
+    if (!allocationPlayerId || syncJoinerBlocked) {
       return;
     }
 
@@ -1202,7 +1231,7 @@ function App() {
 
   function endGame() {
     if (game.mode === "sync" && syncRole === "host") {
-      hostTransportRef.current?.broadcast({ type: "hostQuit" });
+      hostTransportRef.current?.broadcast({ type: "hostEnded" });
     }
 
     if (game.mode === "sync" && syncRole === "joiner") {
@@ -1232,8 +1261,13 @@ function App() {
   function resetAppToHome() {
     endSyncTransports();
     clearLocalGame();
+    clearSyncHostGame();
+    syncRevisionRef.current = 0;
+    lastSnapshotRevisionRef.current = 0;
+    lastSentAllocationRef.current = "";
     setSyncEntryOpen(false);
     setSyncRole(null);
+    setSyncSession("idle");
     setLocalPlayerId(null);
     setSyncQrText("");
     setSyncAnswerText("");
@@ -1253,6 +1287,21 @@ function App() {
     joinTransportRef.current?.close();
     hostTransportRef.current = null;
     joinTransportRef.current = null;
+  }
+
+  function broadcastSnapshot(nextGame: GameState) {
+    if (syncRole !== "host") {
+      return;
+    }
+
+    const revision = syncRevisionRef.current + 1;
+    syncRevisionRef.current = revision;
+    saveSyncHostGame(nextGame, localPlayerId, revision);
+    hostTransportRef.current?.broadcast({
+      type: "snapshot",
+      revision,
+      game: nextGame,
+    });
   }
 
   return (
@@ -1323,6 +1372,7 @@ function App() {
           onPause={game.mode === "local" || syncRole === "host" ? pauseDraft : undefined}
           pauseLabel="Pause allocation"
           player={allocationPlayer}
+          timerRemaining={timerRemaining}
           title={allocationPlayer.name}
         />
       ) : null}
@@ -1479,6 +1529,13 @@ function App() {
           message="Restart this game and return to setup?"
           onCancel={() => setIsRestartGamePromptOpen(false)}
           onConfirm={restartPausedGame}
+        />
+      ) : null}
+
+      {syncJoinerBlocked ? (
+        <SyncSessionBlocker
+          onHome={syncSession === "reconnecting" ? undefined : resetAppToHome}
+          session={syncSession}
         />
       ) : null}
     </main>
@@ -2278,6 +2335,29 @@ function DecisionDialog({
   );
 }
 
+function SyncSessionBlocker({ onHome, session }: { onHome?: () => void; session: SyncSessionState }) {
+  const message = session === "hostEnded"
+    ? "Host ended the game"
+    : session === "disconnected"
+      ? "Host disconnected"
+      : "Reconnecting";
+
+  return (
+    <div className="modal-scrim sync-session-scrim">
+      <section className="modal-panel decision-modal sync-session-dialog" role="alertdialog" aria-label="Sync connection">
+        <h2>{message}</h2>
+        {onHome ? (
+          <div className="modal-actions">
+            <button className="icon-button primary large" type="button" onClick={onHome} aria-label="Return home">
+              <Check size={24} />
+            </button>
+          </div>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
 function PanelHeader({ closeLabel = "Close", onClose, title }: { closeLabel?: string; onClose: () => void; title?: string }) {
   return (
     <div className={title ? "panel-header" : "panel-header icon-only"}>
@@ -2762,26 +2842,6 @@ function troopName(color: PlayerColor | null, troopType: TroopType) {
   return TROOP_NAME_BY_SIDE[troopSide(color)][troopType];
 }
 
-function pauseSyncGame(state: GameState): GameState {
-  return {
-    ...state,
-    phase: "paused",
-    draft: state.draft
-      ? clearDraftTimer({
-          ...state.draft,
-          resultTerritoryId: null,
-          resultPlayerId: null,
-        }, state.config)
-      : state.draft,
-    allocation: state.allocation
-      ? {
-          ...state.allocation,
-          timerEndsAt: null,
-        }
-      : state.allocation,
-  };
-}
-
 function syncDraftNoticeFromOwnershipChange(previous: GameState, next: GameState): Omit<SyncDraftNotice, "key"> | null {
   if (previous.mode !== "sync" || next.mode !== "sync" || !previous.draft || !next.draft || next.phase !== "draft") {
     return null;
@@ -2801,13 +2861,6 @@ function syncDraftNoticeFromOwnershipChange(previous: GameState, next: GameState
   }
 
   return null;
-}
-
-function markSyncPlayerStatus(state: GameState, playerId: string, connectionStatus: GamePlayer["connectionStatus"]): GameState {
-  return {
-    ...state,
-    players: state.players.map((player) => player.id === playerId ? { ...player, connectionStatus } : player),
-  };
 }
 
 function formatQrHandshakeError(error: unknown) {

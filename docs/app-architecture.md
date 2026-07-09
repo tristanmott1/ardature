@@ -262,9 +262,9 @@ Territory troop data should track heavy, cavalry, elite, and leader counts. The 
 
 ## Persistence
 
-Active game recovery and setup preferences should stay separate. Active local games use the saved game key and can restore in-progress setup, draft, allocation, or read-only map state. Setup preferences use their own key and only remember convenience defaults: local player names/colors/order, shared game configuration, and this device's sync name/color.
+Active game recovery and setup preferences should stay separate. Active local games use the saved local game key and can restore in-progress setup, draft, allocation, or read-only map state. Active sync host games use a separate sync-host key. Setup preferences use their own key and only remember convenience defaults: local player names/colors/order, shared game configuration, and this device's sync name/color.
 
-Starting a new local setup should restore local setup preferences with fresh player IDs. Starting sync should restore only this device's sync profile, and sync hosts should reuse the saved game configuration defaults. Remote sync players should never be written into local setup preferences.
+Starting a new local setup should restore local setup preferences with fresh player IDs. Starting sync should restore only this device's sync profile, and sync hosts should reuse the saved game configuration defaults. Remote sync players should never be written into local setup preferences. Host refresh during active sync play restores the saved host game into paused reconnect state, with timers stopped and non-host peers marked disconnected.
 
 ## Sync Architecture
 
@@ -276,14 +276,22 @@ Sync mode should be copied and adapted from Qwixx rather than literally reused:
 - Ardatúrë-specific payload kinds and compact QR prefixes.
 - Host-authoritative setup, draft, timer, ownership, pause, reconnect, and removal state.
 
-The host is always one of the players and owns the canonical game state. Joiners send requests and render the latest host state. Joiners can edit their own unlocked name/color during setup, while the host can edit any name/color and lock or unlock those fields. During sync draft, joiners send only confirmed draft picks, not pending selection previews. During sync allocation, joiners send actual allocation updates, not selected-territory UI state. Ready/waiting is derived locally from each player's `ready` flag while the shared phase remains `allocation` until the host starts the map. The host owns the canonical allocation timer and advances only after every remaining player is ready or after timeout random-completion.
+The host is always one of the players and owns the canonical `GameState`. Sync connection/session state is separate UI/session state owned by `App`. Joiners send requests and render the latest host snapshot only while connected. If a joiner loses the host, gameplay controls become inert behind a blocking reconnect/disconnected state. If the host intentionally ends the game, it sends `hostEnded` and joiners return home.
+
+Host-to-joiner game updates are revisioned snapshots:
+
+```ts
+{ type: "snapshot", revision, game }
+```
+
+Joiners ignore stale snapshots. Joiner-to-host messages are intentionally small: `profileUpdate`, `draftConfirm`, `allocationUpdate`, and `quit`. The host validates every payload before it reaches game logic. Joiners can edit their own unlocked name/color during setup, while the host can edit any name/color and lock or unlock those fields. During sync draft, joiners send only confirmed draft picks, not pending selection previews. During sync allocation, joiners send actual allocation updates, not selected-territory UI state. Ready/waiting is derived locally from each player's `ready` flag while the shared phase remains `allocation` until the host starts the map. The host owns the canonical allocation timer and advances only after every remaining player is ready or after timeout random-completion.
 
 During sync draft, graceful quit and ungraceful disconnect are separate:
 
 - Graceful quit removes the player, clears their territories, returns those territories to the draft pool, and pauses the game.
 - Ungraceful disconnect keeps the player and their territories, marks them disconnected, and pauses the game.
 
-Paused sync games are host-persisted. Host refresh during an active draft restores into the paused reconnect lobby. The host can unpause only when at least 2 players remain and every remaining player is connected.
+Paused sync games are host-persisted separately from local pass-and-play saves. Host refresh during active sync draft or allocation restores into the paused reconnect lobby. The host can unpause only when at least 2 players remain and every remaining player is connected. Automatic WebRTC reconnect can clear reconnecting state when the transport recovers. Full QR reconnect slot selection is future work and should not be treated as completed.
 
 Local and sync modes use the same pause icon/button placement during draft. In local mode, the pause button is always visible because the device owns the whole game. In sync mode, only the host sees the pause button.
 

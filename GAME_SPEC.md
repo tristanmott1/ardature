@@ -173,7 +173,7 @@ Rules:
 
 In local mode, allocation uses pass-and-play turns in configured turn order, skipping removed players. The allocation timer includes both army build and territory placement. If the timer expires, the app locks the current army mixture, randomly allocates remaining troops, shows a brief message, and advances through a handoff screen.
 
-In sync mode, every player allocates at the same time. The host owns the canonical allocation timer. Players press ready when done and cannot manually unready. Ready players see a local waiting page with all remaining players split into `READY` and `WAITING` columns, while unready players stay in allocation. The host can advance only after every remaining player is ready. If the timer expires, the host randomly completes allocation for every unready player.
+In sync mode, every player allocates at the same time. The host owns the canonical allocation timer. Players press ready when done and cannot manually unready. One player becoming ready does not stop the shared timer for the remaining players. Ready players see a local waiting page with all remaining players split into `READY` and `WAITING` columns, while unready players stay in allocation. The host can advance only after every remaining player is ready. If the timer expires, the host randomly completes allocation for every unready player, and that host-finalized completion cannot be overwritten by stale player updates.
 
 If a player is removed during allocation, their territories and troops are redistributed to remaining players using the exact redistribution rules in `docs/troop-allocation-v1.md`. Additional troops received from a removed player are additive and do not alter the recipient's army-build budget.
 
@@ -902,11 +902,11 @@ Graceful quit and ungraceful disconnect are different:
 
 - Graceful quit sends a quit message. The host removes that player, clears their territories, returns those territories to the draft pool, pauses the draft, and shows the pause page without that player.
 - Ungraceful disconnect keeps the player in the game as disconnected, keeps their territories owned, and forces pause.
-- Host end-game sends a host-quit message so joiners return home instead of staying in a disconnected game.
+- Host end-game sends `hostEnded` so joiners return home instead of staying in a disconnected game.
 
-Disconnected players should automatically attempt to reconnect when possible, following the Qwixx-style reconnect behavior. If automatic reconnect does not work, the QR handshake is the fallback.
+Disconnected players should automatically attempt to reconnect when possible, following the Qwixx-style reconnect behavior. Joiner gameplay is blocked while the host is reconnecting or disconnected. Full QR reconnect slot selection is future work and should not be treated as completed until the host and joiner can explicitly reconnect an existing player identity.
 
-Fallback reconnect flow:
+Future fallback reconnect flow:
 
 1. Host shows a reusable paused-game QR.
 2. The joiner scans it and sees the game information plus disconnected player names.
@@ -938,7 +938,18 @@ The host is authoritative for shared game state:
 
 Joined devices send action requests to the host.
 
-The host validates each request against the current game state, applies valid actions, and broadcasts the resulting state or view updates.
+The completed sync contract through troop allocation separates authoritative game facts from connection/session state:
+
+- `GameState` stores game facts only.
+- `App` owns sync session state such as connecting, connected, reconnecting, disconnected, and host-ended.
+- Host-to-joiner updates are revisioned snapshots: `{ type: "snapshot", revision, game }`.
+- Joiners ignore stale snapshots.
+- Joiner-to-host commands are limited to `profileUpdate`, `draftConfirm`, `allocationUpdate`, and `quit`.
+- The host validates every command against the current game state before applying it.
+- Host intentional end uses `hostEnded`.
+- Old unversioned `gameState`, `hostQuit`, and pending-pick messages are not part of the current sync contract.
+
+The host applies valid actions, persists active sync-host state separately from local pass-and-play saves, and broadcasts the resulting revisioned snapshot.
 
 Because this is for personal use, hidden state may exist client-side. However, the UI should still render strictly from the local player's viewer perspective. When practical, the host may send redacted player-specific views to make accidental spoilers less likely.
 
@@ -1202,7 +1213,7 @@ The following decisions are intentionally open:
 - Weighted die probability curve.
 - Spy success probability by distance.
 - Fortify cavalry radius final value.
-- Exact sync wire message names and payload schemas.
+- Future combat-specific sync message names and payload schemas.
 
 These should be resolved before or during the relevant implementation pass.
 
@@ -1218,7 +1229,7 @@ Suggested build order:
 6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardatúrë-specific payload names and prefixes.
 7. Implement sync setup with host/join flows, joiner editable name/color, host edit/lock/unlock, duplicate-color blocking, host roster controls, and setup broadcasts.
 8. Implement sync draft as host-authoritative state: host timers, pick requests, confirmed picks, random fallback picks, broadcasts, and read-only views for inactive devices.
-9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, QR reconnect fallback, and unpause validation.
+9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, blocked joiner disconnect state, and unpause validation. QR reconnect slot selection remains future work.
 10. Update verification to cover local setup/draft/pause, sync handshake/setup, sync draft, timeout behavior, pause/reconnect behavior, persistence recovery, and map interaction modes.
 11. Generate territory visual centers from the large green circles in the territory drawing.
 12. Implement army-build triangle, troop budget calculation, and exact rounded troop counts.
@@ -1232,6 +1243,12 @@ Suggested build order:
 20. Implement arrow challenge.
 21. Implement effectiveness and weighted dice.
 22. Implement casualty sampling and post-battle reveals.
+
+Current implementation status:
+
+- Steps 1 through 16 are implemented for the current setup, draft, troop allocation, and read-only map scope.
+- Sync mode now uses the cleaned contract documented above: revisioned host snapshots, validated joiner commands, explicit `hostEnded`, blocked joiner play on host loss, and separate sync-host active game persistence.
+- Full QR reconnect slot selection is not implemented yet.
 23. Implement fortify.
 24. Implement elimination and game over.
 
@@ -1243,7 +1260,7 @@ Before considering the first playable version complete:
 - Verify sync setup supports Qwixx-style QR handshake, host lobby, joiner lobby, name/color edits, host locks, duplicate-color blocking, and host-authoritative setup state.
 - Verify local and sync drafts support snake, round-robin, random simulation, timed picks, confirmation timeout, random timeout fallback, and transition into troop allocation.
 - Verify local pause preserves the active pick timer, pending confirmation, and result popup state, and supports player removal without reconnect state.
-- Verify sync pause/reconnect supports manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, QR reconnect fallback, and unpause validation.
+- Verify sync pause/reconnect supports manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, blocked joiner disconnect state, and unpause validation.
 - Verify every territory is assigned to exactly one player before troop allocation.
 - Verify territory visual centers are generated from the large green circles in the territory drawing and are used for troop-count circles.
 - Verify army-build triangle barycentric coordinates, leader budget reservation, effective triangle budget calculation, and rounded troop count correction.

@@ -127,14 +127,20 @@ Sync mode is simultaneous and host-authoritative.
 - Every player builds and allocates on their own device at the same time.
 - The troop allocation timer includes both army build and territory allocation.
 - The host owns the canonical allocation timer.
+- The host remains in shared `phase: "allocation"` until it starts the read-only map; the ready page is local UI derived from this device's ready flag.
 - If the timer is unlimited, there is no timer and no automatic random completion.
 - When a player finishes, they press ready.
 - Ready is final. Players cannot manually unready.
+- A ready player's allocation remains final even if a stale sync update arrives from that device.
 - Ready players go to a local waiting page while unready players stay in allocation.
 - The waiting page shows all remaining players in two columns: `READY` and `WAITING`.
+- The waiting page keeps the same colored top bar and shows the shared allocation timer when one is running.
 - All players can see readiness status, not only the host.
 - The host can advance only after every remaining player is ready.
+- One player becoming ready does not stop the shared timer for the remaining players.
 - If the host-authoritative timer expires, the host randomly completes allocation for every unready player using the same random completion rules as local mode.
+- Host random completion is final and cannot be overwritten by later stale allocation updates from an unready player's device.
+- Joiners send allocation updates as commands. The host accepts them only during allocation, only for that player, and never over a ready or random-completed allocation.
 
 ## Allocation Pause, Disconnect, And Removal
 
@@ -143,7 +149,8 @@ Sync allocation uses the same pause/reconnect model as sync draft:
 - Any ungraceful disconnect during sync allocation forces pause.
 - The disconnected player remains in the game as disconnected/reconnecting.
 - The host cannot unpause until every remaining player is connected and at least 2 players remain.
-- Reconnect uses the same automatic reconnect and QR fallback model as sync draft.
+- Joiners cannot continue allocating while the host is reconnecting or disconnected; controls remain visible only as inert background behind the blocking session UI.
+- Automatic WebRTC reconnect may restore the connection. QR reconnect slot selection is future work and is not part of this milestone's completed behavior.
 
 If a player is removed during allocation:
 

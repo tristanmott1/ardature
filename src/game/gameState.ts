@@ -10,6 +10,7 @@ import type {
   GamePlayer,
   GameState,
   PickTimeLimit,
+  PlayerAllocation,
   PlayerColor,
   TerritoryOwnerMap,
   TroopAllocationTimeLimit,
@@ -21,6 +22,7 @@ export const PLAYER_COLORS: PlayerColor[] = ["green", "blue", "yellow", "red", "
 export const PICK_TIME_LIMITS: PickTimeLimit[] = [5, 10, 15, 0];
 export const TROOP_ALLOCATION_TIME_LIMITS: TroopAllocationTimeLimit[] = [60, 120, 180, 240, 300, 0];
 export const LOCAL_GAME_KEY = "ardature.localGame.v1";
+export const SYNC_HOST_GAME_KEY = "ardature.syncHostGame.v1";
 export const TROOP_TYPES: TroopType[] = ["heavy", "cavalry", "elite", "leader"];
 export const MIXTURE_TROOP_TYPES: Exclude<TroopType, "leader">[] = ["heavy", "cavalry", "elite"];
 
@@ -440,11 +442,16 @@ export function finishAllocationForPlayer(state: GameState, playerId: string): G
     return state;
   }
 
-  const nextAllocation = clearAllocationTimer(markAllocationReady(allocation, playerId), state.config);
   if (state.mode === "sync") {
+    const readyAllocation = markAllocationReady(allocation, playerId);
+    const nextAllocation = allAllocationsReady(readyAllocation, state.players)
+      ? clearAllocationTimer(readyAllocation, state.config)
+      : readyAllocation;
+
     return { ...state, phase: "allocation", allocation: nextAllocation };
   }
 
+  const nextAllocation = clearAllocationTimer(markAllocationReady(allocation, playerId), state.config);
   const nextIndex = nextLocalAllocationIndex(nextAllocation, state.players);
   if (nextIndex === null) {
     return { ...state, phase: "gameMap", allocation: nextAllocation };
@@ -497,6 +504,154 @@ export function randomCompleteAllocationForPlayer(state: GameState, playerId: st
         },
       },
     },
+  };
+}
+
+export function completeTimedOutSyncAllocations(state: GameState): GameState {
+  if (state.mode !== "sync" || state.phase !== "allocation" || !state.allocation) {
+    return state;
+  }
+
+  let next = state;
+  for (const player of state.players) {
+    if (!next.allocation?.playerAllocations[player.id]?.ready) {
+      next = randomCompleteAllocationForPlayer(next, player.id);
+    }
+  }
+
+  return {
+    ...next,
+    phase: "allocation",
+    allocation: next.allocation
+      ? {
+          ...next.allocation,
+          timerEndsAt: null,
+          timerRemainingMs: null,
+        }
+      : next.allocation,
+  };
+}
+
+export function applySyncAllocationUpdate(state: GameState, playerId: string, update: PlayerAllocation): GameState {
+  const allocation = state.allocation;
+  const ownership = state.draft?.ownership;
+  const currentPlayerAllocation = allocation?.playerAllocations[playerId];
+  if (state.mode !== "sync" || state.phase !== "allocation" || !allocation || !ownership || !currentPlayerAllocation || !state.players.some((player) => player.id === playerId)) {
+    return state;
+  }
+
+  // Ready and random-completed allocations are host-authoritative and final.
+  if (currentPlayerAllocation.ready || currentPlayerAllocation.randomCompleted) {
+    return state;
+  }
+
+  const proposedAllocation = {
+    ...allocation,
+    playerAllocations: {
+      ...allocation.playerAllocations,
+      [playerId]: {
+        ...update,
+        randomCompleted: false,
+      },
+    },
+  };
+  const proposedPlayerAllocation = proposedAllocation.playerAllocations[playerId];
+  const ready = proposedPlayerAllocation.ready && allocationComplete(proposedAllocation, ownership, playerId);
+  const nextAllocation = {
+    ...proposedAllocation,
+    playerAllocations: {
+      ...proposedAllocation.playerAllocations,
+      [playerId]: {
+        ...proposedPlayerAllocation,
+        ready,
+      },
+    },
+  };
+
+  return {
+    ...state,
+    allocation: ready && allAllocationsReady(nextAllocation, state.players)
+      ? clearAllocationTimer(nextAllocation, state.config)
+      : nextAllocation,
+  };
+}
+
+export function applySyncProfileUpdate(state: GameState, playerId: string, updates: { color?: PlayerColor | null; name?: string }): GameState {
+  if (state.mode !== "sync" || state.phase !== "setup") {
+    return state;
+  }
+
+  return {
+    ...state,
+    players: state.players.map((player) => {
+      if (player.id !== playerId) {
+        return player;
+      }
+
+      return {
+        ...player,
+        name: updates.name !== undefined && !player.nameLocked ? updates.name.trim() : player.name,
+        color: updates.color !== undefined && !player.colorLocked ? updates.color : player.color,
+        connectionStatus: "connected",
+      };
+    }),
+  };
+}
+
+export function applySyncDraftConfirm(state: GameState, playerId: string, territoryId: string, now: number): GameState {
+  if (state.mode !== "sync" || state.phase !== "draft" || activePlayer(state)?.id !== playerId || !canPickTerritory(state, territoryId)) {
+    return state;
+  }
+
+  return confirmTerritoryPick(state, territoryId, now);
+}
+
+export function applySyncPlayerQuit(state: GameState, playerId: string): GameState {
+  if (state.mode !== "sync" || (state.phase !== "setup" && state.phase !== "draft" && state.phase !== "allocation" && state.phase !== "paused")) {
+    return state;
+  }
+
+  const next = removePlayerFromDraft(state, playerId);
+  return (state.phase === "draft" || state.phase === "allocation") && next.phase !== "home"
+    ? pauseSyncGame(next)
+    : next;
+}
+
+export function applySyncPlayerConnectionStatus(state: GameState, playerId: string, connectionStatus: GamePlayer["connectionStatus"]): GameState {
+  if (state.mode !== "sync") {
+    return state;
+  }
+
+  const next = markSyncPlayerStatus(state, playerId, connectionStatus);
+  return connectionStatus !== "connected" && (state.phase === "draft" || state.phase === "allocation")
+    ? pauseSyncGame(next)
+    : next;
+}
+
+export function pauseSyncGame(state: GameState): GameState {
+  return {
+    ...state,
+    phase: "paused",
+    draft: state.draft
+      ? clearDraftTimer({
+          ...state.draft,
+          resultTerritoryId: null,
+          resultPlayerId: null,
+        }, state.config)
+      : state.draft,
+    allocation: state.allocation
+      ? {
+          ...state.allocation,
+          timerEndsAt: null,
+        }
+      : state.allocation,
+  };
+}
+
+export function markSyncPlayerStatus(state: GameState, playerId: string, connectionStatus: GamePlayer["connectionStatus"]): GameState {
+  return {
+    ...state,
+    players: state.players.map((player) => player.id === playerId ? { ...player, connectionStatus } : player),
   };
 }
 
@@ -742,6 +897,18 @@ export function saveLocalGame(state: GameState) {
   localStorage.setItem(LOCAL_GAME_KEY, JSON.stringify(state));
 }
 
+export function saveSyncHostGame(state: GameState, localPlayerId: string | null, revision: number) {
+  if (state.mode !== "sync" || !localPlayerId) {
+    return;
+  }
+
+  localStorage.setItem(SYNC_HOST_GAME_KEY, JSON.stringify({
+    game: state,
+    localPlayerId,
+    revision,
+  }));
+}
+
 export function readLocalGame() {
   try {
     const raw = localStorage.getItem(LOCAL_GAME_KEY);
@@ -751,8 +918,65 @@ export function readLocalGame() {
   }
 }
 
+export function readSyncHostGame() {
+  try {
+    const raw = localStorage.getItem(SYNC_HOST_GAME_KEY);
+    const save = raw ? JSON.parse(raw) as unknown : null;
+    if (!save || typeof save !== "object") {
+      return null;
+    }
+
+    const partial = save as { game?: unknown; localPlayerId?: unknown; revision?: unknown };
+    const game = normalizeGameState(partial.game);
+    if (!game || game.mode !== "sync" || typeof partial.localPlayerId !== "string") {
+      return null;
+    }
+
+    return {
+      game: restoreSyncHostGame(game, partial.localPlayerId),
+      localPlayerId: partial.localPlayerId,
+      revision: typeof partial.revision === "number" ? partial.revision : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function clearLocalGame() {
   localStorage.removeItem(LOCAL_GAME_KEY);
+}
+
+export function clearSyncHostGame() {
+  localStorage.removeItem(SYNC_HOST_GAME_KEY);
+}
+
+function restoreSyncHostGame(game: GameState, localPlayerId: string): GameState {
+  const players = game.players.map((player) => ({
+    ...player,
+    connectionStatus: player.id === localPlayerId ? "connected" as const : "disconnected" as const,
+  }));
+  const restored = {
+    ...game,
+    players,
+    draft: game.draft
+      ? {
+          ...game.draft,
+          resultTerritoryId: null,
+          resultPlayerId: null,
+          timerEndsAt: null,
+        }
+      : game.draft,
+    allocation: game.allocation
+      ? {
+          ...game.allocation,
+          timerEndsAt: null,
+        }
+      : game.allocation,
+  };
+
+  return game.phase === "draft" || game.phase === "allocation"
+    ? { ...restored, phase: "paused" }
+    : restored;
 }
 
 function simulateRandomDraft(players: GamePlayer[], config: GameConfig, draft: DraftState) {
