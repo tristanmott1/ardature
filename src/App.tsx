@@ -102,6 +102,7 @@ function App() {
   const [dismissedNoticeKey, setDismissedNoticeKey] = useState("");
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
   const [isEndGamePromptOpen, setIsEndGamePromptOpen] = useState(false);
+  const [resetCameraKey, setResetCameraKey] = useState(0);
   const hostTransportRef = useRef<SyncHostTransport | null>(null);
   const joinTransportRef = useRef<SyncJoinTransport | null>(null);
   const previousPhaseRef = useRef(game.phase);
@@ -145,6 +146,14 @@ function App() {
     !game.draft?.pendingTerritoryId &&
     !game.draft?.resultTerritoryId;
   const canShowConfirm = Boolean(pendingTerritory && active && canControlActivePlayer);
+  const isModalOpen = Boolean(
+    pendingTerritory ||
+    blockingResultTerritory ||
+    noticeTerritory ||
+    syncCameraMode ||
+    isEndGamePromptOpen ||
+    game.phase === "paused",
+  );
   const showDraftControls = game.phase === "draft" &&
     !pendingTerritory &&
     !blockingResultTerritory &&
@@ -712,6 +721,8 @@ function App() {
       return;
     }
 
+    setResetCameraKey((current) => current + 1);
+
     if (game.mode === "sync" && syncRole === "joiner") {
       joinTransportRef.current?.send({ type: "draftConfirm", territoryId: game.draft.pendingTerritoryId });
       return;
@@ -839,7 +850,9 @@ function App() {
       <MapView
         mapData={generatedMapData}
         onTerritoryPress={canPick ? pressTerritory : undefined}
+        resetCameraKey={resetCameraKey}
         selectedTerritoryId={selectedTerritoryId}
+        showZoomOutControl={!isModalOpen}
         territoryStates={territoryStates}
       />
 

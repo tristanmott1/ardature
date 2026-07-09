@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ZoomOut } from "lucide-react";
 import { HitTargetLayer } from "./HitTargetLayer";
 import { StaticMapInk } from "./StaticMapInk";
 import { TerritoryFillLayer } from "./TerritoryFillLayer";
@@ -39,12 +40,16 @@ const MIN_VIEWPORT_SIZE = 400;
 export function MapView({
   mapData,
   onTerritoryPress,
+  resetCameraKey = 0,
   selectedTerritoryId,
+  showZoomOutControl = true,
   territoryStates,
 }: {
   mapData: GeneratedMapData;
   onTerritoryPress?: (territoryId: string) => void;
+  resetCameraKey?: number;
   selectedTerritoryId: string | null;
+  showZoomOutControl?: boolean;
   territoryStates: Record<string, TerritoryState>;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -193,6 +198,10 @@ export function MapView({
     setViewport(nextViewport);
   }
 
+  function zoomOutToFullMap() {
+    startFocusAnimation(fullMapViewport(mapData.width, mapData.height));
+  }
+
   function startFocusAnimation(targetViewport: MapViewport) {
     stopFocusAnimation();
 
@@ -295,6 +304,12 @@ export function MapView({
   }, [mapData, selectedTerritoryId]);
 
   useEffect(() => {
+    if (resetCameraKey > 0) {
+      zoomOutToFullMap();
+    }
+  }, [resetCameraKey]);
+
+  useEffect(() => {
     return () => {
       if (animationFrameRef.current !== null) {
         window.cancelAnimationFrame(animationFrameRef.current);
@@ -340,6 +355,11 @@ export function MapView({
           ) : null}
         </g>
       </svg>
+      {showZoomOutControl ? (
+        <button className="map-zoom-out" type="button" onClick={zoomOutToFullMap} aria-label="Zoom out">
+          <ZoomOut size={34} strokeWidth={2.2} />
+        </button>
+      ) : null}
     </div>
   );
 }

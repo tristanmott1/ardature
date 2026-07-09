@@ -171,6 +171,16 @@ function assertViewBoxInside(value, size, message) {
   assert(viewport.y + viewport.height <= size.height + epsilon, message);
 }
 
+function assertFullMapViewBox(value, size, message) {
+  const viewport = parseViewBox(value);
+  const epsilon = 0.001;
+
+  assert(Math.abs(viewport.x) <= epsilon, message);
+  assert(Math.abs(viewport.y) <= epsilon, message);
+  assert(Math.abs(viewport.width - size.width) <= epsilon, message);
+  assert(Math.abs(viewport.height - size.height) <= epsilon, message);
+}
+
 async function clickTerritory(page, territoryId) {
   await page.evaluate((id) => {
     const target = document.querySelector(`[data-territory-hit="${id}"]`);
@@ -231,6 +241,7 @@ async function runLocalDraftChecks(page) {
   const controlsBox = await page.locator(".draft-panel").boundingBox();
   const mapBox = await page.locator(".map-shell").boundingBox();
   assert(controlsBox && mapBox && mapBox.y >= controlsBox.y + controlsBox.height - 1, "Draft controls sit above the map.");
+  assert((await page.getByRole("button", { name: "Zoom out" }).count()) === 1, "Map shows the zoom-out control.");
   assert(
     await page.locator(".static-map-ink").evaluate((node) => getComputedStyle(node).pointerEvents === "none"),
     "Static ink layer is pointer inert.",
@@ -239,6 +250,7 @@ async function runLocalDraftChecks(page) {
   await clickTerritory(page, "shire");
   const confirmDialog = page.getByRole("dialog", { name: "Confirm territory" });
   await confirmDialog.waitFor();
+  assert((await page.getByRole("button", { name: "Zoom out" }).count()) === 0, "Confirm modal hides the zoom-out control.");
   assert(await confirmDialog.getByRole("heading", { name: "Shire" }).isVisible(), "Confirm modal shows the territory name.");
   assert((await confirmDialog.locator(".territory-preview-shape path").count()) > 0, "Confirm modal shows the territory shape.");
   await page.getByRole("button", { name: "Confirm pick" }).click();
@@ -247,6 +259,7 @@ async function runLocalDraftChecks(page) {
   assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
   assert((await resultDialog.locator(".territory-preview-shape path").count()) > 0, "Result modal shows the territory shape.");
   await page.getByText("41 left").waitFor();
+  assertFullMapViewBox(await viewBox(page), size, "Local confirm zooms back out to the full map.");
 
   await clickTerritory(page, "bree");
   await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
@@ -272,6 +285,22 @@ async function runLocalDraftChecks(page) {
   });
   await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeWheel);
   assertViewBoxInside(await viewBox(page), size, "Wheel zoom keeps the viewBox inside the map.");
+  await page.getByRole("button", { name: "Zoom out" }).click();
+  await page.waitForFunction(
+    ({ width, height }) => {
+      const value = document.querySelector(".map-svg")?.getAttribute("viewBox");
+      if (!value) {
+        return false;
+      }
+
+      const parts = value.trim().split(/\s+/).map(Number);
+      return Math.abs(parts[0]) < 0.001 &&
+        Math.abs(parts[1]) < 0.001 &&
+        Math.abs(parts[2] - width) < 0.001 &&
+        Math.abs(parts[3] - height) < 0.001;
+    },
+    size,
+  );
 }
 
 async function runRandomReviewChecks(page) {
