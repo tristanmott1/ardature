@@ -6,19 +6,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { ZoomOut } from "lucide-react";
+import { Fullscreen } from "lucide-react";
 import { HitTargetLayer } from "./HitTargetLayer";
 import { StaticMapInk } from "./StaticMapInk";
 import { TerritoryFillLayer } from "./TerritoryFillLayer";
 import { TroopMarkerLayer } from "./TroopMarkerLayer";
-import type { GeneratedMapData, MapBounds, TerritoryState } from "../mapTypes";
-
-type MapViewport = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
+import type { GeneratedMapData, MapBounds, MapViewport, TerritoryState } from "../mapTypes";
 
 type PointerPoint = {
   id: number;
@@ -43,7 +36,7 @@ export function MapView({
   onTerritoryPress,
   resetCameraKey = 0,
   selectedTerritoryId,
-  showZoomOutControl = true,
+  showMapViewControl = true,
   territoryStates,
 }: {
   mapData: GeneratedMapData;
@@ -51,7 +44,7 @@ export function MapView({
   onTerritoryPress?: (territoryId: string) => void;
   resetCameraKey?: number;
   selectedTerritoryId: string | null;
-  showZoomOutControl?: boolean;
+  showMapViewControl?: boolean;
   territoryStates: Record<string, TerritoryState>;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -60,7 +53,7 @@ export function MapView({
   const isAnimatingRef = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
   const previousSelectedTerritoryIdRef = useRef<string | null>(null);
-  const viewportRef = useRef<MapViewport>({ x: 0, y: 0, width: mapData.width, height: mapData.height });
+  const viewportRef = useRef<MapViewport>(mapData.homeViewport);
   const [isAnimating, setIsAnimatingState] = useState(false);
   const [viewport, setViewportState] = useState<MapViewport>(viewportRef.current);
 
@@ -200,8 +193,8 @@ export function MapView({
     setViewport(nextViewport);
   }
 
-  function zoomOutToFullMap() {
-    startFocusAnimation(fullMapViewport(mapData.width, mapData.height));
+  function returnToMapView() {
+    startFocusAnimation(mapData.homeViewport);
   }
 
   function startFocusAnimation(targetViewport: MapViewport) {
@@ -271,8 +264,8 @@ export function MapView({
   }
 
   useLayoutEffect(() => {
-    setViewport(fullMapViewport(mapData.width, mapData.height));
-  }, [mapData.height, mapData.width]);
+    setViewport(mapData.homeViewport);
+  }, [mapData.homeViewport]);
 
   useEffect(() => {
     const previousSelectedTerritoryId = previousSelectedTerritoryIdRef.current;
@@ -307,7 +300,7 @@ export function MapView({
 
   useEffect(() => {
     if (resetCameraKey > 0) {
-      zoomOutToFullMap();
+      returnToMapView();
     }
   }, [resetCameraKey]);
 
@@ -362,9 +355,9 @@ export function MapView({
           ) : null}
         </g>
       </svg>
-      {showZoomOutControl ? (
-        <button className="map-zoom-out" type="button" onClick={zoomOutToFullMap} aria-label="Zoom out">
-          <ZoomOut size={34} strokeWidth={2.2} />
+      {showMapViewControl ? (
+        <button className="map-zoom-out" type="button" onClick={returnToMapView} aria-label="Return to map view">
+          <Fullscreen size={34} strokeWidth={2.2} />
         </button>
       ) : null}
     </div>

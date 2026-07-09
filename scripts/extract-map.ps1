@@ -282,7 +282,7 @@ public static class MapExtractor
     const double ShadeUniquenessThreshold = 0.0105;
     const double TerritoryFillBleedStrokeWidth = 12;
     const double AppFocusPadding = 500;
-    const double AppDisplayMargin = AppFocusPadding;
+    const double AppDisplayMargin = 1500;
 
     static readonly PreviewTheme[] PreviewThemes = new PreviewTheme[]
     {
@@ -2506,6 +2506,7 @@ public static class MapExtractor
         builder.AppendLine("  height: " + PointNumber(mapHeight) + ",");
         builder.AppendLine("  sourceWidth: " + width.ToString(CultureInfo.InvariantCulture) + ",");
         builder.AppendLine("  sourceHeight: " + height.ToString(CultureInfo.InvariantCulture) + ",");
+        builder.AppendLine("  homeViewport: " + ViewportTs(AppDisplayMargin, AppDisplayMargin, width * mapScale, height * mapScale) + ",");
         builder.AppendLine("  backgroundColor: " + JsonString(previewBackgroundColor) + ",");
         builder.AppendLine("  skins: " + StringArrayJson(AppSkinIds) + ",");
         builder.AppendLine("  territories: [");
@@ -2631,6 +2632,15 @@ public static class MapExtractor
             ", minY: " + PointNumber(bounds.MinY) +
             ", maxX: " + PointNumber(bounds.MaxX) +
             ", maxY: " + PointNumber(bounds.MaxY) +
+            " }";
+    }
+
+    static string ViewportTs(double x, double y, double width, double height)
+    {
+        return "{ x: " + PointNumber(x) +
+            ", y: " + PointNumber(y) +
+            ", width: " + PointNumber(width) +
+            ", height: " + PointNumber(height) +
             " }";
     }
 

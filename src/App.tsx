@@ -908,7 +908,7 @@ function App() {
         onTerritoryPress={canDraftOnMap ? pressTerritory : undefined}
         resetCameraKey={resetCameraKey}
         selectedTerritoryId={viewerSelectedTerritoryId}
-        showZoomOutControl={!isModalOpen}
+        showMapViewControl={!isModalOpen}
         territoryStates={territoryStates}
       />
 

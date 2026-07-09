@@ -26,6 +26,13 @@ export type MapBounds = {
   maxY: number;
 };
 
+export type MapViewport = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type GeneratedTerritoryData = {
   id: string;
   name: string;
@@ -52,6 +59,7 @@ export type GeneratedMapData = {
   height: number;
   sourceWidth: number;
   sourceHeight: number;
+  homeViewport: MapViewport;
   backgroundColor: string;
   skins: readonly MapSkin[];
   territories: readonly GeneratedTerritoryData[];

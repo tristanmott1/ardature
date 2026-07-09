@@ -95,12 +95,20 @@ async function runSourceChecks() {
   const mapHeight = generatedNumber(mapDataSource, "height");
   const sourceWidth = generatedNumber(mapDataSource, "sourceWidth");
   const sourceHeight = generatedNumber(mapDataSource, "sourceHeight");
+  const homeViewport = generatedViewport(mapDataSource, "homeViewport");
 
   assert(mapDataSource.includes("satisfies GeneratedMapData"), "Generated map data is typed.");
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
   assert(!mapDataSource.includes("Infinity"), "Generated map data has no Infinity values.");
   assert((mapDataSource.match(/id: "/g) ?? []).length === 42, "Generated app data has 42 playable territories.");
-  assert(mapWidth === sourceWidth * 10 + 1000 && mapHeight === sourceHeight * 10 + 1000, "Generated app data includes the 500-unit display frame.");
+  assert(mapWidth === sourceWidth * 10 + 3000 && mapHeight === sourceHeight * 10 + 3000, "Generated app data includes the 1500-unit display frame.");
+  assert(
+    homeViewport.x === 1500 &&
+    homeViewport.y === 1500 &&
+    homeViewport.width === sourceWidth * 10 &&
+    homeViewport.height === sourceHeight * 10,
+    "Generated app data includes the unbuffered home viewport.",
+  );
   const focusBounds = [...mapDataSource.matchAll(/focusBounds: \{ minX: ([^,]+), minY: ([^,]+), maxX: ([^,]+), maxY: ([^ }]+) \}/g)];
   assert(focusBounds.length === 42, "Generated app data has 42 focus bounds.");
   for (const match of focusBounds) {
@@ -118,6 +126,7 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
   assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
   assert(mapViewSource.includes("onMapPress"), "Map view supports map-background presses.");
+  assert(mapViewSource.includes("Fullscreen") && mapViewSource.includes("Return to map view"), "Map view uses a return-to-map control.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
 }
 
@@ -131,6 +140,24 @@ function generatedNumber(source, name) {
   const value = Number(match[1]);
   assert(Number.isFinite(value), `Generated ${name} is finite.`);
   return value;
+}
+
+function generatedViewport(source, name) {
+  const match = source.match(new RegExp(`\\n  ${name}: \\{ x: ([^,]+), y: ([^,]+), width: ([^,]+), height: ([^ }]+) \\},`));
+
+  if (!match) {
+    throw new Error(`Missing generated ${name}.`);
+  }
+
+  const viewport = {
+    x: Number(match[1]),
+    y: Number(match[2]),
+    width: Number(match[3]),
+    height: Number(match[4]),
+  };
+
+  assert(Object.values(viewport).every(Number.isFinite), `Generated ${name} is finite.`);
+  return viewport;
 }
 
 async function viewBox(page) {
@@ -177,14 +204,23 @@ function assertViewBoxInside(value, size, message) {
   assert(viewport.y + viewport.height <= size.height + epsilon, message);
 }
 
-function assertFullMapViewBox(value, size, message) {
+function homeViewportFromSize(size) {
+  return {
+    x: 1500,
+    y: 1500,
+    width: size.width - 3000,
+    height: size.height - 3000,
+  };
+}
+
+function assertViewBoxEquals(value, expected, message) {
   const viewport = parseViewBox(value);
   const epsilon = 0.001;
 
-  assert(Math.abs(viewport.x) <= epsilon, message);
-  assert(Math.abs(viewport.y) <= epsilon, message);
-  assert(Math.abs(viewport.width - size.width) <= epsilon, message);
-  assert(Math.abs(viewport.height - size.height) <= epsilon, message);
+  assert(Math.abs(viewport.x - expected.x) <= epsilon, message);
+  assert(Math.abs(viewport.y - expected.y) <= epsilon, message);
+  assert(Math.abs(viewport.width - expected.width) <= epsilon, message);
+  assert(Math.abs(viewport.height - expected.height) <= epsilon, message);
 }
 
 async function clickTerritory(page, territoryId) {
@@ -319,13 +355,15 @@ async function runLocalDraftChecks(page) {
   await startLocalSnakeDraft(page);
 
   const size = await mapSize(page);
+  const homeViewport = homeViewportFromSize(size);
   assertViewBoxInside(await viewBox(page), size, "Initial draft viewBox stays inside the map.");
+  assertViewBoxEquals(await viewBox(page), homeViewport, "Initial draft viewBox uses the home viewport.");
   assert((await page.locator("[data-territory-fill]").count()) === 42, "Map renders 42 territory fill groups.");
   assert((await page.locator("[data-territory-hit]").count()) === 42, "Draft renders 42 hit targets.");
   const controlsBox = await page.locator(".draft-panel").boundingBox();
   const mapBox = await page.locator(".map-shell").boundingBox();
   assert(controlsBox && mapBox && mapBox.y >= controlsBox.y + controlsBox.height - 1, "Draft controls sit above the map.");
-  assert((await page.getByRole("button", { name: "Zoom out" }).count()) === 1, "Map shows the zoom-out control.");
+  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Map shows the return-to-map control.");
   assert(
     await page.locator(".static-map-ink").evaluate((node) => getComputedStyle(node).pointerEvents === "none"),
     "Static ink layer is pointer inert.",
@@ -337,7 +375,7 @@ async function runLocalDraftChecks(page) {
   const confirmBox = await confirmDialog.boundingBox();
   const viewport = page.viewportSize();
   assert(confirmBox && viewport && confirmBox.y > viewport.height * 0.55, "Confirm sheet appears at the bottom.");
-  assert((await page.getByRole("button", { name: "Zoom out" }).count()) === 0, "Confirm modal hides the zoom-out control.");
+  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 0, "Confirm modal hides the return-to-map control.");
   assert(await confirmDialog.getByRole("heading", { name: "Shire" }).isVisible(), "Confirm modal shows the territory name.");
   assert((await confirmDialog.locator(".territory-preview-shape").count()) === 0, "Confirm sheet has no territory preview.");
   assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Pending territory is selected on the map.");
@@ -360,7 +398,7 @@ async function runLocalDraftChecks(page) {
   assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
   assert((await resultDialog.locator(".territory-preview-shape").count()) === 0, "Result sheet has no territory preview.");
   await page.getByText("41 left").waitFor();
-  assertFullMapViewBox(await viewBox(page), size, "Local result dismissal zooms back out to the full map.");
+  assertViewBoxEquals(await viewBox(page), homeViewport, "Local result dismissal returns to the home viewport.");
 
   await clickTerritory(page, "shire");
   await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
@@ -382,25 +420,27 @@ async function runLocalDraftChecks(page) {
     cancelable: true,
     clientX: box.x + box.width / 2,
     clientY: box.y + box.height / 2,
-    deltaY: -500,
+    deltaY: 500,
   });
   await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeWheel);
-  assertViewBoxInside(await viewBox(page), size, "Wheel zoom keeps the viewBox inside the map.");
-  await page.getByRole("button", { name: "Zoom out" }).click();
+  const zoomedOutViewport = parseViewBox(await viewBox(page));
+  assert(zoomedOutViewport.width > homeViewport.width, "Manual wheel zoom can zoom out past the home viewport.");
+  assertViewBoxInside(await viewBox(page), size, "Wheel zoom keeps the viewBox inside the framed map.");
+  await page.getByRole("button", { name: "Return to map view" }).click();
   await page.waitForFunction(
-    ({ width, height }) => {
+    (expected) => {
       const value = document.querySelector(".map-svg")?.getAttribute("viewBox");
       if (!value) {
         return false;
       }
 
       const parts = value.trim().split(/\s+/).map(Number);
-      return Math.abs(parts[0]) < 0.001 &&
-        Math.abs(parts[1]) < 0.001 &&
-        Math.abs(parts[2] - width) < 0.001 &&
-        Math.abs(parts[3] - height) < 0.001;
+      return Math.abs(parts[0] - expected.x) < 0.001 &&
+        Math.abs(parts[1] - expected.y) < 0.001 &&
+        Math.abs(parts[2] - expected.width) < 0.001 &&
+        Math.abs(parts[3] - expected.height) < 0.001;
     },
-    size,
+    homeViewport,
   );
 }
 
