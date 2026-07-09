@@ -126,6 +126,7 @@ public static class MapExtractor
         public string Id;
         public string Name;
         public string RegionId;
+        public string RegionName;
         public string[] LandBorders;
         public string[] ShipBorders;
     }
@@ -214,7 +215,7 @@ public static class MapExtractor
     {
         new RegionSeed { Id = "eriador", Name = "Eriador", X = 440, Y = 410 },
         new RegionSeed { Id = "rhovanion", Name = "Rhovanion", X = 890, Y = 390 },
-        new RegionSeed { Id = "rhun", Name = "Rhun", X = 1280, Y = 420 },
+        new RegionSeed { Id = "rhun", Name = "Rh\u00fbn", X = 1280, Y = 420 },
         new RegionSeed { Id = "rohan", Name = "Rohan", X = 820, Y = 715 },
         new RegionSeed { Id = "mordor", Name = "Mordor", X = 1270, Y = 900 },
         new RegionSeed { Id = "gondor", Name = "Gondor", X = 710, Y = 900 }
@@ -253,7 +254,7 @@ public static class MapExtractor
         new RegionConfig
         {
             Id = "rhun",
-            Name = "Rhun",
+            Name = "Rh\u00fbn",
             TerritoryIds = new string[] { "erebor", "iron-hills", "sea-of-rhun", "dorwinion", "brown-lands", "dagorlad" }
         },
         new RegionConfig
@@ -321,7 +322,7 @@ public static class MapExtractor
         new TerritorySeed { Id = "caradhras", Name = "Caradhras", RegionId = "rhovanion", X = 835, Y = 250 },
         new TerritorySeed { Id = "woodland-realm", Name = "Woodland Realm", RegionId = "rhovanion", X = 990, Y = 235 },
         new TerritorySeed { Id = "gladden-fields", Name = "Gladden Fields", RegionId = "rhovanion", X = 985, Y = 320 },
-        new TerritorySeed { Id = "lorien", Name = "Lorien", RegionId = "rhovanion", X = 850, Y = 470 },
+        new TerritorySeed { Id = "lorien", Name = "L\u00f3rien", RegionId = "rhovanion", X = 850, Y = 470 },
         new TerritorySeed { Id = "dol-guldur", Name = "Dol Guldur", RegionId = "rhovanion", X = 1035, Y = 420 },
         new TerritorySeed { Id = "emyn-muil", Name = "Emyn Muil", RegionId = "rhovanion", X = 970, Y = 620 },
         new TerritorySeed { Id = "dead-marshes", Name = "Dead Marshes", RegionId = "rhovanion", X = 1000, Y = 735 },
@@ -329,7 +330,7 @@ public static class MapExtractor
 
         new TerritorySeed { Id = "erebor", Name = "Erebor", RegionId = "rhun", X = 1135, Y = 210 },
         new TerritorySeed { Id = "iron-hills", Name = "Iron Hills", RegionId = "rhun", X = 1325, Y = 260 },
-        new TerritorySeed { Id = "sea-of-rhun", Name = "Sea of Rhun", RegionId = "rhun", X = 1420, Y = 520 },
+        new TerritorySeed { Id = "sea-of-rhun", Name = "Sea of Rh\u00fbn", RegionId = "rhun", X = 1420, Y = 520 },
         new TerritorySeed { Id = "dorwinion", Name = "Dorwinion", RegionId = "rhun", X = 1340, Y = 520 },
         new TerritorySeed { Id = "brown-lands", Name = "Brown Lands", RegionId = "rhun", X = 1130, Y = 330 },
         new TerritorySeed { Id = "dagorlad", Name = "Dagorlad", RegionId = "rhun", X = 1285, Y = 675 },
@@ -339,12 +340,12 @@ public static class MapExtractor
         new TerritorySeed { Id = "edoras", Name = "Edoras", RegionId = "rohan", X = 690, Y = 830 },
         new TerritorySeed { Id = "eastfold", Name = "Eastfold", RegionId = "rohan", X = 900, Y = 785 },
 
-        new TerritorySeed { Id = "udun", Name = "Udun", RegionId = "mordor", X = 1110, Y = 770 },
+        new TerritorySeed { Id = "udun", Name = "Ud\u00fbn", RegionId = "mordor", X = 1110, Y = 770 },
         new TerritorySeed { Id = "lithlad", Name = "Lithlad", RegionId = "mordor", X = 1450, Y = 825 },
         new TerritorySeed { Id = "minas-morgul", Name = "Minas Morgul", RegionId = "mordor", X = 1115, Y = 910 },
         new TerritorySeed { Id = "nurn", Name = "Nurn", RegionId = "mordor", X = 1320, Y = 940 },
 
-        new TerritorySeed { Id = "druwaith-iaur", Name = "Druwaith Iaur", RegionId = "gondor", X = 560, Y = 765 },
+        new TerritorySeed { Id = "druwaith-iaur", Name = "Dr\u00fawait Iaur", RegionId = "gondor", X = 560, Y = 765 },
         new TerritorySeed { Id = "andrast", Name = "Andrast", RegionId = "gondor", X = 445, Y = 850 },
         new TerritorySeed { Id = "anfalas", Name = "Anfalas", RegionId = "gondor", X = 615, Y = 850 },
         new TerritorySeed { Id = "lamedon", Name = "Lamedon", RegionId = "gondor", X = 755, Y = 880 },
@@ -456,7 +457,7 @@ public static class MapExtractor
                 landmarkMaxBrightness);
             ValidateLandmarks(landmarks, width * mapScale, height * mapScale);
 
-            WriteMapJson(outputJson, inputImage, territoryKey, landmarkImage, landmarkOutlineImage, width, height, mapScale, territories, borders, landmarks);
+            WriteMapJson(outputJson, inputImage, territoryKey, landmarkImage, landmarkOutlineImage, width, height, mapScale, territories, borders, landmarks, keyEntries);
             WriteLandmarkSvg(landmarkSvg, width, height, mapScale, landmarks);
             WriteTerritoryThemeSvgs(previewDirectory, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks);
             WriteAppData(appData, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks);
@@ -1887,6 +1888,7 @@ public static class MapExtractor
                 Id = id,
                 Name = parts[0],
                 RegionId = Slug(parts[1]),
+                RegionName = parts[1],
                 LandBorders = ParseBorderList(parts[2]),
                 ShipBorders = ParseBorderList(parts[3])
             };
@@ -1911,9 +1913,25 @@ public static class MapExtractor
 
     static string Slug(string value)
     {
-        string lower = value.Trim().ToLowerInvariant();
+        string lower = RemoveDiacritics(value.Trim()).ToLowerInvariant();
         lower = Regex.Replace(lower, @"[^a-z0-9]+", "-");
         return lower.Trim('-');
+    }
+
+    static string RemoveDiacritics(string value)
+    {
+        string normalized = value.Normalize(NormalizationForm.FormD);
+        StringBuilder builder = new StringBuilder();
+
+        foreach (char c in normalized)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+            {
+                builder.Append(c);
+            }
+        }
+
+        return builder.ToString().Normalize(NormalizationForm.FormC);
     }
 
     static void ValidateTerritoryCatalog(Dictionary<string, TerritoryKeyEntry> keyEntries)
@@ -2193,7 +2211,7 @@ public static class MapExtractor
         return 2000;
     }
 
-    static void WriteMapJson(string outputJson, string inputImage, string territoryKey, string landmarkImage, string landmarkOutlineImage, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks)
+    static void WriteMapJson(string outputJson, string inputImage, string territoryKey, string landmarkImage, string landmarkOutlineImage, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks, Dictionary<string, TerritoryKeyEntry> keyEntries)
     {
         int mapWidth = width * mapScale;
         int mapHeight = height * mapScale;
@@ -2221,7 +2239,7 @@ public static class MapExtractor
         for (int i = 0; i < playableRegions.Count; i++)
         {
             RegionConfig region = playableRegions[i];
-            WriteRegionJson(builder, region.Id, region.Name, true, region.TerritoryIds, territories, false);
+            WriteRegionJson(builder, region.Id, RegionNameFromKey(region, keyEntries), true, region.TerritoryIds, territories, false);
         }
 
         WriteRegionJson(builder, "background", "Background", false, BackgroundSeeds.Select(s => s.Id).Distinct().ToArray(), territories, true);
@@ -2242,6 +2260,20 @@ public static class MapExtractor
         builder.AppendLine("}");
 
         File.WriteAllText(outputJson, builder.ToString(), new UTF8Encoding(false));
+    }
+
+    static string RegionNameFromKey(RegionConfig region, Dictionary<string, TerritoryKeyEntry> keyEntries)
+    {
+        foreach (string territoryId in region.TerritoryIds)
+        {
+            TerritoryKeyEntry entry;
+            if (keyEntries.TryGetValue(territoryId, out entry))
+            {
+                return entry.RegionName;
+            }
+        }
+
+        return region.Name;
     }
 
     static void WriteRegionJson(StringBuilder builder, string id, string name, bool playable, string[] territoryIds, Dictionary<string, TerritoryInfo> territories, bool last)

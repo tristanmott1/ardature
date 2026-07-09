@@ -150,7 +150,7 @@
         },
         {
           "id": "lorien",
-          "name": "Lorien",
+          "name": "Lórien",
           "playable": true,
           "borderIds": ["caradhras__lorien", "dol-guldur__lorien", "emnet__lorien", "emyn-muil__lorien", "gladden-fields__lorien", "isengard__lorien", "lorien__moria", "lorien__swanfleet", "lorien__westfold"],
           "landConnections": ["caradhras", "gladden-fields", "dol-guldur", "moria", "emyn-muil"],
@@ -200,7 +200,7 @@
     },
     {
       "id": "rhun",
-      "name": "Rhun",
+      "name": "Rhûn",
       "playable": true,
       "territories": [
         {
@@ -221,7 +221,7 @@
         },
         {
           "id": "sea-of-rhun",
-          "name": "Sea of Rhun",
+          "name": "Sea of Rhûn",
           "playable": true,
           "borderIds": ["background-north-east__sea-of-rhun", "dagorlad__sea-of-rhun", "dorwinion__sea-of-rhun", "iron-hills__sea-of-rhun", "lithlad__sea-of-rhun"],
           "landConnections": ["iron-hills", "dorwinion", "dagorlad", "lithlad"],
@@ -299,7 +299,7 @@
       "territories": [
         {
           "id": "udun",
-          "name": "Udun",
+          "name": "Udûn",
           "playable": true,
           "borderIds": ["dagorlad__udun", "dead-marshes__udun", "lithlad__udun", "minas-morgul__udun", "minas-tirith__udun"],
           "landConnections": ["dead-marshes", "minas-morgul"],
@@ -338,7 +338,7 @@
       "territories": [
         {
           "id": "druwaith-iaur",
-          "name": "Druwaith Iaur",
+          "name": "Drúwaith Iaur",
           "playable": true,
           "borderIds": ["andrast__druwaith-iaur", "anfalas__druwaith-iaur", "background-ocean__druwaith-iaur", "druwaith-iaur__edoras", "druwaith-iaur__enedwaith", "druwaith-iaur__isengard"],
           "landConnections": ["enedwaith", "isengard", "andrast", "anfalas"],

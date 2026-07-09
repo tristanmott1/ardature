@@ -363,7 +363,7 @@ export const generatedMapData = {
     },
     {
       id: "lorien",
-      name: "Lorien",
+      name: "Lórien",
       regionId: "rhovanion",
       center: { x: 10108.619, y: 5577.395 },
       focusBounds: { minX: 8582.5, minY: 4500, maxX: 11367.5, maxY: 7860 },
@@ -517,7 +517,7 @@ export const generatedMapData = {
     },
     {
       id: "sea-of-rhun",
-      name: "Sea of Rhun",
+      name: "Sea of Rhûn",
       regionId: "rhun",
       center: { x: 16207.255, y: 7385.114 },
       focusBounds: { minX: 14740, minY: 4560, maxX: 18000, maxY: 9670 },
@@ -693,7 +693,7 @@ export const generatedMapData = {
     },
     {
       id: "udun",
-      name: "Udun",
+      name: "Udûn",
       regionId: "mordor",
       center: { x: 14111.883, y: 9492.131 },
       focusBounds: { minX: 11900, minY: 8427.5, maxX: 15737.5, maxY: 10420 },
@@ -781,7 +781,7 @@ export const generatedMapData = {
     },
     {
       id: "druwaith-iaur",
-      name: "Druwaith Iaur",
+      name: "Drúwaith Iaur",
       regionId: "gondor",
       center: { x: 6455.868, y: 9183.092 },
       focusBounds: { minX: 5440, minY: 8172.5, maxX: 9270, maxY: 10175 },
