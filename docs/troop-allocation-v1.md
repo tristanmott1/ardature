@@ -28,7 +28,7 @@ The gameplay troop classes are the same for both sides:
 
 The leader troop is not part of the triangle mixture. Every player always has exactly one base leader troop, determined by side, and the leader allocates to territories like any other troop.
 
-The UI should use circular character icons wherever practical. Allocation controls should not use troop names when an icon can clearly identify the troop class. The app-facing troop icons live in `public/troops/icons/` and are manually tuned PNG crops from the original art in `public/troops/source/`.
+The UI should use circular character icons wherever practical. Allocation controls should not use troop names when an icon can clearly identify the troop class. The app-facing troop icons live in `public/troops/icons/` and are manually tuned PNG crops from the original art in `public/troops/source/`. The red outline files in `public/troops/source/crop-outlines/` are the source of truth for manual crop placement.
 
 When a troop icon is displayed with a count, the count should appear in a small white circular badge on the edge of the character circle. The icon itself remains the main visual; no troop text should be shown in ordinary allocation UI.
 

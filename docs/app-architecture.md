@@ -60,9 +60,12 @@ The `public/` directory is organized by runtime asset purpose:
 
 - `app-icons/`: PWA icon files referenced by `index.html`, `manifest.webmanifest`, and the service worker. `ring-icon.jpg` is the original source image for the app icon.
 - `troops/source/`: original uncropped character images. These should be preserved because later screens may need full-size character art.
+- `troops/source/crop-outlines/`: red-outline crop references. These are the persisted source of truth for manual circular crop placement.
 - `troops/icons/`: one-time, manually tuned circular PNG crops for troop UI.
 
 Troop portraits are raster art and should remain PNGs. Do not convert them to SVG; SVG would either embed the same raster data or create poor traced art. CSS should provide borders, sizing, and count bubbles around these PNGs at runtime.
+
+Army build appears as a centered modal over the map. Normal allocation controls stay compact and use circular image icons with count bubbles rather than text troop labels or letter badges.
 
 The troop icon crops are app-facing assets:
 

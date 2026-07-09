@@ -153,6 +153,10 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("onMapPress"), "Map view supports map-background presses.");
   assert(mapViewSource.includes("Maximize") && mapViewSource.includes("Return to map view"), "Map view uses a corner-only return-to-map control.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
+  assert(appSource.includes("TroopIconCount") && appSource.includes("troopIconSrc"), "Allocation UI uses troop image icons.");
+  assert(!appSource.includes("TroopBadge") && !appSource.includes("troopLabel"), "Old letter troop badge components are removed.");
+  assert(!stylesSource.includes(".troop-badge") && !stylesSource.includes(".troop-chip") && !stylesSource.includes(".army-builder"), "Old troop badge styles are removed.");
+  assert(!stylesSource.includes(".army-triangle text"), "Army triangle does not style text labels.");
   assert(indexSource.includes("./app-icons/icon-192.png") && indexSource.includes("./app-icons/apple-touch-icon.png"), "Index references organized app icons.");
   assert(manifestSource.includes("app-icons/icon-192.png") && manifestSource.includes("app-icons/icon-512.png"), "Manifest references organized app icons.");
   assert(serviceWorkerSource.includes("./app-icons/icon-192.png") && serviceWorkerSource.includes("./app-icons/icon-512.png"), "Service worker caches organized app icons.");
@@ -538,10 +542,12 @@ async function runRandomAllocationChecks(page) {
   await capture(page, "10-allocation-handoff-mobile.png");
   assert((await page.locator('[data-territory-fill][data-territory-skin="background"]').count()) < 42, "Random draft colors territories.");
   await page.getByRole("button", { name: "Begin allocation" }).click();
-  await page.waitForSelector(".army-triangle");
+  await page.waitForSelector(".army-build-modal .army-triangle");
   await capture(page, "11-allocation-army-mobile.png");
-  assert((await page.locator(".troop-chip").count()) === 4, "Army build shows three troop classes plus leader.");
-  const projectedCounts = (await page.locator(".troop-chip").evaluateAll((nodes) => nodes.map((node) => (node.textContent ?? "").replace(/\D/g, "")))).sort((left, right) => Number(left) - Number(right));
+  assert((await page.locator(".army-build-modal .troop-icon-count").count()) === 4, "Army build shows three troop classes plus leader.");
+  assert((await page.locator(".army-triangle .army-triangle-icon").count()) === 3, "Army triangle uses three troop icons.");
+  assert((await page.locator(".army-triangle text").count()) === 0, "Army triangle has no H/C/E text labels.");
+  const projectedCounts = (await page.locator(".army-build-modal .troop-count-bubble").evaluateAll((nodes) => nodes.map((node) => (node.textContent ?? "").trim()))).sort((left, right) => Number(left) - Number(right));
   assert(projectedCounts.join(",") === "1,13,13,13", "Two-player center army reserves one leader and spends 39 triangle budget.");
   await page.getByRole("button", { name: "Confirm army" }).click();
   await page.waitForSelector(".allocation-controls");
@@ -551,6 +557,7 @@ async function runRandomAllocationChecks(page) {
   await page.waitForSelector(".allocation-target");
   await capture(page, "12-allocation-territory-mobile.png");
   assert((await page.locator(".troop-stepper").count()) === 4, "Territory allocation has four troop steppers.");
+  assert((await page.locator(".troop-stepper .troop-icon-count").count()) === 8, "Territory allocation uses icon-count steppers.");
   await page.getByRole("button", { name: "Add heavy" }).click();
   assert((await page.locator(".troop-marker").count()) >= 1, "Adding a troop shows a troop marker.");
   await finishAllocationTurn(page, "yellow", { coveredTerritoryIds: [ownedTerritoryId], troopPool: [
@@ -561,7 +568,7 @@ async function runRandomAllocationChecks(page) {
   ] });
   await page.waitForSelector('.app-shell[data-app-phase="allocationHandoff"]');
   await page.getByRole("button", { name: "Begin allocation" }).click();
-  await page.waitForSelector(".army-triangle");
+  await page.waitForSelector(".army-build-modal .army-triangle");
   await page.getByRole("button", { name: "Confirm army" }).click();
   await page.waitForSelector(".allocation-controls");
   await finishAllocationTurn(page, "red");
@@ -569,6 +576,8 @@ async function runRandomAllocationChecks(page) {
   await capture(page, "13-game-map-mobile.png");
   assert((await page.getByLabel("Current viewer").count()) === 1, "Local game map can switch viewer perspective.");
   assert((await page.locator(".troop-marker").count()) > 0, "Read-only game map shows troop totals.");
+  await clickTerritory(page, ownedTerritoryId);
+  assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Read-only breakdown uses troop icon counts.");
 }
 
 async function finishAllocationTurn(page, skin, options = {}) {

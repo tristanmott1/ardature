@@ -162,6 +162,7 @@ function App() {
     ? localAllocationPlayerId
     : localPlayerId;
   const allocationPlayer = game.players.find((player) => player.id === allocationPlayerId) ?? null;
+  const allocationBuildSubmitted = Boolean(allocationPlayerId && game.allocation?.playerAllocations[allocationPlayerId]?.buildSubmitted);
   const localAllocationReady = Boolean(allocationPlayerId && game.allocation?.playerAllocations[allocationPlayerId]?.ready);
   const gameMapViewerId = game.mode === "local"
     ? localPlayerId ?? game.players[0]?.id ?? null
@@ -210,13 +211,16 @@ function App() {
     canControlActivePlayer &&
     Boolean(active) &&
     !game.draft?.resultTerritoryId;
-  const canAllocateOnMap = game.phase === "allocation" && Boolean(allocationPlayerId) && !localAllocationReady;
+  const canAllocateOnMap = game.phase === "allocation" && Boolean(allocationPlayerId) && allocationBuildSubmitted && !localAllocationReady;
   const canInspectGameMap = game.phase === "gameMap" && Boolean(gameMapViewerId);
   const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
+  const showAllocationControls = game.phase === "allocation" && !localAllocationReady && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
+  const showArmyBuildModal = Boolean(showAllocationControls && allocationPlayer && !allocationBuildSubmitted);
   const isModalOpen = Boolean(
     viewerPendingTerritory ||
     blockingResultTerritory ||
     noticeTerritory ||
+    showArmyBuildModal ||
     syncCameraMode ||
     isEndGamePromptOpen ||
     isRestartGamePromptOpen ||
@@ -231,7 +235,6 @@ function App() {
     !syncCameraMode &&
     !isEndGamePromptOpen &&
     !isRestartGamePromptOpen;
-  const showAllocationControls = game.phase === "allocation" && !localAllocationReady && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const showAllocationWaiting = (game.phase === "allocationWaiting" || (game.phase === "allocation" && localAllocationReady)) && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const showGameMapControls = game.phase === "gameMap" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
 
@@ -1206,10 +1209,8 @@ function App() {
           allocation={game.allocation}
           canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
           onAdjustTroop={adjustSelectedTroop}
-          onArmyMarkerChange={changeArmyMarker}
           onFinish={finishCurrentAllocation}
           onPause={pauseDraft}
-          onSubmitBuild={submitCurrentArmyBuild}
           ownership={ownership}
           player={allocationPlayer}
           timerRemaining={timerRemaining}
@@ -1238,6 +1239,15 @@ function App() {
         territoryStates={territoryStates}
         troopMarkers={troopMarkers}
       />
+
+      {showArmyBuildModal && allocationPlayer ? (
+        <ArmyBuildModal
+          allocation={game.allocation}
+          onArmyMarkerChange={changeArmyMarker}
+          onSubmitBuild={submitCurrentArmyBuild}
+          player={allocationPlayer}
+        />
+      ) : null}
 
       {game.phase === "home" && !syncEntryOpen ? (
         <HomePanel onStartLocal={startLocalSetup} onStartSync={openSyncEntry} />
@@ -1673,10 +1683,8 @@ function AllocationPanel({
   allocation,
   canFinish,
   onAdjustTroop,
-  onArmyMarkerChange,
   onFinish,
   onPause,
-  onSubmitBuild,
   ownership,
   player,
   timerRemaining,
@@ -1684,18 +1692,13 @@ function AllocationPanel({
   allocation: GameState["allocation"];
   canFinish: boolean;
   onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
-  onArmyMarkerChange: (marker: ArmyMarker) => void;
   onFinish: () => void;
   onPause: () => void;
-  onSubmitBuild: () => void;
   ownership: TerritoryOwnerMap;
   player: GamePlayer;
   timerRemaining: number | null;
 }) {
   const playerAllocation = allocation?.playerAllocations[player.id] ?? null;
-  const projectedTroops = playerAllocation
-    ? armyCountsForMarker(playerAllocation.marker, player.color, allocation?.originalPlayerCount ?? 2)
-    : null;
 
   return (
     <section className="hud-panel allocation-panel compact-hud">
@@ -1707,15 +1710,7 @@ function AllocationPanel({
         <strong>{player.name}</strong>
         {timerRemaining ? <span className="timer-chip">{Math.ceil(timerRemaining / 1000)}s</span> : null}
       </div>
-      {playerAllocation && !playerAllocation.buildSubmitted ? (
-        <div className="army-builder">
-          <ArmyTriangle marker={playerAllocation.marker} onChange={onArmyMarkerChange} />
-          {projectedTroops ? <TroopCountRow counts={projectedTroops} player={player} /> : null}
-          <button className="primary icon-text-button wide-button" type="button" onClick={onSubmitBuild} aria-label="Confirm army">
-            <Check size={18} />
-          </button>
-        </div>
-      ) : playerAllocation && allocation ? (
+      {playerAllocation?.buildSubmitted && allocation ? (
         <AllocationControls
           allocation={allocation}
           canFinish={canFinish}
@@ -1758,15 +1753,25 @@ function AllocationControls({
       <div className="troop-step-grid">
         {TROOP_TYPES.map((troopType) => (
           <div className="troop-stepper" key={troopType}>
-            <TroopBadge player={player} troopType={troopType} />
+            <TroopIconCount
+              count={selectedTroops?.[troopType] ?? 0}
+              label={`${troopName(player.color, troopType)} on territory: ${selectedTroops?.[troopType] ?? 0}`}
+              player={player}
+              troopType={troopType}
+            />
             <button className="icon-button" type="button" onClick={() => onAdjustTroop(troopType, -1)} disabled={!selectedTroops || selectedTroops[troopType] <= 0} aria-label={`Remove ${troopType}`}>
               <Minus size={16} />
             </button>
-            <span>{selectedTroops?.[troopType] ?? 0}</span>
             <button className="icon-button" type="button" onClick={() => onAdjustTroop(troopType, 1)} disabled={!selectedTerritoryId || !canAddTroop(allocation, ownership, player.id, selectedTerritoryId, troopType)} aria-label={`Add ${troopType}`}>
               <Plus size={16} />
             </button>
-            <em>{remaining[troopType]}</em>
+            <TroopIconCount
+              className="remaining"
+              count={remaining[troopType]}
+              label={`${troopName(player.color, troopType)} remaining: ${remaining[troopType]}`}
+              player={player}
+              troopType={troopType}
+            />
           </div>
         ))}
       </div>
@@ -1777,13 +1782,41 @@ function AllocationControls({
   );
 }
 
-function ArmyTriangle({ marker, onChange }: { marker: ArmyMarker; onChange: (marker: ArmyMarker) => void }) {
+function ArmyBuildModal({
+  allocation,
+  onArmyMarkerChange,
+  onSubmitBuild,
+  player,
+}: {
+  allocation: GameState["allocation"];
+  onArmyMarkerChange: (marker: ArmyMarker) => void;
+  onSubmitBuild: () => void;
+  player: GamePlayer;
+}) {
+  const playerAllocation = allocation?.playerAllocations[player.id] ?? null;
+  const projectedTroops = playerAllocation ? armyCountsForMarker(playerAllocation.marker, player.color, allocation?.originalPlayerCount ?? 2) : null;
+
+  return (
+    <div className="modal-scrim army-build-scrim">
+      <section className="modal-panel army-build-modal" role="dialog" aria-label="Build army">
+        {projectedTroops ? <TroopCountRow counts={projectedTroops} player={player} variant="large" /> : null}
+        {playerAllocation ? <ArmyTriangle marker={playerAllocation.marker} onChange={onArmyMarkerChange} player={player} /> : null}
+        <button className="primary icon-text-button wide-button" type="button" onClick={onSubmitBuild} aria-label="Confirm army">
+          <Check size={20} />
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function ArmyTriangle({ marker, onChange, player }: { marker: ArmyMarker; onChange: (marker: ArmyMarker) => void; player: GamePlayer }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const corners = {
-    heavy: { x: 100, y: 12 },
-    cavalry: { x: 18, y: 154 },
-    elite: { x: 182, y: 154 },
+    heavy: { x: 100, y: 24 },
+    cavalry: { x: 24, y: 158 },
+    elite: { x: 176, y: 158 },
   };
+  const iconSize = 42;
   const markerPoint = markerToTrianglePoint(marker);
 
   function updateFromPointer(clientX: number, clientY: number) {
@@ -1795,7 +1828,7 @@ function ArmyTriangle({ marker, onChange }: { marker: ArmyMarker; onChange: (mar
     const bounds = svg.getBoundingClientRect();
     const point = {
       x: ((clientX - bounds.left) / bounds.width) * 200,
-      y: ((clientY - bounds.top) / bounds.height) * 170,
+      y: ((clientY - bounds.top) / bounds.height) * 184,
     };
     onChange(pointToMarker(point));
   }
@@ -1813,12 +1846,20 @@ function ArmyTriangle({ marker, onChange }: { marker: ArmyMarker; onChange: (mar
         }
       }}
       ref={svgRef}
-      viewBox="0 0 200 170"
+      viewBox="0 0 200 184"
     >
       <path d={`M ${corners.heavy.x} ${corners.heavy.y} L ${corners.elite.x} ${corners.elite.y} L ${corners.cavalry.x} ${corners.cavalry.y} Z`} />
-      <text x={corners.heavy.x} y={corners.heavy.y + 8}>H</text>
-      <text x={corners.cavalry.x} y={corners.cavalry.y + 4}>C</text>
-      <text x={corners.elite.x} y={corners.elite.y + 4}>E</text>
+      {(["heavy", "cavalry", "elite"] as const).map((troopType) => (
+        <image
+          className="army-triangle-icon"
+          height={iconSize}
+          href={troopIconSrc(player.color, troopType)}
+          key={troopType}
+          width={iconSize}
+          x={corners[troopType].x - iconSize / 2}
+          y={corners[troopType].y - iconSize / 2}
+        />
+      ))}
       <circle cx={markerPoint.x} cy={markerPoint.y} r="9" />
     </svg>
   );
@@ -1910,21 +1951,37 @@ function GameMapPanel({
   );
 }
 
-function TroopCountRow({ counts, player }: { counts: TroopCounts; player: GamePlayer }) {
+function TroopCountRow({ counts, player, variant = "compact" }: { counts: TroopCounts; player: GamePlayer; variant?: "compact" | "large" }) {
   return (
-    <div className="troop-count-row">
+    <div className={`troop-count-row ${variant}`}>
       {TROOP_TYPES.map((troopType) => (
-        <span className="troop-chip" key={troopType}>
-          <TroopBadge player={player} troopType={troopType} />
-          {counts[troopType]}
-        </span>
+        <TroopIconCount count={counts[troopType]} key={troopType} player={player} troopType={troopType} />
       ))}
     </div>
   );
 }
 
-function TroopBadge({ player, troopType }: { player: GamePlayer; troopType: TroopType }) {
-  return <span className="troop-badge" data-side={isLightColor(player.color) ? "light" : "dark"}>{troopLabel(player.color, troopType)}</span>;
+function TroopIconCount({
+  className = "",
+  count,
+  label,
+  player,
+  troopType,
+}: {
+  className?: string;
+  count: number;
+  label?: string;
+  player: GamePlayer;
+  troopType: TroopType;
+}) {
+  const name = troopName(player.color, troopType);
+
+  return (
+    <span className={`troop-icon-count${className ? ` ${className}` : ""}`} aria-label={label ?? `${name}: ${count}`}>
+      <img alt="" draggable={false} src={troopIconSrc(player.color, troopType)} />
+      <span className="troop-count-bubble">{count}</span>
+    </span>
+  );
 }
 
 function PausePanel({
@@ -2475,9 +2532,9 @@ function visibleTroopTotalTerritoryIds(ownership: Record<string, string | null>,
 
 function markerToTrianglePoint(marker: ArmyMarker) {
   const corners = {
-    heavy: { x: 100, y: 12 },
-    cavalry: { x: 18, y: 154 },
-    elite: { x: 182, y: 154 },
+    heavy: { x: 100, y: 24 },
+    cavalry: { x: 24, y: 158 },
+    elite: { x: 176, y: 158 },
   };
 
   return {
@@ -2487,9 +2544,9 @@ function markerToTrianglePoint(marker: ArmyMarker) {
 }
 
 function pointToMarker(point: { x: number; y: number }): ArmyMarker {
-  const a = { x: 100, y: 12 };
-  const b = { x: 18, y: 154 };
-  const c = { x: 182, y: 154 };
+  const a = { x: 100, y: 24 };
+  const b = { x: 24, y: 158 };
+  const c = { x: 176, y: 158 };
   const denominator = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
   const heavy = ((b.y - c.y) * (point.x - c.x) + (c.x - b.x) * (point.y - c.y)) / denominator;
   const cavalry = ((c.y - a.y) * (point.x - c.x) + (a.x - c.x) * (point.y - c.y)) / denominator;
@@ -2520,18 +2577,46 @@ function isLightColor(color: PlayerColor | null) {
   return color === "green" || color === "blue" || color === "yellow";
 }
 
-function troopLabel(color: PlayerColor | null, troopType: TroopType) {
-  const light = isLightColor(color);
-  switch (troopType) {
-    case "heavy":
-      return light ? "D" : "O";
-    case "cavalry":
-      return light ? "R" : "W";
-    case "elite":
-      return light ? "E" : "U";
-    case "leader":
-      return light ? "Z" : "K";
-  }
+const TROOP_ICON_BY_SIDE = {
+  light: {
+    heavy: "dwarf",
+    cavalry: "rohirrim",
+    elite: "elf",
+    leader: "wizard",
+  },
+  dark: {
+    heavy: "orc",
+    cavalry: "warg",
+    elite: "uruk-hai",
+    leader: "witch-king",
+  },
+} as const;
+
+const TROOP_NAME_BY_SIDE = {
+  light: {
+    heavy: "Dwarf",
+    cavalry: "Rohirrim",
+    elite: "Elf",
+    leader: "Wizard",
+  },
+  dark: {
+    heavy: "Orc",
+    cavalry: "Warg",
+    elite: "Uruk-hai",
+    leader: "Witch-king",
+  },
+} as const;
+
+function troopSide(color: PlayerColor | null) {
+  return isLightColor(color) ? "light" : "dark";
+}
+
+function troopIconSrc(color: PlayerColor | null, troopType: TroopType) {
+  return `./troops/icons/${TROOP_ICON_BY_SIDE[troopSide(color)][troopType]}.png`;
+}
+
+function troopName(color: PlayerColor | null, troopType: TroopType) {
+  return TROOP_NAME_BY_SIDE[troopSide(color)][troopType];
 }
 
 function pauseSyncGame(state: GameState): GameState {
