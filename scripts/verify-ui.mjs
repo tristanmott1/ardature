@@ -125,6 +125,8 @@ async function runSourceChecks() {
   assert(appSource.includes("syncDraftNoticeFromOwnershipChange"), "App creates local sync draft notices from ownership changes.");
   assert(appSource.includes("onCloseRef") && appSource.includes("resultKey"), "Draft result auto-dismiss is stable across parent re-renders.");
   assert(appSource.includes("viewerSelectedTerritoryId") && appSource.includes("selectedTerritoryId={viewerSelectedTerritoryId}"), "App keeps draft focus viewer-local.");
+  assert(appSource.includes("RotateCcw") && appSource.includes("restartPausedGame"), "Pause can restart to setup without closing transports.");
+  assert(!appSource.includes('closeLabel="End game"'), "Pause modal does not use a close X to end the game.");
   assert(syncMessagesSource.includes('type: "hostQuit"') && syncMessagesSource.includes('message.type === "hostQuit"'), "Sync messages include host quit.");
   assert(!gameTypesSource.includes("noticeTerritoryId") && !gameTypesSource.includes("noticePlayerId"), "Shared draft state does not store local notices.");
   assert(!gameStateSource.includes("timerMs(state.config.pickTimeLimit) ?? 0") && gameStateSource.includes('draft: state.mode === "sync" ? beginDraftTimer'), "Sync draft timers preserve unlimited pick time.");
@@ -418,6 +420,12 @@ async function runLocalDraftChecks(page) {
   await page.getByRole("button", { name: "Pause draft" }).click();
   await page.getByRole("dialog", { name: "Paused" }).waitFor();
   assert((await page.locator(".draft-panel").count()) === 0, "Pause hides draft controls.");
+  assert((await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "End game" }).count()) === 0, "Local pause has no end-game close button.");
+  assert((await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart game" }).count()) === 1, "Local pause has a restart button.");
+  await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart game" }).click();
+  await page.getByRole("dialog", { name: "Restart this game and return to setup?" }).waitFor();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("dialog", { name: "Paused" }).waitFor();
   await page.getByText("40 territories remain.").waitFor();
   await page.getByRole("button", { name: "Resume" }).click();
   await page.getByText("1 / 21").waitFor();

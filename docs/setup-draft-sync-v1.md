@@ -141,6 +141,8 @@ Local pause is a true pause of the single-device draft:
 - If a confirmation popup is open, the pending selected territory stays pending.
 - If the result popup is open, no timer is running and the same popup remains.
 - On resume, the same player continues from the same state.
+- Local pause has a restart button, confirmed like quitting, that returns to local setup/config with the same players and settings.
+- Local pause has no end-game or close button.
 - Local pause has no disconnected or reconnecting state.
 - Local pause has no QR/reconnect controls.
 - Local players can be removed while paused.
@@ -150,6 +152,7 @@ Sync host pause is a synchronization reset:
 - The active pick timer is not preserved.
 - Any pending selected territory or confirmation popup is discarded.
 - On unpause, the current player's turn starts over with a fresh timer.
+- The host can restart from pause after confirmation, returning everyone to setup while keeping current sync connections open.
 - Sync pause includes connected, disconnected, and reconnecting player status.
 - Sync pause includes QR reconnect controls when needed.
 - The host can remove players while paused.

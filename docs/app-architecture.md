@@ -249,7 +249,7 @@ Paused sync games are host-persisted. Host refresh during an active draft restor
 
 Local and sync modes use the same pause icon/button placement during draft. In local mode, the pause button is always visible because the device owns the whole game. In sync mode, only the host sees the pause button.
 
-Local pause preserves the current draft state exactly: running timer time remaining, pending confirmation, or result popup. Sync pause resets the active pick for consistency across devices: pending confirmations are discarded, the active pick timer restarts on unpause, and reconnect state is shown when needed.
+Local pause preserves the current draft state exactly: running timer time remaining, pending confirmation, or result popup, and has no quit control. Local restart from pause returns to local setup/config with the same players and settings. Sync pause resets the active pick for consistency across devices: pending confirmations are discarded, the active pick timer restarts on unpause, and reconnect state is shown when needed. The sync host can confirm a restart from pause, returning everyone to setup without closing transports.
 
 Both modes allow player removal while paused. Removed players' territories are cleared and returned to the draft pool. Local pause has no disconnected/reconnecting state or QR tools.
 

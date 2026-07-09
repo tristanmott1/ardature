@@ -7,6 +7,7 @@ import {
   Pause,
   Play,
   Plus,
+  RotateCcw,
   ScanLine,
   Shuffle,
   Trash2,
@@ -117,6 +118,7 @@ function App() {
   const [syncDraftNotice, setSyncDraftNotice] = useState<SyncDraftNotice | null>(null);
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
   const [isEndGamePromptOpen, setIsEndGamePromptOpen] = useState(false);
+  const [isRestartGamePromptOpen, setIsRestartGamePromptOpen] = useState(false);
   const [resetCameraKey, setResetCameraKey] = useState(0);
   const hostTransportRef = useRef<SyncHostTransport | null>(null);
   const joinTransportRef = useRef<SyncJoinTransport | null>(null);
@@ -164,6 +166,7 @@ function App() {
     noticeTerritory ||
     syncCameraMode ||
     isEndGamePromptOpen ||
+    isRestartGamePromptOpen ||
     game.phase === "paused",
   );
   const showDraftControls = game.phase === "draft" &&
@@ -171,7 +174,8 @@ function App() {
     !blockingResultTerritory &&
     !noticeTerritory &&
     !syncCameraMode &&
-    !isEndGamePromptOpen;
+    !isEndGamePromptOpen &&
+    !isRestartGamePromptOpen;
 
   useEffect(() => {
     const notice = syncDraftNoticeFromOwnershipChange(latestGameRef.current, game);
@@ -192,6 +196,12 @@ function App() {
   useEffect(() => {
     latestLocalPlayerIdRef.current = localPlayerId;
   }, [localPlayerId]);
+
+  useEffect(() => {
+    if (game.phase !== "draft") {
+      setSyncDraftNotice(null);
+    }
+  }, [game.phase]);
 
   useEffect(() => {
     if (game.mode === "local") {
@@ -888,6 +898,22 @@ function App() {
     resetAppToHome();
   }
 
+  function restartPausedGame() {
+    if (game.phase !== "paused" || (game.mode === "sync" && syncRole !== "host")) {
+      return;
+    }
+
+    setSyncDraftNotice(null);
+    setIsRestartGamePromptOpen(false);
+    setGame((current) => current.phase === "paused" && (current.mode === "local" || syncRole === "host")
+      ? {
+          ...current,
+          phase: "setup",
+          draft: null,
+        }
+      : current);
+  }
+
   function resetAppToHome() {
     endSyncTransports();
     clearLocalGame();
@@ -899,6 +925,7 @@ function App() {
     setSyncMessage("");
     setSyncDraftNotice(null);
     setIsEndGamePromptOpen(false);
+    setIsRestartGamePromptOpen(false);
     setGame(createInitialGameState());
   }
 
@@ -992,8 +1019,8 @@ function App() {
           canResume={game.mode === "local" || (syncRole === "host" && game.players.every((player) => player.connectionStatus === "connected"))}
           localPlayerId={localPlayerId}
           mode={game.mode}
-          onExit={returnHome}
           onRemovePlayer={removePlayer}
+          onRestart={game.mode === "local" || syncRole === "host" ? () => setIsRestartGamePromptOpen(true) : undefined}
           onResume={resumeDraft}
           players={game.players}
           remainingCount={remainingCount}
@@ -1043,6 +1070,15 @@ function App() {
           message="End this game and return home?"
           onCancel={() => setIsEndGamePromptOpen(false)}
           onConfirm={endGame}
+        />
+      ) : null}
+
+      {isRestartGamePromptOpen ? (
+        <DecisionDialog
+          confirmLabel="Restart game"
+          message="Restart this game and return to setup?"
+          onCancel={() => setIsRestartGamePromptOpen(false)}
+          onConfirm={restartPausedGame}
         />
       ) : null}
     </main>
@@ -1357,8 +1393,8 @@ function PausePanel({
   canResume,
   localPlayerId,
   mode,
-  onExit,
   onRemovePlayer,
+  onRestart,
   onResume,
   players,
   remainingCount,
@@ -1367,8 +1403,8 @@ function PausePanel({
   canResume: boolean;
   localPlayerId: string | null;
   mode: "local" | "sync";
-  onExit: () => void;
   onRemovePlayer: (playerId: string) => void;
+  onRestart?: () => void;
   onResume: () => void;
   players: GamePlayer[];
   remainingCount: number;
@@ -1376,7 +1412,14 @@ function PausePanel({
   return (
     <div className="modal-scrim">
       <section className="modal-panel pause-modal" role="dialog" aria-label="Paused">
-        <PanelHeader title="Paused" onClose={onExit} closeLabel="End game" />
+        <div className="panel-header">
+          <h1>Paused</h1>
+          {onRestart ? (
+            <button className="icon-button" type="button" onClick={onRestart} aria-label="Restart game">
+              <RotateCcw size={18} />
+            </button>
+          ) : null}
+        </div>
         <p className="muted">{remainingCount} territories remain.</p>
         <div className="player-list paused-list">
           {players.map((player) => (
@@ -1494,10 +1537,12 @@ function PickResultDialog({
 }
 
 function DecisionDialog({
+  confirmLabel = "End game",
   message,
   onCancel,
   onConfirm,
 }: {
+  confirmLabel?: string;
   message: string;
   onCancel: () => void;
   onConfirm: () => void;
@@ -1510,7 +1555,7 @@ function DecisionDialog({
           <button className="icon-button large" type="button" onClick={onCancel} aria-label="Cancel">
             <X size={24} />
           </button>
-          <button className="icon-button danger large" type="button" onClick={onConfirm} aria-label="End game">
+          <button className="icon-button danger large" type="button" onClick={onConfirm} aria-label={confirmLabel}>
             <Check size={24} />
           </button>
         </div>
