@@ -106,8 +106,11 @@ Manual draft interaction:
 
 - Game-stage screens use a shared colored top bar. The X button is always in the top-left, the current player name is bold and prominent near the left, the timer appears near the right when present, and pause appears in the top-right in local mode and for the sync host.
 - The top bar background uses the current player's color instead of a small color dot.
+- The current-player top bar stays visible through territory confirmation, draft result notifications, sync notifications, and troop allocation controls.
+- The current-player top bar is hidden only when there is intentionally no active turn, such as local in-between handoff screens.
 - The active player picks by selecting a remaining territory on the map.
 - Selecting a territory opens a confirmation popup with cancel and confirm controls.
+- The shared top bar remains visible during draft confirmation and draft result notifications.
 - While the confirmation popup is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels the pending pick.
 - Once confirmed, the territory becomes owned by that player and immediately uses that player's color.
 - The confirmation popup is a compact bottom sheet with the selected territory name and cancel/confirm controls.

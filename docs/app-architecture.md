@@ -224,7 +224,7 @@ Invisible topmost territory shapes used for taps/clicks. It should receive point
 
 The background component is rendered but not selectable.
 
-Draft confirmation and result UI should use matching compact bottom sheets. Territory emphasis belongs on the map: only the active drafting viewer receives selected-territory fill for the pending pick. If automatic focus is enabled, that viewer also focuses the pending territory. Passive sync viewers should not focus or highlight another player's pending selection. While a confirmation sheet is open, the active drafter can tap another remaining territory to replace the pending pick, or tap the map background to cancel it.
+Draft confirmation and result UI should use matching compact bottom sheets. The shared game top bar remains visible above the map during confirmation, draft result notifications, sync notifications, and troop allocation controls. It is hidden only when there is intentionally no active turn, such as a local in-between handoff screen. Territory emphasis belongs on the map: only the active drafting viewer receives selected-territory fill for the pending pick. If automatic focus is enabled, that viewer also focuses the pending territory. Passive sync viewers should not focus or highlight another player's pending selection. While a confirmation sheet is open, the active drafter can tap another remaining territory to replace the pending pick, or tap the map background to cancel it.
 
 ## Territory State
 

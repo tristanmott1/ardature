@@ -755,7 +755,7 @@ The exact QR prefixes should be project-specific, not Qwixx-specific.
 
 ### Draft View
 
-During manual drafts, the active player selects a remaining territory on the map.
+During manual drafts, the active player selects a remaining territory on the map. The current-player top bar stays visible during confirmation and draft result notifications. It is hidden only when there is intentionally no active turn, such as local in-between handoff screens.
 
 Draft selection flow:
 
@@ -764,9 +764,9 @@ Draft selection flow:
 3. Confirming assigns the territory immediately and colors it with the owner's player color.
 4. Show a result popup naming the player and drafted territory.
 
-The confirmation popup is a compact bottom sheet with the territory name and cancel/confirm controls. The pending territory itself is highlighted on the map for the active drafting viewer. While confirmation is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels it.
+The confirmation popup is a compact bottom sheet with the territory name and cancel/confirm controls. The shared game top bar remains visible during confirmation. The pending territory itself is highlighted on the map for the active drafting viewer. While confirmation is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels it.
 
-The result popup uses the exact same compact bottom-sheet footprint. In local mode, it auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
+The result popup uses the exact same compact bottom-sheet footprint and also keeps the shared game top bar visible. In local mode, it auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
 
 In sync mode, another player's pending selection never moves, focuses, or highlights your map. Confirmed picks are synced as ownership changes; each device turns that local observation into its own small drafted notification. The next player's turn starts immediately on that player's device. The result popup also auto-dismisses after about one second and can be dismissed early.
 

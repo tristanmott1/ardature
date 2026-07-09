@@ -219,10 +219,7 @@ function App() {
   const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
   const showAllocationControls = game.phase === "allocation" && !localAllocationReady && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const showArmyBuildModal = Boolean(showAllocationControls && allocationPlayer && !allocationBuildSubmitted);
-  const showDraftControls = game.phase === "draft" &&
-    !viewerPendingTerritory &&
-    !blockingResultTerritory &&
-    !noticeTerritory &&
+  const showDraftPanel = game.phase === "draft" &&
     !syncCameraMode &&
     !isEndGamePromptOpen &&
     !isRestartGamePromptOpen;
@@ -1219,13 +1216,13 @@ function App() {
   }
 
   return (
-    <main
-      className={`app-shell${showDraftControls || showAllocationControls || showAllocationWaiting || showGameMapControls ? " draft-layout" : ""}`}
+      <main
+      className={`app-shell${showDraftPanel || showAllocationControls || showAllocationWaiting || showGameMapControls ? " draft-layout" : ""}`}
       data-app-phase={game.phase}
-      data-draft-controls={showDraftControls ? "visible" : "hidden"}
+      data-draft-controls={showDraftPanel ? "visible" : "hidden"}
       data-sync-role={syncRole ?? "none"}
     >
-      {showDraftControls ? (
+      {showDraftPanel ? (
         <DraftPanel
           activePlayer={active}
           activeDraftProgress={activeDraftProgress}

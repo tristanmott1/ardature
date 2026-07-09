@@ -138,10 +138,14 @@ async function runSourceChecks() {
   assert(appSource.includes("syncDraftNoticeFromOwnershipChange"), "App creates local sync draft notices from ownership changes.");
   assert(appSource.includes("onCloseRef") && appSource.includes("resultKey"), "Draft result auto-dismiss is stable across parent re-renders.");
   assert(appSource.includes("viewerSelectedTerritoryId") && appSource.includes("selectedTerritoryId={viewerSelectedTerritoryId}"), "App keeps draft focus viewer-local.");
+  assert(!showDraftPanelSource(appSource).includes("viewerPendingTerritory") && !showDraftPanelSource(appSource).includes("blockingResultTerritory") && !showDraftPanelSource(appSource).includes("noticeTerritory"), "Draft top bar stays visible during confirmation and notifications.");
   assert(appSource.includes("RotateCcw") && appSource.includes("restartPausedGame"), "Pause can restart to setup without closing transports.");
   assert(!appSource.includes('closeLabel="End game"'), "Pause modal does not use a close X to end the game.");
   assert(appSource.includes("closeOnOutsidePress"), "Color dropdowns close on outside press.");
   assert(stylesSource.includes(".sync-entry-panel") && stylesSource.includes("padding-bottom: 112px"), "Sync entry reserves color menu space.");
+  assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".modal-scrim"), "Map camera controls stack below modal popups.");
+  assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".draft-sheet-scrim"), "Map camera controls stack below draft sheets.");
+  assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".army-build-scrim"), "Map camera controls stack below army build modal.");
   assert(syncMessagesSource.includes('type: "hostQuit"') && syncMessagesSource.includes('message.type === "hostQuit"'), "Sync messages include host quit.");
   assert(!gameTypesSource.includes("noticeTerritoryId") && !gameTypesSource.includes("noticePlayerId"), "Shared draft state does not store local notices.");
   assert(!gameStateSource.includes("timerMs(state.config.pickTimeLimit) ?? 0") && gameStateSource.includes('draft: state.mode === "sync" ? beginDraftTimer'), "Sync draft timers preserve unlimited pick time.");
@@ -185,6 +189,27 @@ function generatedNumber(source, name) {
   const value = Number(match[1]);
   assert(Number.isFinite(value), `Generated ${name} is finite.`);
   return value;
+}
+
+function cssZIndex(source, selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = source.match(new RegExp(`${escaped} \\{[\\s\\S]*?z-index: ([0-9]+);`));
+
+  if (!match) {
+    throw new Error(`Missing z-index for ${selector}.`);
+  }
+
+  return Number(match[1]);
+}
+
+function showDraftPanelSource(source) {
+  const match = source.match(/const showDraftPanel = [\s\S]*?;/);
+
+  if (!match) {
+    throw new Error("Missing showDraftPanel expression.");
+  }
+
+  return match[0];
 }
 
 function generatedViewport(source, name) {
@@ -524,6 +549,8 @@ async function runLocalDraftChecks(page) {
   const confirmBox = await confirmDialog.boundingBox();
   const viewport = page.viewportSize();
   assert(confirmBox && viewport && confirmBox.y > viewport.height * 0.55, "Confirm sheet appears at the bottom.");
+  assert(confirmBox && viewport && confirmBox.width <= viewport.width - 140, "Confirm sheet leaves room for map camera controls.");
+  assert((await page.locator(".draft-panel .game-top-bar").count()) === 1, "Draft top bar stays visible during territory confirmation.");
   assertViewBoxEquals(await viewBox(page), parseViewBox(beforeDefaultSelection), "Default-off auto-focus leaves the viewBox unchanged.");
   assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Confirm sheet keeps the return-to-map control available.");
   assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Confirm sheet keeps the auto-focus control available.");
@@ -559,6 +586,7 @@ async function runLocalDraftChecks(page) {
   await resultDialog.waitFor();
   const resultBox = await resultDialog.boundingBox();
   await capture(page, "07-local-draft-result-mobile.png");
+  assert((await page.locator(".draft-panel .game-top-bar").count()) === 1, "Draft top bar stays visible during draft notification.");
   assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.width - resultBox.width) < 1, "Result sheet matches confirm sheet width.");
   assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.height - resultBox.height) < 1, "Result sheet matches confirm sheet height.");
   assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
