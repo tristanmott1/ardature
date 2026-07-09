@@ -97,6 +97,8 @@ async function runSourceChecks() {
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapConnectionsSource = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
   const mapViewSource = await readFile(new URL("../src/map/components/MapView.tsx", import.meta.url), "utf8");
+  const territoryFillSource = await readFile(new URL("../src/map/components/TerritoryFillLayer.tsx", import.meta.url), "utf8");
+  const mapPreferencesSource = await readFile(new URL("../src/map/mapPreferences.ts", import.meta.url), "utf8");
   const indexSource = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const manifestSource = await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8");
   const serviceWorkerSource = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
@@ -152,6 +154,10 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
   assert(mapViewSource.includes("onMapPress"), "Map view supports map-background presses.");
   assert(mapViewSource.includes("Maximize") && mapViewSource.includes("Return to map view"), "Map view uses a corner-only return-to-map control.");
+  assert(mapViewSource.includes("Crosshair") && mapViewSource.includes("Disable automatic focus") && mapViewSource.includes("Enable automatic focus"), "Map view exposes an auto-focus toggle.");
+  assert(mapPreferencesSource.includes("ardature.mapPreferences.v1") && mapPreferencesSource.includes("autoFocusEnabled: false"), "Map preferences persist auto-focus with a default-off state.");
+  assert(territoryFillSource.includes("mixWithWhite") && territoryFillSource.includes("SELECTED_WHITE_MIX = 0.35"), "Selected territory fill blends the current color with white.");
+  assert(!territoryFillSource.includes('state.status === "selected" ? "#ffffff"'), "Selected territory fill is not hard-coded to white.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
   assert(appSource.includes("function GameTopBar") && appSource.includes("allocation-waiting-panel"), "Game stages use the shared game top bar.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
@@ -445,29 +451,46 @@ async function runLocalDraftChecks(page) {
   await page.getByText("0 / 21").waitFor();
   assert((await page.getByText("42 left").count()) === 0, "Draft controls show active-player progress instead of territories left.");
   assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Map shows the return-to-map control.");
+  assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Auto-focus defaults to off.");
   assert(
     await page.locator(".static-map-ink").evaluate((node) => getComputedStyle(node).pointerEvents === "none"),
     "Static ink layer is pointer inert.",
   );
 
+  const beforeDefaultSelection = await viewBox(page);
   await clickTerritory(page, "shire");
   const confirmDialog = page.getByRole("dialog", { name: "Confirm territory" });
   await confirmDialog.waitFor();
   const confirmBox = await confirmDialog.boundingBox();
   const viewport = page.viewportSize();
   assert(confirmBox && viewport && confirmBox.y > viewport.height * 0.55, "Confirm sheet appears at the bottom.");
-  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 0, "Confirm modal hides the return-to-map control.");
+  assertViewBoxEquals(await viewBox(page), parseViewBox(beforeDefaultSelection), "Default-off auto-focus leaves the viewBox unchanged.");
+  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Confirm sheet keeps the return-to-map control available.");
+  assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Confirm sheet keeps the auto-focus control available.");
   assert(await confirmDialog.getByRole("heading", { name: "Shire" }).isVisible(), "Confirm modal shows the territory name.");
   assert((await confirmDialog.locator(".territory-preview-shape").count()) === 0, "Confirm sheet has no territory preview.");
   assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Pending territory is selected on the map.");
-  assert((await page.locator('[data-territory-fill="shire"] [data-territory-fill-piece="shire"]').first().getAttribute("fill")) === "#ffffff", "Pending territory is filled white on the map.");
+  const selectedFill = await page.locator('[data-territory-fill="shire"] [data-territory-fill-piece="shire"]').first().getAttribute("fill");
+  assert(selectedFill && selectedFill !== "#ffffff", "Pending territory is brightened without becoming pure white.");
   await capture(page, "06-local-draft-confirm-mobile.png");
   await clickMapBackground(page);
   await confirmDialog.waitFor({ state: "detached" });
   assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 0, "Tapping the map background cancels the pending pick.");
 
+  await page.getByRole("button", { name: "Enable automatic focus" }).click();
+  assert((await page.getByRole("button", { name: "Disable automatic focus" }).count()) === 1, "Auto-focus can be enabled.");
+  assert(await page.evaluate(() => localStorage.getItem("ardature.mapPreferences.v1")?.includes('"autoFocusEnabled":true')), "Auto-focus preference is persisted.");
+  await page.reload();
+  await page.waitForSelector("[data-background-piece]");
+  await page.getByText("0 / 21").waitFor();
+  assert((await page.getByRole("button", { name: "Disable automatic focus" }).count()) === 1, "Auto-focus enabled state persists after reload.");
+  const beforeFocusedSelection = await viewBox(page);
   await clickTerritory(page, "shire");
   await confirmDialog.waitFor();
+  await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeFocusedSelection);
+  await page.waitForFunction(() => document.querySelector(".map-svg")?.getAttribute("data-map-animating") === "false");
+  assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Auto-focus still selects the pending territory.");
+
   await clickTerritory(page, "bree");
   await confirmDialog.getByRole("heading", { name: "Bree" }).waitFor();
   const replacedConfirmBox = await confirmDialog.boundingBox();

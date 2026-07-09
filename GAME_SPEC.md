@@ -768,7 +768,7 @@ The confirmation popup is a compact bottom sheet with the territory name and can
 
 The result popup uses the exact same compact bottom-sheet footprint. In local mode, it auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
 
-In sync mode, another player's pending selection never moves, focuses, or white-fills your map. Confirmed picks are synced as ownership changes; each device turns that local observation into its own small drafted notification. The next player's turn starts immediately on that player's device. The result popup also auto-dismisses after about one second and can be dismissed early.
+In sync mode, another player's pending selection never moves, focuses, or highlights your map. Confirmed picks are synced as ownership changes; each device turns that local observation into its own small drafted notification. The next player's turn starts immediately on that player's device. The result popup also auto-dismisses after about one second and can be dismissed early.
 
 The compact draft controls show the active player's draft progress as confirmed picks over expected final picks, such as `3 / 11`. The expected final pick count is computed from the current draft style, frozen turn order, active players, and remaining territories.
 
@@ -799,7 +799,7 @@ Territory allocation:
 
 - The player allocates all available troops to owned territories.
 - Only owned territories are selectable.
-- Selecting an owned territory focuses the map on that territory.
+- Selecting an owned territory highlights it. If automatic focus is enabled, the map also focuses on that territory.
 - The controls show icon-only troop totals for the selected territory and icon-only remaining troop totals.
 - The player may remove troops from the selected territory.
 - The player may add remaining troops to the selected territory only when enough total remaining troops are preserved to place at least one troop on every still-empty owned territory.

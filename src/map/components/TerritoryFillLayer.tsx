@@ -1,5 +1,7 @@
 import type { GeneratedMapData, TerritoryState } from "../mapTypes";
 
+const SELECTED_WHITE_MIX = 0.35;
+
 export function TerritoryFillLayer({
   mapData,
   territoryStates,
@@ -11,7 +13,8 @@ export function TerritoryFillLayer({
     <g className="territory-fill-layer">
       {mapData.territories.map((territory) => {
         const state = territoryStates[territory.id];
-        const color = state.status === "selected" ? "#ffffff" : territory.skins[state.skin];
+        const baseColor = territory.skins[state.skin];
+        const color = state.status === "selected" ? mixWithWhite(baseColor, SELECTED_WHITE_MIX) : baseColor;
 
         return (
           <g
@@ -36,4 +39,39 @@ export function TerritoryFillLayer({
       })}
     </g>
   );
+}
+
+function mixWithWhite(color: string, amount: number) {
+  const rgb = parseHexColor(color);
+
+  if (!rgb) {
+    return color;
+  }
+
+  return rgbToHex(
+    Math.round(rgb.r + (255 - rgb.r) * amount),
+    Math.round(rgb.g + (255 - rgb.g) * amount),
+    Math.round(rgb.b + (255 - rgb.b) * amount),
+  );
+}
+
+function parseHexColor(color: string) {
+  const match = color.match(/^#([0-9a-f]{6})$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const value = Number.parseInt(match[1], 16);
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255,
+  };
+}
+
+function rgbToHex(r: number, g: number, b: number) {
+  return "#" + [r, g, b]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
 }

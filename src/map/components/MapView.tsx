@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Maximize } from "lucide-react";
+import { Crosshair, Maximize } from "lucide-react";
 import { HitTargetLayer } from "./HitTargetLayer";
 import { StaticMapInk } from "./StaticMapInk";
 import { TerritoryFillLayer } from "./TerritoryFillLayer";
@@ -36,7 +36,9 @@ export function MapView({
   onTerritoryPress,
   resetCameraKey = 0,
   selectedTerritoryId,
-  showMapViewControl = true,
+  autoFocusEnabled = false,
+  onAutoFocusChange,
+  showCameraControls = true,
   territoryStates,
   troopMarkers = [],
 }: {
@@ -45,7 +47,9 @@ export function MapView({
   onTerritoryPress?: (territoryId: string) => void;
   resetCameraKey?: number;
   selectedTerritoryId: string | null;
-  showMapViewControl?: boolean;
+  autoFocusEnabled?: boolean;
+  onAutoFocusChange?: (enabled: boolean) => void;
+  showCameraControls?: boolean;
   territoryStates: Record<string, TerritoryState>;
   troopMarkers?: readonly TroopMarker[];
 }) {
@@ -199,6 +203,10 @@ export function MapView({
     startFocusAnimation(mapData.homeViewport);
   }
 
+  function toggleAutoFocus() {
+    onAutoFocusChange?.(!autoFocusEnabled);
+  }
+
   function startFocusAnimation(targetViewport: MapViewport) {
     stopFocusAnimation();
 
@@ -281,6 +289,10 @@ export function MapView({
       return;
     }
 
+    if (!autoFocusEnabled) {
+      return;
+    }
+
     if (selectedTerritoryId === previousSelectedTerritoryId) {
       return;
     }
@@ -298,7 +310,7 @@ export function MapView({
       : mapData.width / mapData.height;
 
     startFocusAnimation(fitBoundsToAspect(selectedTerritory.focusBounds, aspect));
-  }, [mapData, selectedTerritoryId]);
+  }, [autoFocusEnabled, mapData, selectedTerritoryId]);
 
   useEffect(() => {
     if (resetCameraKey > 0) {
@@ -357,10 +369,22 @@ export function MapView({
           ) : null}
         </g>
       </svg>
-      {showMapViewControl ? (
-        <button className="map-zoom-out" type="button" onClick={returnToMapView} aria-label="Return to map view">
-          <Maximize size={34} strokeWidth={2.2} />
-        </button>
+      {showCameraControls && !isAnimating ? (
+        <>
+          <button className="map-camera-control map-zoom-out" type="button" onClick={returnToMapView} aria-label="Return to map view">
+            <Maximize size={34} strokeWidth={2.2} />
+          </button>
+          <button
+            aria-label={autoFocusEnabled ? "Disable automatic focus" : "Enable automatic focus"}
+            aria-pressed={autoFocusEnabled}
+            className="map-camera-control map-auto-focus"
+            data-enabled={autoFocusEnabled ? "true" : "false"}
+            onClick={toggleAutoFocus}
+            type="button"
+          >
+            <Crosshair size={31} strokeWidth={2.2} />
+          </button>
+        </>
       ) : null}
     </div>
   );

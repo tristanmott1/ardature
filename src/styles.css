@@ -84,11 +84,10 @@ button:focus-visible,
   -webkit-tap-highlight-color: transparent;
 }
 
-.map-zoom-out {
+.map-camera-control {
   position: absolute;
-  left: max(14px, env(safe-area-inset-left));
   bottom: max(14px, env(safe-area-inset-bottom));
-  z-index: 8;
+  z-index: 22;
   display: grid;
   place-items: center;
   width: 46px;
@@ -103,8 +102,20 @@ button:focus-visible,
   -webkit-tap-highlight-color: transparent;
 }
 
-.map-zoom-out svg {
+.map-camera-control svg {
   display: block;
+}
+
+.map-zoom-out {
+  left: max(14px, env(safe-area-inset-left));
+}
+
+.map-auto-focus {
+  right: max(14px, env(safe-area-inset-right));
+}
+
+.map-auto-focus[data-enabled="false"] {
+  opacity: 0.48;
 }
 
 .territory-fill {

@@ -190,7 +190,7 @@ Layer order:
 3. `TroopMarkerLayer`
 4. `HitTargetLayer`
 
-`MapView` owns pan, zoom, and selected-territory camera movement. The `viewBox` is bounded by the generated app map dimensions, which include a 1500 map-unit display margin around the extracted source map. The generated `homeViewport` is the normal unbuffered map view inside that larger frame, and the bottom-left control returns to that home view rather than to the maximum zoom-out frame. Manual zoom and selected edge territories may still reveal the larger display margin. When a territory is selected, `MapView` fits that territory's generated `focusBounds` rectangle to the current screen shape, then clamps the result inside the framed map. Nearly identical focus moves happen instantly; visible moves use a short ease-in-out animation. Focus duration is based on a combined pan and zoom distance, with both values normalized against the halfway viewport diagonal. The focus rectangle is generated from the canonical territory fill loops with 500 map units of padding on every side.
+`MapView` owns pan, zoom, and selected-territory camera movement. The `viewBox` is bounded by the generated app map dimensions, which include a 1500 map-unit display margin around the extracted source map. The generated `homeViewport` is the normal unbuffered map view inside that larger frame, and the bottom-left control returns to that home view rather than to the maximum zoom-out frame. Manual zoom and selected edge territories may still reveal the larger display margin. The bottom-right crosshair toggles automatic selected-territory focus and is stored as a device-local map preference. Automatic focus defaults to off. When automatic focus is enabled and a territory is selected, `MapView` fits that territory's generated `focusBounds` rectangle to the current screen shape, then clamps the result inside the framed map. Nearly identical focus moves happen instantly; visible moves use a short ease-in-out animation. Focus duration is based on a combined pan and zoom distance, with both values normalized against the halfway viewport diagonal. The focus rectangle is generated from the canonical territory fill loops with 500 map units of padding on every side.
 
 While a focus animation is running, manual camera gestures are locked. Pointer panning, pinch zooming, and wheel zooming are ignored until the animation finishes. Territory taps and skin changes remain active; selecting a different territory redirects the focus animation from the current view. The SVG exposes `data-map-animating="true"` while the camera is moving.
 
@@ -201,7 +201,7 @@ Renders all playable territory fills and the background component. Each playable
 - current skin
 - current visual state
 
-The fill layer is also where selected fill styling should happen. The static ink stays unchanged above it.
+The fill layer is also where selected fill styling should happen. Selected territories render as a brighter blend of their current skin color and white, so player color remains recognizable. The static ink stays unchanged above it.
 
 ### StaticMapInk
 
@@ -224,7 +224,7 @@ Invisible topmost territory shapes used for taps/clicks. It should receive point
 
 The background component is rendered but not selectable.
 
-Draft confirmation and result UI should use matching compact bottom sheets. Territory emphasis belongs on the map: only the active drafting viewer receives selected-territory fill/focus for the pending pick. Passive sync viewers should not focus or white-fill another player's pending selection. While a confirmation sheet is open, the active drafter can tap another remaining territory to replace the pending pick, or tap the map background to cancel it.
+Draft confirmation and result UI should use matching compact bottom sheets. Territory emphasis belongs on the map: only the active drafting viewer receives selected-territory fill for the pending pick. If automatic focus is enabled, that viewer also focuses the pending territory. Passive sync viewers should not focus or highlight another player's pending selection. While a confirmation sheet is open, the active drafter can tap another remaining territory to replace the pending pick, or tap the map background to cancel it.
 
 ## Territory State
 

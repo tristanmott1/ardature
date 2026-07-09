@@ -88,6 +88,7 @@ import {
 import { generatedMapData } from "./map/generated/mapData";
 import { generatedMapConnections } from "./map/generated/mapConnections";
 import { MapView } from "./map/components/MapView";
+import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import type { GeneratedTerritoryData } from "./map/mapTypes";
 import { isArdatureSyncMessage } from "./sync/syncMessages";
 import { SyncHostTransport, SyncJoinTransport, type SyncConnectionStatus, type SyncWireMessage } from "./sync/syncTransport";
@@ -148,6 +149,7 @@ function App() {
   const [isRestartGamePromptOpen, setIsRestartGamePromptOpen] = useState(false);
   const [pausedReturnPhase, setPausedReturnPhase] = useState<AppPhase | null>(null);
   const [resetCameraKey, setResetCameraKey] = useState(0);
+  const [autoFocusEnabled, setAutoFocusEnabled] = useState(() => readMapPreferences().autoFocusEnabled);
   const hostTransportRef = useRef<SyncHostTransport | null>(null);
   const joinTransportRef = useRef<SyncJoinTransport | null>(null);
   const previousPhaseRef = useRef(game.phase);
@@ -217,18 +219,6 @@ function App() {
   const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
   const showAllocationControls = game.phase === "allocation" && !localAllocationReady && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const showArmyBuildModal = Boolean(showAllocationControls && allocationPlayer && !allocationBuildSubmitted);
-  const isModalOpen = Boolean(
-    viewerPendingTerritory ||
-    blockingResultTerritory ||
-    noticeTerritory ||
-    showArmyBuildModal ||
-    syncCameraMode ||
-    isEndGamePromptOpen ||
-    isRestartGamePromptOpen ||
-    game.phase === "paused" ||
-    game.phase === "allocationHandoff" ||
-    game.phase === "allocationWaiting",
-  );
   const showDraftControls = game.phase === "draft" &&
     !viewerPendingTerritory &&
     !blockingResultTerritory &&
@@ -238,6 +228,15 @@ function App() {
     !isRestartGamePromptOpen;
   const showAllocationWaiting = (game.phase === "allocationWaiting" || (game.phase === "allocation" && localAllocationReady)) && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const showGameMapControls = game.phase === "gameMap" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
+  const canUseMapCameraControls = !Boolean(
+    showArmyBuildModal ||
+    syncCameraMode ||
+    isEndGamePromptOpen ||
+    isRestartGamePromptOpen ||
+    game.phase === "paused" ||
+    game.phase === "allocationHandoff" ||
+    showAllocationWaiting
+  );
 
   useEffect(() => {
     const notice = syncDraftNoticeFromOwnershipChange(latestGameRef.current, game);
@@ -1021,6 +1020,11 @@ function App() {
       : current);
   }
 
+  function changeAutoFocusEnabled(enabled: boolean) {
+    setAutoFocusEnabled(enabled);
+    saveMapPreferences({ autoFocusEnabled: enabled });
+  }
+
   function nextDraftTurn() {
     setResetCameraKey((current) => current + 1);
 
@@ -1262,12 +1266,14 @@ function App() {
       ) : null}
 
       <MapView
+        autoFocusEnabled={autoFocusEnabled}
         mapData={generatedMapData}
         onMapPress={canShowConfirm ? cancelPendingPick : undefined}
         onTerritoryPress={canDraftOnMap || canAllocateOnMap || canInspectGameMap ? pressTerritory : undefined}
+        onAutoFocusChange={changeAutoFocusEnabled}
         resetCameraKey={resetCameraKey}
         selectedTerritoryId={viewerSelectedTerritoryId}
-        showMapViewControl={!isModalOpen}
+        showCameraControls={canUseMapCameraControls}
         territoryStates={territoryStates}
         troopMarkers={troopMarkers}
       />

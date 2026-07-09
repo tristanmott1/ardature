@@ -111,10 +111,10 @@ Manual draft interaction:
 - While the confirmation popup is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels the pending pick.
 - Once confirmed, the territory becomes owned by that player and immediately uses that player's color.
 - The confirmation popup is a compact bottom sheet with the selected territory name and cancel/confirm controls.
-- The selected pending territory is highlighted on the map for the active drafting viewer.
+- The selected pending territory is highlighted on the map for the active drafting viewer using a brighter version of its current color.
 - A result popup uses the exact same compact bottom-sheet footprint and shows the player and territory name.
 - In local mode, the result popup auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
-- In sync mode, another player's pending selection never moves, focuses, or white-fills your map.
+- In sync mode, another player's pending selection never moves, focuses, or highlights your map.
 - In sync mode, confirmed picks are synced as ownership changes; each device turns that local observation into its own small drafted notification.
 - In sync mode, the next player's turn starts immediately on their device; the result popup also auto-dismisses after about one second and can be dismissed early.
 - The compact draft controls show the active player's draft progress as confirmed picks over expected final picks, such as `3 / 11`.
