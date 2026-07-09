@@ -196,6 +196,11 @@ async function setPlayerColor(page, index, color) {
   await row.getByRole("menuitemradio", { name: colorLabel(color) }).click();
 }
 
+async function assertNoHorizontalOverflow(page, message) {
+  const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  assert(!hasOverflow, message);
+}
+
 function colorLabel(color) {
   return color.charAt(0).toUpperCase() + color.slice(1);
 }
@@ -206,6 +211,7 @@ async function startLocalSnakeDraft(page) {
   await setPlayerColor(page, 0, "green");
   await setPlayerName(page, 1, "Gimli");
   await setPlayerColor(page, 1, "blue");
+  await assertNoHorizontalOverflow(page, "Local setup has no horizontal overflow on mobile.");
   await page.getByRole("button", { name: "Start game" }).click();
   await page.waitForSelector("[data-territory-hit]");
 }

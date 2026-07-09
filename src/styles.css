@@ -344,11 +344,11 @@ select {
 
 .player-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-wrap: nowrap;
   min-height: 50px;
-  padding: 8px;
+  padding: 7px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.24);
@@ -367,6 +367,7 @@ select {
 .player-row > input {
   flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
 }
 
 .player-row[data-player-status="reconnecting"],
@@ -377,7 +378,7 @@ select {
 .drag-handle {
   display: grid;
   place-items: center;
-  width: 34px;
+  width: 32px;
   height: 34px;
   padding: 0;
   border: 1px solid var(--line);
@@ -390,18 +391,16 @@ select {
 .color-select {
   position: relative;
   display: block;
-  flex: 0 0 58px;
-  width: 58px;
+  flex: 0 0 38px;
+  width: 38px;
 }
 
 .color-select-trigger {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px;
-  align-items: center;
+  place-items: center;
   width: 100%;
   min-height: 38px;
-  padding: 0 7px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
@@ -569,17 +568,12 @@ select {
 .qr-panel {
   display: grid;
   justify-items: center;
-  padding: 9px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.2);
 }
 
 .qr-code,
 .qr-placeholder {
   width: min(260px, 62vw);
   aspect-ratio: 1;
-  border-radius: 6px;
   overflow: hidden;
   background: #ffffff;
 }
@@ -725,6 +719,19 @@ select {
 
   .sync-player-entry-row {
     grid-template-columns: minmax(0, 1fr) 58px;
+  }
+
+  .player-row {
+    gap: 5px;
+    padding: 6px;
+  }
+
+  .player-row .icon-button {
+    width: 34px;
+  }
+
+  .player-row input {
+    padding: 0 8px;
   }
 
   .draft-status {

@@ -2,7 +2,6 @@ import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback
 import QRCode from "qrcode";
 import jsQR from "jsqr";
 import {
-  ChevronDown,
   Check,
   GripVertical,
   Pause,
@@ -1503,7 +1502,6 @@ function ColorSelect({
         type="button"
       >
         <span aria-hidden="true" />
-        <ChevronDown size={15} />
       </button>
       {isOpen ? (
         <div className="color-select-menu" role="menu">
