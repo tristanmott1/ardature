@@ -186,6 +186,10 @@ button:focus-visible,
   transform: translate(-50%, -50%);
 }
 
+.sync-entry-panel {
+  padding-bottom: 88px;
+}
+
 .sync-player-entry-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 58px;

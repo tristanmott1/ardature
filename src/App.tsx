@@ -1587,6 +1587,22 @@ function ColorSelect({
   selectedColor: PlayerColor | null;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    function closeOnOutsidePress(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePress);
+  }, [isOpen]);
 
   return (
     <div
@@ -1596,6 +1612,7 @@ function ColorSelect({
           setIsOpen(false);
         }
       }}
+      ref={rootRef}
       style={{ "--selected-color": colorCss(selectedColor) } as CSSProperties}
     >
       <button
