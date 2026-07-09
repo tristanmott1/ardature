@@ -165,7 +165,7 @@ button:focus-visible,
 
 .sync-player-entry-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 132px;
+  grid-template-columns: minmax(0, 1fr) 58px;
   gap: 8px;
 }
 
@@ -195,6 +195,10 @@ button:focus-visible,
 .panel-header,
 .brand-row {
   justify-content: space-between;
+}
+
+.panel-header.icon-only {
+  justify-content: flex-end;
 }
 
 .panel-header h1,
@@ -309,10 +313,10 @@ select {
 }
 
 .player-row {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 128px auto auto auto;
+  display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: nowrap;
   min-height: 50px;
   padding: 8px;
   border: 1px solid var(--line);
@@ -326,7 +330,13 @@ select {
 }
 
 .player-row.compact-row {
+  display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+
+.player-row > input {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .player-row[data-player-status="reconnecting"],
@@ -350,16 +360,18 @@ select {
 .color-select {
   position: relative;
   display: block;
+  flex: 0 0 58px;
+  width: 58px;
 }
 
 .color-select-trigger {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 7px;
+  gap: 4px;
   align-items: center;
   width: 100%;
   min-height: 38px;
-  padding: 0 9px;
+  padding: 0 7px;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
@@ -417,7 +429,8 @@ select {
 
 .config-grid {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  margin-bottom: 6px;
 }
 
 .time-select-grid {
@@ -434,6 +447,10 @@ select {
 .select-field {
   display: grid;
   gap: 5px;
+}
+
+.select-field select {
+  min-height: 44px;
 }
 
 .select-field > span {
@@ -656,20 +673,12 @@ select {
     padding: 10px;
   }
 
-  .player-row {
-    grid-template-columns: 34px minmax(0, 1fr) 112px auto;
-  }
-
-  .player-row > .danger {
-    grid-column: auto;
-  }
-
   .sync-lobby-tools {
     grid-template-columns: 1fr;
   }
 
   .sync-player-entry-row {
-    grid-template-columns: minmax(0, 1fr) 112px;
+    grid-template-columns: minmax(0, 1fr) 58px;
   }
 
   .draft-status {

@@ -987,7 +987,7 @@ function SyncEntryPanel({
 
   return (
     <section className="hud-panel sync-entry-panel">
-      <PanelHeader title="Sync" onClose={onBack} />
+      <PanelHeader onClose={onBack} />
       <div className="sync-player-entry-row">
         <input
           aria-label="Sync player name"
@@ -1068,7 +1068,7 @@ function SetupPanel({
 }) {
   return (
     <section className="hud-panel setup-panel">
-      <PanelHeader title={mode === "local" ? "Local" : syncRole === "host" ? "Host" : "Joined"} onClose={onBack} />
+      <PanelHeader onClose={onBack} />
 
       {mode === "local" ? (
         <form
@@ -1095,13 +1095,13 @@ function SetupPanel({
         <div className="sync-lobby-tools">
           {syncQrText ? <QrPanel text={syncQrText} /> : null}
           <div className="setup-actions two-up">
-            <button className="secondary icon-text-button" type="button" onClick={onScanAnswer}>
-              <ScanLine size={18} />
-              Scan
-            </button>
             <button className="secondary icon-text-button" type="button" onClick={onRandomizePlayers} disabled={!canControl || players.length < 2}>
               <Shuffle size={18} />
               Randomize
+            </button>
+            <button className="secondary icon-text-button" type="button" onClick={onScanAnswer}>
+              <ScanLine size={18} />
+              Scan
             </button>
           </div>
         </div>
@@ -1112,6 +1112,15 @@ function SetupPanel({
       ) : null}
 
       {syncMessage ? <p className="sync-status">{syncMessage}</p> : null}
+
+      {mode === "local" ? (
+        <div className="setup-actions">
+          <button className="secondary icon-text-button" type="button" onClick={onRandomizePlayers} disabled={!canControl || players.length < 2}>
+            <Shuffle size={18} />
+            Randomize
+          </button>
+        </div>
+      ) : null}
 
       <div className="player-list">
         {players.map((player) => {
@@ -1158,7 +1167,6 @@ function SetupPanel({
                   <Unlock size={15} />
                 </button>
               ) : null}
-              {mode === "sync" ? <span className="connection-dot" data-status={player.connectionStatus} aria-label={player.connectionStatus} /> : null}
               {mode === "local" || canControl ? (
                 <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name || "player"}`}>
                   <Trash2 size={16} />
@@ -1168,15 +1176,6 @@ function SetupPanel({
           );
         })}
       </div>
-
-      {mode === "local" ? (
-        <div className="setup-actions">
-          <button className="secondary icon-text-button" type="button" onClick={onRandomizePlayers} disabled={!canControl || players.length < 2}>
-            <Shuffle size={18} />
-            Randomize
-          </button>
-        </div>
-      ) : null}
 
       <div className="config-grid">
         <SegmentedControl
@@ -1389,10 +1388,10 @@ function DecisionDialog({
   );
 }
 
-function PanelHeader({ closeLabel = "Close", onClose, title }: { closeLabel?: string; onClose: () => void; title: string }) {
+function PanelHeader({ closeLabel = "Close", onClose, title }: { closeLabel?: string; onClose: () => void; title?: string }) {
   return (
-    <div className="panel-header">
-      <h1>{title}</h1>
+    <div className={title ? "panel-header" : "panel-header icon-only"}>
+      {title ? <h1>{title}</h1> : null}
       <button className="icon-button" type="button" onClick={onClose} aria-label={closeLabel}>
         <X size={18} />
       </button>
