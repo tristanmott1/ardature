@@ -116,7 +116,7 @@ Local mode is pass-and-play.
 - The troop allocation timer includes both army build and territory allocation.
 - If the timer is unlimited, there is no timer and no automatic random completion.
 - If the timer expires, the app locks the current army build if needed, randomly completes remaining allocation, and shows a brief message: `The remainder of your troops have been randomly allocated.`
-- After each player finishes, a handoff screen hides that player's allocation before the next player begins.
+- After each player finishes, the app shows the next player's name in the top bar and a handoff popup with only a continue arrow before that player begins.
 - If a player who already finished allocation later receives redistributed territories or troops, they get a second allocation turn appended to the end of the local allocation order.
 - During a second allocation turn, the player can rearrange all of their troops across all of their current territories. Their previous placements remain where they were until the player changes them.
 
@@ -177,9 +177,9 @@ Visibility rules:
 
 - Ownership is visible to everyone.
 - Each viewer sees total troop counts on their own territories.
-- Each viewer can select only their own territories.
-- Selecting one of your own territories shows the heavy/cavalry/elite/leader breakdown in the top controls section.
-- Opponent territories are not selectable.
+- Each viewer can select any territory to show its name in the top controls section.
+- Selecting one of your own territories also shows the heavy/cavalry/elite/leader breakdown.
+- Selecting an opponent territory never shows that territory's breakdown.
 - Opponent territories that have any connection to one of the viewer's territories show total troop count only.
 - Opponent territory breakdowns are never shown in this milestone.
 - Opponent territories with no connection to the viewer's territories show ownership only.
@@ -188,9 +188,9 @@ Visibility rules:
 
 Local read-only map:
 
-- Because local mode is pass-and-play on one device, this milestone uses a temporary current-viewer dropdown at the top of the map.
-- Changing the dropdown changes the viewer perspective and therefore troop-count visibility.
-- Later turn play will replace this dropdown with handoff/confirm screens between players.
+- Because local mode is pass-and-play on one device, pressing the player name in the top bar cycles the current viewer.
+- Cycling the viewer changes the viewer perspective and therefore troop-count visibility.
+- Later turn play will replace this viewer-cycling shortcut with handoff/confirm screens between players.
 
 Sync read-only map:
 

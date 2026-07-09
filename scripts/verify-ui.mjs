@@ -160,6 +160,7 @@ async function runSourceChecks() {
   assert(appSource.includes('game.mode === "sync" && game.phase === "allocation" && localAllocationReady'), "Ready page is derived from this device's ready state.");
   assert(appSource.includes("function ReadyColumn") && appSource.includes('title="Ready"') && appSource.includes('title="Waiting"'), "Allocation ready page uses ready and waiting columns.");
   assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
+  assert(appSource.includes("data-qr-text") && appSource.includes("handlePaste"), "QR scanner supports paste-driven verification.");
   assert(appSource.includes("canAdvance={syncRole === \"host\"") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
@@ -428,6 +429,13 @@ async function assertBelow(page, upperLocator, lowerLocator, message) {
   assert(upper && lower && lower.y >= upper.y + upper.height - 1, message);
 }
 
+async function assertTopBarFullWidth(page, selector, message) {
+  const bar = await page.locator(selector).boundingBox();
+  const viewport = page.viewportSize();
+
+  assert(bar && viewport && bar.x <= 1 && bar.width >= viewport.width - 2, message);
+}
+
 async function checkColorMenuDismissal(page) {
   const firstColorButton = page.locator(".player-row").nth(0).getByRole("button", { name: /color/i });
   const secondColorButton = page.locator(".player-row").nth(1).getByRole("button", { name: /color/i });
@@ -532,14 +540,14 @@ async function runLocalDraftChecks(page) {
   assertViewBoxEquals(await viewBox(page), homeViewport, "Initial draft viewBox uses the home viewport.");
   assert((await page.locator("[data-territory-fill]").count()) === 42, "Map renders 42 territory fill groups.");
   assert((await page.locator("[data-territory-hit]").count()) === 42, "Draft renders 42 hit targets.");
-  const controlsBox = await page.locator(".draft-panel").boundingBox();
+  const controlsBox = await page.locator(".game-top-bar").boundingBox();
   const mapBox = await page.locator(".map-shell").boundingBox();
   assert(controlsBox && mapBox && mapBox.y >= controlsBox.y + controlsBox.height - 1, "Draft controls sit above the map.");
-  assert((await page.locator(".draft-panel .game-top-bar").count()) === 1, "Draft uses the shared game top bar.");
+  assert((await page.locator(".game-top-bar").count()) === 1, "Draft uses the shared game top bar.");
   assert((await page.locator(".game-top-bar .player-dot").count()) === 0, "Game top bar does not use player dots.");
-  const topBarBox = await page.locator(".draft-panel .game-top-bar").boundingBox();
-  const endButtonBox = await page.locator(".draft-panel .game-top-bar").getByRole("button", { name: "End game" }).boundingBox();
-  const pauseButtonBox = await page.locator(".draft-panel .game-top-bar").getByRole("button", { name: "Pause draft" }).boundingBox();
+  const topBarBox = await page.locator(".game-top-bar").boundingBox();
+  const endButtonBox = await page.locator(".game-top-bar").getByRole("button", { name: "End game" }).boundingBox();
+  const pauseButtonBox = await page.locator(".game-top-bar").getByRole("button", { name: "Pause draft" }).boundingBox();
   assert(topBarBox && endButtonBox && pauseButtonBox && endButtonBox.x < topBarBox.x + topBarBox.width * 0.2, "Game top bar keeps X on the left.");
   assert(topBarBox && pauseButtonBox && pauseButtonBox.x + pauseButtonBox.width > topBarBox.x + topBarBox.width * 0.8, "Game top bar keeps pause on the right.");
   await page.getByText("0 / 21").waitFor();
@@ -559,7 +567,7 @@ async function runLocalDraftChecks(page) {
   const viewport = page.viewportSize();
   assert(confirmBox && viewport && confirmBox.y > viewport.height * 0.55, "Confirm sheet appears at the bottom.");
   assert(confirmBox && viewport && confirmBox.width <= viewport.width - 140, "Confirm sheet leaves room for map camera controls.");
-  assert((await page.locator(".draft-panel .game-top-bar").count()) === 1, "Draft top bar stays visible during territory confirmation.");
+  assert((await page.locator(".game-top-bar").count()) === 1, "Draft top bar stays visible during territory confirmation.");
   assertViewBoxEquals(await viewBox(page), parseViewBox(beforeDefaultSelection), "Default-off auto-focus leaves the viewBox unchanged.");
   assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Confirm sheet keeps the return-to-map control available.");
   assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Confirm sheet keeps the auto-focus control available.");
@@ -595,7 +603,7 @@ async function runLocalDraftChecks(page) {
   await resultDialog.waitFor();
   const resultBox = await resultDialog.boundingBox();
   await capture(page, "07-local-draft-result-mobile.png");
-  assert((await page.locator(".draft-panel .game-top-bar").count()) === 1, "Draft top bar stays visible during draft notification.");
+  assert((await page.locator(".game-top-bar").count()) === 1, "Draft top bar stays visible during draft notification.");
   assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.width - resultBox.width) < 1, "Result sheet matches confirm sheet width.");
   assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.height - resultBox.height) < 1, "Result sheet matches confirm sheet height.");
   assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
@@ -613,7 +621,7 @@ async function runLocalDraftChecks(page) {
   await page.getByRole("button", { name: "Pause draft" }).click();
   await page.getByRole("dialog", { name: "Paused" }).waitFor();
   await capture(page, "08-local-pause-mobile.png");
-  assert((await page.locator(".draft-panel").count()) === 0, "Pause hides draft controls.");
+  assert((await page.locator(".game-top-bar").count()) === 0, "Pause hides the game top bar.");
   assert((await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "End game" }).count()) === 0, "Local pause has no end-game close button.");
   assert((await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart game" }).count()) === 1, "Local pause has a restart button.");
   await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart game" }).click();
@@ -732,6 +740,8 @@ async function runRandomAllocationChecks(page) {
   await page.getByRole("button", { name: "Start game" }).click();
   await page.waitForSelector('.app-shell[data-app-phase="allocationHandoff"]');
   await capture(page, "10-allocation-handoff-mobile.png");
+  assert((await page.locator(".game-top-bar").count()) === 1, "Allocation handoff shows the next player's top bar.");
+  assert((await page.getByRole("dialog", { name: "Allocation handoff" }).getByRole("button", { name: "Begin allocation" }).count()) === 1, "Allocation handoff popup is only the continue arrow.");
   assert((await page.locator('[data-territory-fill][data-territory-skin="background"]').count()) < 42, "Random draft colors territories.");
   await page.getByRole("button", { name: "Begin allocation" }).click();
   await page.waitForSelector(".army-build-modal .army-triangle");
@@ -748,7 +758,7 @@ async function runRandomAllocationChecks(page) {
   await clickTerritory(page, ownedTerritoryId);
   await page.waitForSelector(".allocation-target");
   await capture(page, "12-allocation-territory-mobile.png");
-  assert((await page.locator(".allocation-panel .game-top-bar").count()) === 1, "Allocation uses the shared game top bar.");
+  assert((await page.locator(".game-top-bar").count()) === 1, "Allocation uses the shared game top bar.");
   assert((await page.locator(".allocation-target span").count()) === 0, "Allocation target does not repeat the territory troop total.");
   assert((await page.locator(".troop-action-row").count()) === 2, "Territory allocation has add and remove rows.");
   assert((await page.locator(".troop-action-row").nth(0).locator(".troop-icon-button").count()) === 4, "Add row has four troop icon buttons.");
@@ -779,11 +789,22 @@ async function runRandomAllocationChecks(page) {
   await finishAllocationTurn(page, "red");
   await page.waitForSelector('.app-shell[data-app-phase="gameMap"]');
   await capture(page, "13-game-map-mobile.png");
-  assert((await page.locator(".game-map-panel .game-top-bar").count()) === 1, "Read-only map uses the shared game top bar.");
-  assert((await page.getByLabel("Current viewer").count()) === 1, "Local game map can switch viewer perspective.");
+  assert((await page.locator(".game-top-bar").count()) === 1, "Read-only map uses the shared game top bar.");
+  await assertTopBarFullWidth(page, ".game-top-bar", "Read-only map top bar spans the screen.");
+  assert((await page.getByLabel("Current viewer").count()) === 0, "Local game map does not use a viewer dropdown.");
+  assert((await page.getByRole("button", { name: "Change viewer" }).count()) === 1, "Local game map cycles viewer from the name bar.");
   assert((await page.locator(".troop-marker").count()) > 0, "Read-only game map shows troop totals.");
   await clickTerritory(page, ownedTerritoryId);
+  assert((await page.locator(".game-map-panel .selected-territory-name").count()) === 1, "Read-only map shows the selected territory name.");
   assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Read-only breakdown uses troop icon counts.");
+  const opponentTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="red"]').first().getAttribute("data-territory-fill");
+  assert(opponentTerritoryId, "Random draft gives the opponent at least one territory.");
+  await clickTerritory(page, opponentTerritoryId);
+  assert((await page.locator(".game-map-panel .selected-territory-name").count()) === 1, "Read-only map shows opponent territory names.");
+  assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 0, "Read-only map hides opponent breakdowns.");
+  await page.getByRole("button", { name: "Change viewer" }).click();
+  await clickTerritory(page, opponentTerritoryId);
+  assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Cycling local viewer reveals that player's own breakdowns.");
 }
 
 async function finishAllocationTurn(page, skin, options = {}) {
@@ -841,6 +862,78 @@ async function runSyncEntryChecks(page) {
   await page.waitForSelector("[data-sync-role='host']");
 }
 
+async function runSyncReadyPageChecks(browser) {
+  console.log("Checking sync ready page");
+  const host = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const joiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  host.setDefaultTimeout(15000);
+  joiner.setDefaultTimeout(15000);
+
+  await host.goto(baseUrl);
+  await host.evaluate(() => localStorage.clear());
+  await host.reload();
+  await host.getByRole("button", { name: "Sync" }).click();
+  await host.getByLabel("Sync player name").fill("Gandalf");
+  await host.getByRole("button", { name: "Sync player color" }).click();
+  await host.getByRole("menuitemradio", { name: "Green" }).click();
+  await host.getByRole("button", { name: "Host" }).click();
+  await host.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
+
+  await joiner.goto(baseUrl);
+  await joiner.evaluate(() => localStorage.clear());
+  await joiner.reload();
+  await joiner.getByRole("button", { name: "Sync" }).click();
+  await joiner.getByLabel("Sync player name").fill("Saruman");
+  await joiner.getByRole("button", { name: "Sync player color" }).click();
+  await joiner.getByRole("menuitemradio", { name: "Red" }).click();
+  await joiner.getByRole("button", { name: "Join" }).click();
+  await pasteScannerText(joiner, await qrText(host));
+  await joiner.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
+
+  await host.getByRole("button", { name: "Scan" }).click();
+  await pasteScannerText(host, await qrText(joiner));
+  await host.getByText("Saruman").waitFor({ timeout: 15000 });
+  await host.getByRole("button", { name: "Random", exact: true }).click();
+  await host.getByRole("button", { name: "Start game" }).click();
+  await host.waitForSelector(".army-build-modal .army-triangle", { timeout: 15000 });
+  await host.getByRole("button", { name: "Confirm army" }).click();
+  await host.waitForSelector(".allocation-controls");
+  await finishAllocationTurn(host, "green");
+  await host.waitForSelector(".allocation-waiting-panel .ready-columns");
+  await capture(host, "16-sync-ready-page-mobile.png");
+  assert((await host.locator(".game-top-bar").count()) === 1, "Sync ready page uses the top game bar.");
+  await assertTopBarFullWidth(host, ".game-top-bar", "Sync ready page top bar spans the screen.");
+  assert((await host.locator(".game-top-player span").count()) === 0, "Sync ready top bar shows name only.");
+  assert((await host.locator(".ready-column").count()) === 2, "Sync ready page has two columns.");
+  assert((await host.locator(".ready-player-row .connection-label").count()) === 0, "Sync ready rows do not include row-level status.");
+
+  await joiner.waitForSelector(".army-build-modal .army-triangle", { timeout: 15000 });
+  await capture(joiner, "17-sync-unready-allocation-mobile.png");
+  assert((await joiner.locator(".allocation-waiting-panel").count()) === 0, "Unready sync player does not see ready page.");
+
+  await host.close();
+  await joiner.close();
+}
+
+async function qrText(page) {
+  const text = await page.locator(".qr-code[data-qr-text]").last().getAttribute("data-qr-text");
+  assert(text, "QR text is exposed for verification.");
+  return text;
+}
+
+async function pasteScannerText(page, text) {
+  await page.locator(".scanner-modal").waitFor();
+  await page.evaluate((payload) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", payload);
+    const event = new ClipboardEvent("paste", {
+      bubbles: true,
+      clipboardData: data,
+    });
+    document.querySelector(".scanner-modal")?.dispatchEvent(event);
+  }, text);
+}
+
 async function main() {
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(outputDir, { recursive: true });
@@ -866,6 +959,7 @@ async function main() {
     await runDesktopMapInteractionChecks(desktop);
     await runRandomAllocationChecks(mobile);
     await runSyncEntryChecks(mobile);
+    await runSyncReadyPageChecks(browser);
 
     console.log("Closing browser");
     await Promise.race([

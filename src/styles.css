@@ -56,9 +56,9 @@ button:focus-visible,
   background: var(--map-paper);
 }
 
-.app-shell.draft-layout {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+.app-shell.game-layout {
+  display: flex;
+  flex-direction: column;
 }
 
 .map-shell {
@@ -68,9 +68,10 @@ button:focus-visible,
   touch-action: none;
 }
 
-.draft-layout .map-shell {
+.game-layout .map-shell {
   position: relative;
   inset: auto;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
@@ -207,28 +208,12 @@ button:focus-visible,
   gap: 8px;
 }
 
-.game-stage-panel {
-  top: max(10px, env(safe-area-inset-top));
-  display: grid;
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-.draft-layout .game-stage-panel {
+.game-layout > .game-top-bar {
   position: relative;
-  top: auto;
-  left: auto;
-  z-index: 12;
+  z-index: 21;
+  flex: none;
   width: 100%;
-  max-width: none;
-  border-width: 0 0 1px;
-  border-radius: 0;
-  background: var(--map-paper);
   box-shadow: 0 3px 14px rgba(24, 24, 27, 0.1);
-  transform: none;
-  backdrop-filter: none;
-  padding: 0;
 }
 
 .game-top-bar {
@@ -258,14 +243,26 @@ button:focus-visible,
 }
 
 .game-top-player {
-  display: flex;
+  display: grid;
+  justify-items: start;
   min-width: 0;
-  gap: 8px;
-  align-items: baseline;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+
+.game-top-player:disabled {
+  opacity: 1;
+}
+
+.game-top-player:not(:disabled):active {
+  transform: scale(0.99);
 }
 
 .game-top-player strong {
   overflow: hidden;
+  max-width: 100%;
   font-size: 1.08rem;
   font-weight: 900;
   line-height: 1.1;
@@ -274,9 +271,13 @@ button:focus-visible,
 }
 
 .game-top-player span {
-  flex: none;
-  font-size: 0.84rem;
-  font-weight: 850;
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 0.76rem;
+  font-weight: 760;
+  opacity: 0.78;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .game-top-tools {
@@ -290,6 +291,16 @@ button:focus-visible,
   border-color: rgba(255, 255, 255, 0.24);
   color: currentColor;
   background: rgba(255, 255, 255, 0.18);
+}
+
+.game-controls-panel {
+  position: relative;
+  z-index: 12;
+  flex: none;
+  width: 100%;
+  border-bottom: 1px solid var(--line);
+  background: var(--map-paper);
+  box-shadow: 0 3px 14px rgba(24, 24, 27, 0.08);
 }
 
 .panel-header,
@@ -804,8 +815,11 @@ select {
   justify-items: center;
 }
 
-.game-map-panel > select,
-.game-map-panel > strong,
+.handoff-scrim {
+  z-index: 18;
+}
+
+.game-map-panel > .selected-territory-name,
 .game-map-panel > .troop-count-row {
   margin: 12px max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left));
 }
@@ -874,13 +888,19 @@ select {
 
 .game-map-panel {
   display: grid;
-  justify-items: center;
+  justify-items: stretch;
   padding-bottom: 12px;
 }
 
-.game-map-panel select {
-  min-height: 38px;
-  width: min(220px, calc(100vw - 32px));
+.selected-territory-name {
+  justify-self: center;
+  min-height: 24px;
+  font-size: 0.94rem;
+  text-align: center;
+}
+
+.game-map-panel > .troop-count-row {
+  justify-self: center;
 }
 
 .connection-dot {

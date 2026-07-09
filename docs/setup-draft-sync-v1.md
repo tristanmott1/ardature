@@ -107,7 +107,7 @@ Manual draft interaction:
 - Game-stage screens use a shared colored top bar. The X button is always in the top-left, the current player name is bold and prominent near the left, the timer appears near the right when present, and pause appears in the top-right in local mode and for the sync host.
 - The top bar background uses the current player's color instead of a small color dot.
 - The current-player top bar stays visible through territory confirmation, draft result notifications, sync notifications, and troop allocation controls.
-- The current-player top bar is hidden only when there is intentionally no active turn, such as local in-between handoff screens.
+- The current-player top bar stays visible during active game-stage screens. Local allocation handoff shows the next player's name in the bar and uses a popup with only the continue arrow.
 - The active player picks by selecting a remaining territory on the map.
 - Selecting a territory opens a confirmation popup with cancel and confirm controls.
 - The shared top bar remains visible during draft confirmation and draft result notifications.
@@ -231,7 +231,7 @@ Local mode uses the same draft engine as sync mode, but without network messages
 
 ## Map Behavior
 
-The app should be a map-first shell. During active draft turns, compact controls sit in an opaque top section and the map fills the space below without sliding underneath them. When controls are hidden by pause, confirmation, result, scanner, or exit modals, the map can use the full screen behind the modal.
+The app should be a map-first shell. During game stages, the colored top bar sits at the top, optional controls sit below it, and the map fills the remaining space without sliding underneath either section. Draft confirmation and result sheets do not hide the top bar. Full-screen modal states such as pause, scanner, and exit confirmation may cover the map.
 
 Reusable map modes for this milestone:
 

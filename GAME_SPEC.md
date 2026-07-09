@@ -755,7 +755,7 @@ The exact QR prefixes should be project-specific, not Qwixx-specific.
 
 ### Draft View
 
-During manual drafts, the active player selects a remaining territory on the map. The current-player top bar stays visible during confirmation and draft result notifications. It is hidden only when there is intentionally no active turn, such as local in-between handoff screens.
+During manual drafts, the active player selects a remaining territory on the map. The current-player top bar stays visible during confirmation and draft result notifications.
 
 Draft selection flow:
 
@@ -812,7 +812,7 @@ Local allocation:
 - The allocation timer includes army build and territory allocation.
 - If time expires, the current army mixture is locked if needed and the rest of that player's troops are randomly allocated.
 - After time expiration, the app briefly says `The remainder of your troops have been randomly allocated.`
-- A handoff screen hides one player's allocation before the next player begins.
+- The top bar shows the next player, and a simple arrow popup gates the handoff before that player begins.
 
 Sync allocation:
 
@@ -833,15 +833,15 @@ Visibility rules:
 
 - Ownership is visible to everyone.
 - A viewer sees total troop counts on their own territories.
-- A viewer can select only their own territories.
-- Selecting one of your own territories shows its heavy/cavalry/elite/leader breakdown in the top controls section.
-- Opponent territories are not selectable.
+- A viewer can select any territory to show its name in the top controls section.
+- Selecting one of your own territories also shows its heavy/cavalry/elite/leader breakdown.
+- Selecting an opponent territory never shows its troop breakdown.
 - Opponent territories connected to any of the viewer's territories show total troop count only.
 - Opponent territories not connected to any of the viewer's territories show ownership only.
 - Visibility connections use all gameplay connections from `maps/territory-key.md`, including both land and ship connections.
 - Visibility connections are independent of physical shared borders in generated geometry.
 
-Local mode uses a temporary current-viewer dropdown at the top of the read-only map. Changing the dropdown changes the viewer perspective. Sync mode uses the device's local player as the viewer, including on the host device.
+In local mode, pressing the player name in the top bar cycles the current viewer. Sync mode uses the device's local player as the viewer, including on the host device.
 
 ### Pause And Player Removal
 
