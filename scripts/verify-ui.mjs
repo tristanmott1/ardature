@@ -97,6 +97,9 @@ async function runSourceChecks() {
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapConnectionsSource = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
   const mapViewSource = await readFile(new URL("../src/map/components/MapView.tsx", import.meta.url), "utf8");
+  const indexSource = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const manifestSource = await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8");
+  const serviceWorkerSource = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
   const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
   const syncMessagesSource = await readFile(new URL("../src/sync/syncMessages.ts", import.meta.url), "utf8");
   const syncTransportSource = await readFile(new URL("../src/sync/syncTransport.ts", import.meta.url), "utf8");
@@ -150,6 +153,9 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("onMapPress"), "Map view supports map-background presses.");
   assert(mapViewSource.includes("Maximize") && mapViewSource.includes("Return to map view"), "Map view uses a corner-only return-to-map control.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
+  assert(indexSource.includes("./app-icons/icon-192.png") && indexSource.includes("./app-icons/apple-touch-icon.png"), "Index references organized app icons.");
+  assert(manifestSource.includes("app-icons/icon-192.png") && manifestSource.includes("app-icons/icon-512.png"), "Manifest references organized app icons.");
+  assert(serviceWorkerSource.includes("./app-icons/icon-192.png") && serviceWorkerSource.includes("./app-icons/icon-512.png"), "Service worker caches organized app icons.");
 }
 
 function generatedNumber(source, name) {
@@ -243,6 +249,22 @@ function assertViewBoxEquals(value, expected, message) {
   assert(Math.abs(viewport.y - expected.y) <= epsilon, message);
   assert(Math.abs(viewport.width - expected.width) <= epsilon, message);
   assert(Math.abs(viewport.height - expected.height) <= epsilon, message);
+}
+
+async function waitForViewBox(page, expected) {
+  await page.waitForFunction(
+    (target) => {
+      const value = document.querySelector(".map-svg")?.getAttribute("viewBox");
+      const parts = value?.trim().split(/\s+/).map(Number) ?? [];
+
+      return parts.length === 4 &&
+        Math.abs(parts[0] - target.x) < 0.001 &&
+        Math.abs(parts[1] - target.y) < 0.001 &&
+        Math.abs(parts[2] - target.width) < 0.001 &&
+        Math.abs(parts[3] - target.height) < 0.001;
+    },
+    expected,
+  );
 }
 
 async function clickTerritory(page, territoryId) {
@@ -444,6 +466,7 @@ async function runLocalDraftChecks(page) {
   assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
   assert((await resultDialog.locator(".territory-preview-shape").count()) === 0, "Result sheet has no territory preview.");
   await page.getByText("0 / 21").waitFor();
+  await waitForViewBox(page, homeViewport);
   assertViewBoxEquals(await viewBox(page), homeViewport, "Local result dismissal returns to the home viewport.");
 
   await clickTerritory(page, "shire");

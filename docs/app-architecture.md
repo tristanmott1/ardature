@@ -7,14 +7,20 @@ Ardatúrë is a static GitHub Pages PWA, organized similarly to the sibling `../
 Planned project layout:
 
 ```text
-characters/
-  source character and troop art
-
 docs/
   planning and implementation notes
 
 maps/
   source drawings, territory key, generated geometry, and visual previews
+
+public/
+  app-icons/
+    PWA icons and original ring icon source
+  troops/
+    source/
+      original uncropped character art
+    icons/
+      committed circular troop icon crops
 
 scripts/
   map extraction and generation tools
@@ -47,6 +53,29 @@ The exact file list can evolve, but the boundaries should stay clear:
 - `src/map/` owns map rendering and map-specific UI.
 - `src/game/` owns game state, reducers, and rules.
 - `src/sync/` owns Qwixx-style local network synchronization adapted for Ardatúrë.
+
+## Public Assets
+
+The `public/` directory is organized by runtime asset purpose:
+
+- `app-icons/`: PWA icon files referenced by `index.html`, `manifest.webmanifest`, and the service worker. `ring-icon.jpg` is the original source image for the app icon.
+- `troops/source/`: original uncropped character images. These should be preserved because later screens may need full-size character art.
+- `troops/icons/`: one-time, manually tuned circular PNG crops for troop UI.
+
+Troop portraits are raster art and should remain PNGs. Do not convert them to SVG; SVG would either embed the same raster data or create poor traced art. CSS should provide borders, sizing, and count bubbles around these PNGs at runtime.
+
+The troop icon crops are app-facing assets:
+
+- `dwarf.png`
+- `elf.png`
+- `orc.png`
+- `rohirrim.png`
+- `uruk-hai.png`
+- `warg.png`
+- `witch-king.png`
+- `wizard.png`
+
+Army build, troop allocation controls, and future troop displays should use these circular icon crops instead of letter badges. When an icon has a count, render the count as a small white circle attached to the edge of the character circle.
 
 ## Map Data Flow
 

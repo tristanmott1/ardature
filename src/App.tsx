@@ -1370,7 +1370,7 @@ function HomePanel({ onStartLocal, onStartSync }: { onStartLocal: () => void; on
   return (
     <section className="hud-panel home-panel">
       <div className="brand-row">
-        <img src="./icon-192.png" alt="" />
+        <img src="./app-icons/icon-192.png" alt="" />
         <div>
           <h1>Ardatúrë</h1>
         </div>

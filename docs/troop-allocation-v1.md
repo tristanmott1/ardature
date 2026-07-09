@@ -28,17 +28,20 @@ The gameplay troop classes are the same for both sides:
 
 The leader troop is not part of the triangle mixture. Every player always has exactly one base leader troop, determined by side, and the leader allocates to territories like any other troop.
 
-The UI should use icons wherever practical. Allocation controls should not use troop names when an icon can clearly identify the troop class.
+The UI should use circular character icons wherever practical. Allocation controls should not use troop names when an icon can clearly identify the troop class. The app-facing troop icons live in `public/troops/icons/` and are manually tuned PNG crops from the original art in `public/troops/source/`.
+
+When a troop icon is displayed with a count, the count should appear in a small white circular badge on the edge of the character circle. The icon itself remains the main visual; no troop text should be shown in ordinary allocation UI.
 
 ## Army Build
 
-Each player first chooses an army mixture with a reusable triangle component.
+Each player first chooses an army mixture with a reusable triangle component. This army build step should appear as a large centered modal over the map, not as part of the compact top controls. The compact controls for this step should stay minimal: current player identity plus pause/exit controls.
 
 Triangle rules:
 
 - The top corner is heavy.
 - The bottom-left corner is cavalry.
 - The bottom-right corner is elite.
+- Each triangle corner displays the appropriate circular troop icon for the player's side.
 - The marker starts in the center.
 - The marker is draggable anywhere inside the triangle for army building.
 - The marker position is converted to troop percentages with barycentric coordinates.
@@ -67,7 +70,7 @@ Budget rules:
   - If the sum is too high, reduce the troop class whose raw count is closest to the next lower integer. Repeat with another troop class if needed.
   - If the sum is too low, increase the troop class whose raw count is closest to the next higher integer. Repeat with another troop class if needed.
 - A final count of `0` for any troop class is valid.
-- While the marker moves, the UI shows live final heavy/cavalry/elite counts plus the guaranteed leader.
+- While the marker moves, the UI shows live final heavy/cavalry/elite counts plus the guaranteed leader as four circular troop icons with count badges above the triangle.
 - Once the player submits the army build, the heavy/cavalry/elite counts plus the guaranteed leader become that player's base army.
 
 Inherited troops from removed players are additive. They do not change the player's budget and they do not get converted into budget. Leaders from removed players are not inherited as leaders; each removed wizard or witch-king is randomly replaced with one heavy, cavalry, or elite troop before redistribution. If a player selected a `100%` cavalry mixture and later receives `2` heavy and `1` elite from a removed player, their live allocation pool shows their original cavalry count, their original leader, plus the inherited `2` heavy and `1` elite.

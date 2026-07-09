@@ -155,8 +155,8 @@ Rules:
 
 - Each player first chooses an army mixture using a reusable triangle component.
 - The triangle uses barycentric coordinates for army building.
-- Light-side colors (`green`, `blue`, `yellow`) use dwarf, rohirrim, and elf icons.
-- Dark-side colors (`red`, `purple`, `black`) use orc, warg, and uruk-hai icons.
+- Light-side colors (`green`, `blue`, `yellow`) use dwarf, rohirrim, and elf circular troop icons.
+- Dark-side colors (`red`, `purple`, `black`) use orc, warg, and uruk-hai circular troop icons.
 - Light-side colors also receive a wizard leader. Dark-side colors also receive a witch-king leader.
 - The gameplay mixture troop classes are heavy, cavalry, and elite.
 - The leader troop is not part of the triangle mixture and allocates like any other troop.
@@ -792,7 +792,7 @@ Army build:
 - The current player's side also gives them exactly one wizard or witch-king leader.
 - The triangle marker starts in the center.
 - The army-build triangle uses barycentric coordinates and allows true `0%` troop classes.
-- The UI shows live troop counts while the marker moves.
+- The UI shows live troop counts while the marker moves using icon count badges, not troop text.
 - Submitting the army build locks that player's base heavy/cavalry/elite troop counts plus their guaranteed leader.
 
 Territory allocation:
@@ -1159,7 +1159,13 @@ Sync mode should remain compatible with static hosting:
 
 ## Existing Assets
 
-The repository currently includes character images under `characters/`:
+Runtime public assets are organized under `public/`:
+
+- `app-icons/`: PWA icons and the original ring icon source.
+- `troops/source/`: original uncropped character art.
+- `troops/icons/`: manually tuned circular PNG crops used by troop UI.
+
+The repository currently includes source character images under `public/troops/source/`:
 
 - `crow.png`
 - `dwarf.png`
@@ -1175,7 +1181,7 @@ The repository currently includes character images under `characters/`:
 
 The game should use these assets where appropriate, especially for troop icons, side identity, spy identity, and atmospheric UI accents.
 
-Asset naming may be cleaned up later, but implementation should avoid unnecessary churn until the asset pipeline is clearer.
+The circular troop icon crops under `public/troops/icons/` are raster PNGs, not SVGs. They should be used anywhere the UI needs troop type icons. Counts should be rendered as small white circular badges attached to the icon.
 
 ## Not Yet Fixed
 
