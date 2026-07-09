@@ -640,10 +640,6 @@ select {
   overflow: visible;
 }
 
-.territory-preview-shape path {
-  vector-effect: non-scaling-stroke;
-}
-
 .pick-result-scrim {
   cursor: pointer;
 }

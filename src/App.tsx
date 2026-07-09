@@ -907,7 +907,7 @@ function App() {
 
       {canShowConfirm && pendingTerritory && active ? (
         <ConfirmPickDialog
-          fillColor={generatedMapData.backgroundColor}
+          fillColor="#ffffff"
           onCancel={cancelPendingPick}
           onConfirm={confirmPendingPick}
           territory={pendingTerritory}
@@ -1422,9 +1422,6 @@ function TerritoryShapePreview({
             d={path}
             fill={fillColor}
             key={index}
-            stroke="#111111"
-            strokeLinejoin="round"
-            strokeWidth="34"
           />
         ))}
       </g>
