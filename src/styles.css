@@ -238,7 +238,6 @@ button:focus-visible,
 .review-players,
 .mode-grid,
 .setup-actions,
-.sync-lobby-tools,
 .modal-actions {
   display: flex;
   gap: 10px;
@@ -318,6 +317,12 @@ button:focus-visible,
   flex: 0 0 auto;
   width: 38px;
   padding: 0;
+}
+
+.icon-button-spacer {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
 }
 
 .icon-button.large {
@@ -751,6 +756,10 @@ select {
   }
 
   .player-row .icon-button {
+    width: 34px;
+  }
+
+  .player-row .icon-button-spacer {
     width: 34px;
   }
 

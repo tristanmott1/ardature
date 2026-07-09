@@ -113,6 +113,7 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
   assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
+  assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
 }
 
 function generatedNumber(source, name) {
@@ -400,6 +401,7 @@ async function runSyncEntryChecks(page) {
   await assertBelow(page, page.locator(".qr-code"), page.getByRole("button", { name: "Scan" }), "Sync scan sits below the host QR.");
   await assertBelow(page, page.locator(".player-list"), page.getByRole("button", { name: "Randomize" }), "Sync randomize sits below player names.");
   assert((await page.locator(".player-row").count()) === 1, "Host lobby starts with the host player.");
+  assert((await page.getByRole("button", { name: "Remove Galadriel" }).count()) === 0, "Host cannot remove themselves in the lobby.");
   assert(await page.getByRole("button", { name: "Start game" }).isDisabled(), "Sync host cannot start with one player.");
   assert((await page.locator("[data-sync-role='host']").count()) === 1, "App records host sync role.");
   await page.getByRole("button", { name: "Close" }).click();

@@ -961,6 +961,7 @@ function App() {
         <PausePanel
           canRemove={game.mode === "local" || syncRole === "host"}
           canResume={game.mode === "local" || (syncRole === "host" && game.players.every((player) => player.connectionStatus === "connected"))}
+          localPlayerId={localPlayerId}
           mode={game.mode}
           onExit={returnHome}
           onRemovePlayer={removePlayer}
@@ -1232,9 +1233,13 @@ function SetupPanel({
                 </button>
               ) : null}
               {mode === "local" || canControl ? (
+                player.id === localPlayerId ? (
+                  <span className="icon-button-spacer" aria-hidden="true" />
+                ) : (
                 <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name || "player"}`}>
                   <Trash2 size={16} />
                 </button>
+                )
               ) : null}
             </article>
           );
@@ -1322,6 +1327,7 @@ function DraftPanel({
 function PausePanel({
   canRemove,
   canResume,
+  localPlayerId,
   mode,
   onExit,
   onRemovePlayer,
@@ -1331,6 +1337,7 @@ function PausePanel({
 }: {
   canRemove: boolean;
   canResume: boolean;
+  localPlayerId: string | null;
   mode: "local" | "sync";
   onExit: () => void;
   onRemovePlayer: (playerId: string) => void;
@@ -1350,9 +1357,13 @@ function PausePanel({
               <strong>{player.name}</strong>
               {mode === "sync" ? <span className="connection-label">{player.connectionStatus}</span> : null}
               {canRemove ? (
+                player.id === localPlayerId ? (
+                  <span className="icon-button-spacer" aria-hidden="true" />
+                ) : (
                 <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
                   <Trash2 size={16} />
                 </button>
+                )
               ) : null}
             </article>
           ))}
