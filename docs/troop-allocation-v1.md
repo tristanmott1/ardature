@@ -84,7 +84,10 @@ Allocation rules:
 - A player may select only territories they own.
 - Selecting a territory focuses the map on that territory.
 - Every owned territory must have at least one troop total before the player can finish.
-- The selected territory controls show total heavy/cavalry/elite/leader troops on that territory and total unallocated heavy/cavalry/elite/leader troops remaining.
+- The selected territory controls show two compact icon rows: remaining troops for adding and troops on the selected territory for removing.
+- The selected territory name is shown in bold, but its total troop count is not repeated in the controls because the map marker already shows that total.
+- The `+` and `-` row icons are non-clickable affordances. They are muted only when no troop in that row can currently be added or removed.
+- The circular troop icons are the action targets: tap a remaining troop icon to add one troop, or tap a selected-territory troop icon to remove one troop.
 - The player can remove any number of troops from the selected territory.
 - The player can add any number of remaining troops to the selected territory, but only if the total remaining troop count after the add is at least the number of still-empty owned territories.
 - This rule guarantees that every empty territory can still receive at least one troop.

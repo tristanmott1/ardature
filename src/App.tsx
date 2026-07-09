@@ -61,7 +61,6 @@ import {
   submitArmyBuild,
   territoryTroopTotal,
   territoryTroops,
-  troopTotal,
   updateArmyMarker,
 } from "./game/gameState";
 import type {
@@ -1743,38 +1742,50 @@ function AllocationControls({
   const selectedTroops = selectedTerritoryId ? territoryTroops(allocation, selectedTerritoryId) : null;
   const remaining = remainingTroops(allocation, player.id);
   const selectedTerritory = generatedMapData.territories.find((territory) => territory.id === selectedTerritoryId);
+  const canAddType = (troopType: TroopType) => Boolean(selectedTerritoryId && canAddTroop(allocation, ownership, player.id, selectedTerritoryId, troopType));
+  const canRemoveType = (troopType: TroopType) => Boolean(selectedTroops && selectedTroops[troopType] > 0);
+  const canAddAny = TROOP_TYPES.some(canAddType);
+  const canRemoveAny = TROOP_TYPES.some(canRemoveType);
 
   return (
     <div className="allocation-controls">
       <div className="allocation-target">
         <strong>{selectedTerritory?.name ?? "Select a territory"}</strong>
-        {selectedTerritoryId ? <span>{troopTotal(selectedTroops ?? createEmptyTroops())}</span> : null}
       </div>
-      <div className="troop-step-grid">
-        {TROOP_TYPES.map((troopType) => (
-          <div className="troop-stepper" key={troopType}>
-            <TroopIconCount
-              count={selectedTroops?.[troopType] ?? 0}
-              label={`${troopName(player.color, troopType)} on territory: ${selectedTroops?.[troopType] ?? 0}`}
-              player={player}
-              troopType={troopType}
-            />
-            <button className="icon-button" type="button" onClick={() => onAdjustTroop(troopType, -1)} disabled={!selectedTroops || selectedTroops[troopType] <= 0} aria-label={`Remove ${troopType}`}>
-              <Minus size={16} />
-            </button>
-            <button className="icon-button" type="button" onClick={() => onAdjustTroop(troopType, 1)} disabled={!selectedTerritoryId || !canAddTroop(allocation, ownership, player.id, selectedTerritoryId, troopType)} aria-label={`Add ${troopType}`}>
-              <Plus size={16} />
-            </button>
-            <TroopIconCount
-              className="remaining"
-              count={remaining[troopType]}
-              label={`${troopName(player.color, troopType)} remaining: ${remaining[troopType]}`}
-              player={player}
-              troopType={troopType}
-            />
+      {selectedTerritoryId && selectedTroops ? (
+        <div className="troop-action-grid">
+          <div className="troop-action-row">
+            <span className="troop-row-affordance" data-muted={canAddAny ? undefined : "true"} aria-hidden="true">
+              <Plus size={17} />
+            </span>
+            {TROOP_TYPES.map((troopType) => (
+              <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, 1)} disabled={!canAddType(troopType)} aria-label={`Add ${troopType}`}>
+                <TroopIconCount
+                  count={remaining[troopType]}
+                  label={`${troopName(player.color, troopType)} remaining: ${remaining[troopType]}`}
+                  player={player}
+                  troopType={troopType}
+                />
+              </button>
+            ))}
           </div>
-        ))}
-      </div>
+          <div className="troop-action-row">
+            <span className="troop-row-affordance" data-muted={canRemoveAny ? undefined : "true"} aria-hidden="true">
+              <Minus size={17} />
+            </span>
+            {TROOP_TYPES.map((troopType) => (
+              <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, -1)} disabled={!canRemoveType(troopType)} aria-label={`Remove ${troopType}`}>
+                <TroopIconCount
+                  count={selectedTroops[troopType]}
+                  label={`${troopName(player.color, troopType)} on territory: ${selectedTroops[troopType]}`}
+                  player={player}
+                  troopType={troopType}
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Ready">
         <Check size={20} />
       </button>
@@ -2571,10 +2582,6 @@ function pointToMarker(point: { x: number; y: number }): ArmyMarker {
     cavalry: clamped.cavalry / total,
     elite: clamped.elite / total,
   };
-}
-
-function createEmptyTroops(): TroopCounts {
-  return { heavy: 0, cavalry: 0, elite: 0, leader: 0 };
 }
 
 function isLightColor(color: PlayerColor | null) {

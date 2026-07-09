@@ -156,6 +156,8 @@ async function runSourceChecks() {
   assert(appSource.includes("TroopIconCount") && appSource.includes("troopIconSrc"), "Allocation UI uses troop image icons.");
   assert(!appSource.includes("TroopBadge") && !appSource.includes("troopLabel"), "Old letter troop badge components are removed.");
   assert(!stylesSource.includes(".troop-badge") && !stylesSource.includes(".troop-chip") && !stylesSource.includes(".army-builder"), "Old troop badge styles are removed.");
+  assert(!appSource.includes("troop-step-grid") && !appSource.includes("troop-stepper"), "Old troop stepper markup is removed.");
+  assert(!stylesSource.includes(".troop-step-grid") && !stylesSource.includes(".troop-stepper"), "Old troop stepper styles are removed.");
   assert(!stylesSource.includes(".army-triangle text"), "Army triangle does not style text labels.");
   assert(indexSource.includes("./app-icons/icon-192.png") && indexSource.includes("./app-icons/apple-touch-icon.png"), "Index references organized app icons.");
   assert(manifestSource.includes("app-icons/icon-192.png") && manifestSource.includes("app-icons/icon-512.png"), "Manifest references organized app icons.");
@@ -556,10 +558,15 @@ async function runRandomAllocationChecks(page) {
   await clickTerritory(page, ownedTerritoryId);
   await page.waitForSelector(".allocation-target");
   await capture(page, "12-allocation-territory-mobile.png");
-  assert((await page.locator(".troop-stepper").count()) === 4, "Territory allocation has four troop steppers.");
-  assert((await page.locator(".troop-stepper .troop-icon-count").count()) === 8, "Territory allocation uses icon-count steppers.");
+  assert((await page.locator(".allocation-target span").count()) === 0, "Allocation target does not repeat the territory troop total.");
+  assert((await page.locator(".troop-action-row").count()) === 2, "Territory allocation has add and remove rows.");
+  assert((await page.locator(".troop-action-row").nth(0).locator(".troop-icon-button").count()) === 4, "Add row has four troop icon buttons.");
+  assert((await page.locator(".troop-action-row").nth(1).locator(".troop-icon-button").count()) === 4, "Remove row has four troop icon buttons.");
+  assert((await page.locator(".troop-row-affordance button").count()) === 0, "Row plus and minus icons are not buttons.");
   await page.getByRole("button", { name: "Add heavy" }).click();
   assert((await page.locator(".troop-marker").count()) >= 1, "Adding a troop shows a troop marker.");
+  await page.getByRole("button", { name: "Remove heavy" }).click();
+  await page.getByRole("button", { name: "Add heavy" }).click();
   await finishAllocationTurn(page, "yellow", { coveredTerritoryIds: [ownedTerritoryId], troopPool: [
     ...Array(12).fill("heavy"),
     ...Array(13).fill("cavalry"),
