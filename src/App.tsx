@@ -49,6 +49,14 @@ import type {
   PlayerColor,
   TroopAllocationTimeLimit,
 } from "./game/gameTypes";
+import {
+  gameConfigFromPreferences,
+  localPlayersFromPreferences,
+  saveGameConfigPreference,
+  saveLocalSetupPreference,
+  saveSyncProfilePreference,
+  syncProfileFromPreferences,
+} from "./game/setupPreferences";
 import { generatedMapData } from "./map/generated/mapData";
 import { MapView } from "./map/components/MapView";
 import type { GeneratedTerritoryData, MapBounds } from "./map/mapTypes";
@@ -90,8 +98,8 @@ function App() {
   const [draftName, setDraftName] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [syncEntryOpen, setSyncEntryOpen] = useState(false);
-  const [syncName, setSyncName] = useState("");
-  const [syncColor, setSyncColor] = useState<PlayerColor | null>("green");
+  const [syncName, setSyncName] = useState(() => syncProfileFromPreferences().name);
+  const [syncColor, setSyncColor] = useState<PlayerColor | null>(() => syncProfileFromPreferences().color ?? "green");
   const [syncRole, setSyncRole] = useState<SyncRole>(null);
   const [localPlayerId, setLocalPlayerId] = useState<string | null>(null);
   const [syncQrText, setSyncQrText] = useState("");
@@ -178,6 +186,29 @@ function App() {
       saveLocalGame(game);
     }
   }, [game]);
+
+  useEffect(() => {
+    if (game.phase !== "setup") {
+      return;
+    }
+
+    if (game.mode === "local") {
+      saveLocalSetupPreference(game.players, game.config);
+      return;
+    }
+
+    const localPlayer = game.players.find((player) => player.id === localPlayerId);
+    if (syncRole === "host") {
+      saveGameConfigPreference(game.config);
+    }
+
+    if (localPlayer && !localPlayer.nameLocked && !localPlayer.colorLocked) {
+      saveSyncProfilePreference({
+        name: localPlayer.name,
+        color: localPlayer.color,
+      });
+    }
+  }, [game.config, game.mode, game.phase, game.players, localPlayerId, syncRole]);
 
   useEffect(() => {
     if (game.mode === "sync" && syncRole === "host") {
@@ -270,16 +301,40 @@ function App() {
     setLocalPlayerId(null);
     setGame({
       ...createInitialGameState(),
+      config: gameConfigFromPreferences(),
       phase: "setup",
       mode: "local",
+      players: localPlayersFromPreferences(),
     });
   }
 
   function openSyncEntry() {
+    const profile = syncProfileFromPreferences();
+
     clearLocalGame();
     setSyncEntryOpen(true);
-    setSyncColor("green");
-    setGame(createInitialGameState());
+    setSyncName(profile.name);
+    setSyncColor(profile.color ?? "green");
+    setGame({
+      ...createInitialGameState(),
+      config: gameConfigFromPreferences(),
+    });
+  }
+
+  function updateSyncName(name: string) {
+    setSyncName(name);
+    saveSyncProfilePreference({
+      name,
+      color: syncColor,
+    });
+  }
+
+  function updateSyncColor(color: PlayerColor | null) {
+    setSyncColor(color);
+    saveSyncProfilePreference({
+      name: syncName,
+      color,
+    });
   }
 
   async function beginSyncHost() {
@@ -311,6 +366,7 @@ function App() {
     setSyncEntryOpen(false);
     setGame({
       ...createInitialGameState(),
+      config: gameConfigFromPreferences(),
       phase: "setup",
       mode: "sync",
       players: [hostPlayer],
@@ -866,9 +922,9 @@ function App() {
           message={syncMessage}
           name={syncName}
           onBack={returnHome}
-          onColorChange={setSyncColor}
+          onColorChange={updateSyncColor}
           onHost={beginSyncHost}
-          onNameChange={setSyncName}
+          onNameChange={updateSyncName}
           onScan={() => setSyncCameraMode("hostOffer")}
         />
       ) : null}

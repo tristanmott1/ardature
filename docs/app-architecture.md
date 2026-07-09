@@ -222,6 +222,12 @@ Before draft ownership is assigned, playable territories render with the backgro
 
 During draft and review, playable territory fills are derived from ownership. Owned territories use the owner's unique player color, and unowned territories use the background color. The background component always uses the background skin and is not selectable.
 
+## Persistence
+
+Active game recovery and setup preferences should stay separate. Active local games use the saved game key and can restore an in-progress setup/draft/review. Setup preferences use their own key and only remember convenience defaults: local player names/colors/order, shared game configuration, and this device's sync name/color.
+
+Starting a new local setup should restore local setup preferences with fresh player IDs. Starting sync should restore only this device's sync profile, and sync hosts should reuse the saved game configuration defaults. Remote sync players should never be written into local setup preferences.
+
 ## Sync Architecture
 
 Sync mode should be copied and adapted from Qwixx rather than literally reused:

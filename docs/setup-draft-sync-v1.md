@@ -56,11 +56,14 @@ Local setup behavior:
 - Players can be added, edited, deleted, reordered, randomized, and assigned colors on the same setup page.
 - Manual reorder and randomize should match the interaction style used by Qwixx.
 - Local setup and draft state should persist in `localStorage` so refresh recovery is possible.
+- Local setup defaults should also persist separately from active saved games: player names, player colors, player order, and shared game configuration are restored when starting a new local setup.
 
 Sync setup behavior:
 
 - The host enters a name and color before hosting; that creates the host player.
 - A joiner enters a name and color before joining.
+- Each device remembers its own sync name and color for the next sync entry.
+- Sync hosts reuse the saved shared game configuration defaults.
 - Duplicate colors are allowed in the lobby, but the host cannot start the draft until all remaining players have unique colors.
 - Joiners can edit their own name and color after joining unless the host has locked that field.
 - The host can edit any player's name or color.

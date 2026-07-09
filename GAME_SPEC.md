@@ -1021,6 +1021,8 @@ Persist sync host state where useful:
 - Name/color locks.
 - Draft settings and progress.
 
+Setup preferences are separate from active saved games. Each device should remember local player names, colors, order, and shared game configuration for new local games. Each device should also remember its own sync name and color, and sync hosts should reuse the saved shared game configuration. Remote sync players are not stored as local setup defaults.
+
 Sync host persistence is conservative:
 
 - Host state should be saved after setup starts, draft starts, each pick, pause, removal, and other authoritative changes.

@@ -206,6 +206,10 @@ async function setPlayerColor(page, index, color) {
   await row.getByRole("menuitemradio", { name: colorLabel(color) }).click();
 }
 
+async function playerNames(page) {
+  return page.locator(".player-row input").evaluateAll((inputs) => inputs.map((input) => input.value));
+}
+
 async function assertNoHorizontalOverflow(page, message) {
   const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   assert(!hasOverflow, message);
@@ -232,6 +236,60 @@ async function startLocalSnakeDraft(page) {
   await assertBelow(page, page.locator(".player-list"), page.getByRole("button", { name: "Randomize" }), "Local randomize sits below player names.");
   await page.getByRole("button", { name: "Start game" }).click();
   await page.waitForSelector("[data-territory-hit]");
+}
+
+async function closeActiveSetup(page) {
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("dialog", { name: "End this game and return home?" }).waitFor();
+  await page.getByRole("button", { name: "End game" }).click();
+}
+
+async function runSetupPreferenceChecks(page) {
+  console.log("Checking setup preferences");
+  await page.goto(baseUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  await page.getByRole("button", { name: "Local" }).click();
+  await setPlayerName(page, 0, "Aragorn");
+  await setPlayerColor(page, 0, "green");
+  await setPlayerName(page, 1, "Gimli");
+  await setPlayerColor(page, 1, "blue");
+  await setPlayerName(page, 2, "Legolas");
+  await setPlayerColor(page, 2, "yellow");
+  await page.getByRole("button", { name: "Round robin" }).click();
+  await page.getByLabel("PICK TIME").selectOption("10");
+  await page.getByLabel("TROOP TIME").selectOption("120");
+  await page.getByRole("button", { name: "Randomize" }).click();
+  const savedLocalNames = await playerNames(page);
+  await closeActiveSetup(page);
+
+  await page.getByRole("button", { name: "Local" }).click();
+  assert(JSON.stringify(await playerNames(page)) === JSON.stringify(savedLocalNames), "Local names and order persist.");
+  assert((await page.getByRole("button", { name: "Round robin" }).getAttribute("class"))?.includes("selected"), "Draft style persists.");
+  assert((await page.getByLabel("PICK TIME").inputValue()) === "10", "Pick time persists.");
+  assert((await page.getByLabel("TROOP TIME").inputValue()) === "120", "Troop time persists.");
+  await closeActiveSetup(page);
+
+  await page.getByRole("button", { name: "Sync" }).click();
+  await page.getByLabel("Sync player name").fill("Galadriel");
+  await page.getByRole("button", { name: "Sync player color" }).click();
+  await page.getByRole("menuitemradio", { name: "Purple" }).click();
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Sync" }).click();
+  assert((await page.getByLabel("Sync player name").inputValue()) === "Galadriel", "Sync profile name persists.");
+  await page.getByRole("button", { name: "Sync player color" }).click();
+  assert((await page.getByRole("menuitemradio", { name: "Purple" }).getAttribute("class"))?.includes("selected"), "Sync profile color persists.");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Host" }).click();
+  await page.waitForSelector(".qr-code svg", { timeout: 10000 });
+  assert((await page.getByLabel("PICK TIME").inputValue()) === "10", "Sync host uses saved pick time.");
+  assert((await page.getByLabel("TROOP TIME").inputValue()) === "120", "Sync host uses saved troop time.");
+  await closeActiveSetup(page);
+
+  await page.getByRole("button", { name: "Local" }).click();
+  assert(JSON.stringify(await playerNames(page)) === JSON.stringify(savedLocalNames), "Sync setup does not overwrite local players.");
+  await closeActiveSetup(page);
 }
 
 async function runLocalDraftChecks(page) {
@@ -368,6 +426,7 @@ async function main() {
     const browser = await launchBrowser();
     const mobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
     mobile.setDefaultTimeout(10000);
+    await runSetupPreferenceChecks(mobile);
     await runLocalDraftChecks(mobile);
     await mobile.screenshot({ path: outputPath("draft-local-mobile.png") });
 
