@@ -129,7 +129,7 @@ async function runSourceChecks() {
   assert(appSource.includes("RotateCcw") && appSource.includes("restartPausedGame"), "Pause can restart to setup without closing transports.");
   assert(!appSource.includes('closeLabel="End game"'), "Pause modal does not use a close X to end the game.");
   assert(appSource.includes("closeOnOutsidePress"), "Color dropdowns close on outside press.");
-  assert(stylesSource.includes(".sync-entry-panel") && stylesSource.includes("padding-bottom: 88px"), "Sync entry reserves color menu space.");
+  assert(stylesSource.includes(".sync-entry-panel") && stylesSource.includes("padding-bottom: 112px"), "Sync entry reserves color menu space.");
   assert(syncMessagesSource.includes('type: "hostQuit"') && syncMessagesSource.includes('message.type === "hostQuit"'), "Sync messages include host quit.");
   assert(!gameTypesSource.includes("noticeTerritoryId") && !gameTypesSource.includes("noticePlayerId"), "Shared draft state does not store local notices.");
   assert(!gameStateSource.includes("timerMs(state.config.pickTimeLimit) ?? 0") && gameStateSource.includes('draft: state.mode === "sync" ? beginDraftTimer'), "Sync draft timers preserve unlimited pick time.");

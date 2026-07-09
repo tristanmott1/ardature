@@ -187,7 +187,7 @@ button:focus-visible,
 }
 
 .sync-entry-panel {
-  padding-bottom: 88px;
+  padding-bottom: 112px;
 }
 
 .sync-player-entry-row {
@@ -757,6 +757,10 @@ select {
   .pause-modal {
     width: calc(100vw - 16px);
     padding: 12px;
+  }
+
+  .sync-entry-panel {
+    padding-bottom: 112px;
   }
 
   .sync-lobby-tools {
