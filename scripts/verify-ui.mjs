@@ -363,6 +363,8 @@ async function runLocalDraftChecks(page) {
   const controlsBox = await page.locator(".draft-panel").boundingBox();
   const mapBox = await page.locator(".map-shell").boundingBox();
   assert(controlsBox && mapBox && mapBox.y >= controlsBox.y + controlsBox.height - 1, "Draft controls sit above the map.");
+  await page.getByText("0 / 21").waitFor();
+  assert((await page.getByText("42 left").count()) === 0, "Draft controls show active-player progress instead of territories left.");
   assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Map shows the return-to-map control.");
   assert(
     await page.locator(".static-map-ink").evaluate((node) => getComputedStyle(node).pointerEvents === "none"),
@@ -397,20 +399,21 @@ async function runLocalDraftChecks(page) {
   assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.height - resultBox.height) < 1, "Result sheet matches confirm sheet height.");
   assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
   assert((await resultDialog.locator(".territory-preview-shape").count()) === 0, "Result sheet has no territory preview.");
-  await page.getByText("41 left").waitFor();
+  await page.getByText("0 / 21").waitFor();
   assertViewBoxEquals(await viewBox(page), homeViewport, "Local result dismissal returns to the home viewport.");
 
   await clickTerritory(page, "shire");
   await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
   await page.getByRole("button", { name: "Confirm pick" }).click();
   await page.locator(".pick-result-scrim").click();
-  await page.getByText("40 left").waitFor();
+  await page.getByText("1 / 21").waitFor();
 
   await page.getByRole("button", { name: "Pause draft" }).click();
   await page.getByRole("dialog", { name: "Paused" }).waitFor();
   assert((await page.locator(".draft-panel").count()) === 0, "Pause hides draft controls.");
+  await page.getByText("40 territories remain.").waitFor();
   await page.getByRole("button", { name: "Resume" }).click();
-  await page.getByText("40 left").waitFor();
+  await page.getByText("1 / 21").waitFor();
 
   const box = await page.locator(".map-svg").boundingBox();
   assert(box, "Map SVG has a bounding box.");

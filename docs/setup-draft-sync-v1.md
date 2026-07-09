@@ -112,6 +112,8 @@ Manual draft interaction:
 - In local mode, the result popup auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
 - In sync mode, another player's pending selection never moves, focuses, or white-fills your map. The only shared draft feedback for other players is the small drafted notification.
 - In sync mode, the next player's turn starts immediately on their device; the result popup also auto-dismisses after about one second and can be dismissed early.
+- The compact draft controls show the active player's draft progress as confirmed picks over expected final picks, such as `3 / 11`.
+- The expected final pick count is computed from the current draft style, frozen turn order, active players, and remaining territories.
 - If a timed pick expires with a confirmation popup open, the selected territory is treated as confirmed.
 - If a timed pick expires with no confirmation popup open, the host/local device randomly chooses one remaining territory for the active player.
 - If local mode pauses during an active pick or confirmation popup, the timer and pending choice are preserved.

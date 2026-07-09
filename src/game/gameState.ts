@@ -97,6 +97,41 @@ export function ownedTerritoryIds(ownership: TerritoryOwnerMap, playerId: string
   return TERRITORY_IDS.filter((territoryId) => ownership[territoryId] === playerId);
 }
 
+export function draftProgressForPlayer(state: GameState, playerId: string) {
+  if (!state.draft) {
+    return { drafted: 0, total: 0 };
+  }
+
+  const drafted = ownedTerritoryIds(state.draft.ownership, playerId).length;
+  const remainingCount = remainingTerritoryIds(state.draft.ownership).length;
+  const activeIds = new Set(state.players.map((player) => player.id));
+  const attemptLimit = Math.max(remainingCount * state.draft.originalTurnOrder.length * 4, remainingCount);
+  let future = 0;
+  let picks = 0;
+  let step = state.draft.step;
+
+  // Walk the same draft sequence the engine uses for future picks.
+  for (let attempts = 0; picks < remainingCount && attempts < attemptLimit; attempts += 1) {
+    const nextPlayerId = draftPlayerIdAtStep(state.draft.originalTurnOrder, state.config.draftStyle, state.draft.startIndex, step);
+    step += 1;
+
+    if (!activeIds.has(nextPlayerId)) {
+      continue;
+    }
+
+    if (nextPlayerId === playerId) {
+      future += 1;
+    }
+
+    picks += 1;
+  }
+
+  return {
+    drafted,
+    total: drafted + future,
+  };
+}
+
 export function activePlayer(state: GameState) {
   if (!state.draft || state.phase !== "draft") {
     return null;

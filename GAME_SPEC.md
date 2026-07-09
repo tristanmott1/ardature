@@ -752,6 +752,8 @@ The result popup uses the exact same compact bottom-sheet footprint. In local mo
 
 In sync mode, another player's pending selection never moves, focuses, or white-fills your map. The next player's turn starts immediately on that player's device. The result popup also auto-dismisses after about one second and can be dismissed early.
 
+The compact draft controls show the active player's draft progress as confirmed picks over expected final picks, such as `3 / 11`. The expected final pick count is computed from the current draft style, frozen turn order, active players, and remaining territories.
+
 Timer behavior:
 
 - If a timed pick expires with a confirmation popup open, the pending territory is confirmed.

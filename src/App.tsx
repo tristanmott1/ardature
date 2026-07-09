@@ -29,6 +29,7 @@ import {
   createOwnershipMap,
   createPlayer,
   createTerritoryStates,
+  draftProgressForPlayer,
   formatTimerOption,
   formatTroopTimerOption,
   isSetupValid,
@@ -118,6 +119,7 @@ function App() {
   const latestSyncRoleRef = useRef(syncRole);
   const latestLocalPlayerIdRef = useRef(localPlayerId);
   const active = activePlayer(game);
+  const activeDraftProgress = active ? draftProgressForPlayer(game, active.id) : null;
   const ownership = game.draft?.ownership ?? createOwnershipMap();
   const canControlActivePlayer = game.mode === "local" || (game.mode === "sync" && active?.id === localPlayerId);
   const viewerSelectedTerritoryId = canControlActivePlayer ? game.draft?.pendingTerritoryId ?? null : null;
@@ -894,10 +896,10 @@ function App() {
       {showDraftControls ? (
         <DraftPanel
           activePlayer={active}
+          activeDraftProgress={activeDraftProgress}
           canPause={game.mode === "local" || syncRole === "host"}
           onExit={returnHome}
           onPause={pauseDraft}
-          remainingCount={remainingCount}
           timerRemaining={timerRemaining}
         />
       ) : null}
@@ -1288,17 +1290,17 @@ function SetupPanel({
 
 function DraftPanel({
   activePlayer,
+  activeDraftProgress,
   canPause,
   onExit,
   onPause,
-  remainingCount,
   timerRemaining,
 }: {
   activePlayer: GamePlayer | null;
+  activeDraftProgress: { drafted: number; total: number } | null;
   canPause: boolean;
   onExit: () => void;
   onPause: () => void;
-  remainingCount: number;
   timerRemaining: number | null;
 }) {
   return (
@@ -1309,7 +1311,7 @@ function DraftPanel({
       <div className="draft-status">
         <span className="player-dot" style={{ background: colorCss(activePlayer?.color ?? null) }} />
         <strong>{activePlayer?.name ?? "Draft"}</strong>
-        <span>{remainingCount} left</span>
+        {activeDraftProgress ? <span>{activeDraftProgress.drafted} / {activeDraftProgress.total}</span> : null}
         {timerRemaining ? <span className="timer-chip">{Math.ceil(timerRemaining / 1000)}s</span> : null}
       </div>
       {canPause ? (
