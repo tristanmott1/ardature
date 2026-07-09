@@ -583,12 +583,13 @@ select {
 .army-build-modal {
   width: min(380px, calc(100vw - 32px));
   justify-items: center;
-  gap: 16px;
+  gap: 18px;
   padding: 18px;
 }
 
 .army-triangle {
   justify-self: center;
+  margin-top: 8px;
   width: min(270px, 76vw);
   height: 248px;
   touch-action: none;
@@ -601,10 +602,26 @@ select {
   stroke-linejoin: round;
 }
 
-.army-triangle circle {
+.army-triangle-marker {
+  cursor: grab;
+  filter: drop-shadow(0 2px 4px rgba(17, 17, 17, 0.24));
+  pointer-events: none;
+}
+
+.army-triangle-marker-halo {
+  fill: rgba(255, 255, 255, 0.32);
+  stroke: rgba(17, 17, 17, 0.16);
+  stroke-width: 1;
+}
+
+.army-triangle-marker-handle {
   fill: #ffffff;
   stroke: #111111;
-  stroke-width: 3;
+  stroke-width: 2.5;
+}
+
+.army-triangle-marker-dot {
+  fill: #111111;
 }
 
 .army-triangle-icon {

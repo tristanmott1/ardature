@@ -1860,7 +1860,11 @@ function ArmyTriangle({ marker, onChange, player }: { marker: ArmyMarker; onChan
           y={corners[troopType].y - iconSize / 2}
         />
       ))}
-      <circle cx={markerPoint.x} cy={markerPoint.y} r="9" />
+      <g className="army-triangle-marker">
+        <circle className="army-triangle-marker-halo" cx={markerPoint.x} cy={markerPoint.y} r="16" />
+        <circle className="army-triangle-marker-handle" cx={markerPoint.x} cy={markerPoint.y} r="10" />
+        <circle className="army-triangle-marker-dot" cx={markerPoint.x} cy={markerPoint.y} r="3" />
+      </g>
     </svg>
   );
 }
