@@ -238,7 +238,7 @@ function App() {
   const disconnectedSyncPlayers = game.mode === "sync"
     ? game.players
         .filter((player) => player.id !== localPlayerId && player.connectionStatus === "disconnected")
-        .map((player) => ({ id: player.id, name: player.name }))
+        .map((player) => ({ color: player.color, id: player.id, name: player.name }))
     : [];
   const gameMapSelectedTerritory = gameMapSelectedTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === gameMapSelectedTerritoryId) ?? null
@@ -932,7 +932,7 @@ function App() {
           {
             id: slot.id,
             name: slot.name,
-            color: null,
+            color: slot.color,
             nameLocked: true,
             colorLocked: true,
             connectionStatus: "connected",
@@ -1782,6 +1782,7 @@ function SyncEntryPanel({
           {recoverySlots.map((slot) => (
             <button className="secondary icon-text-button wide-button" type="button" key={slot.id} onClick={() => onChooseRecoveryPlayer(slot)}>
               <Users size={18} />
+              <span className="player-dot" style={{ background: colorCss(slot.color) }} />
               {slot.name}
             </button>
           ))}

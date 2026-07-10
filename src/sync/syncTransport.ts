@@ -4,6 +4,9 @@ import {
   decompressFromEncodedURIComponent,
   decompressFromUint8Array,
 } from "lz-string";
+import type { PlayerColor } from "../game/gameTypes";
+
+const RECOVERY_PLAYER_COLORS: PlayerColor[] = ["green", "blue", "yellow", "red", "purple", "black"];
 
 export type SyncWireMessage = {
   type: string;
@@ -35,6 +38,7 @@ export type SyncAnswerPayload = {
 export type SyncRecoveryPlayerSlot = {
   id: string;
   name: string;
+  color: PlayerColor | null;
 };
 
 export type SyncRecoveryOfferPayload = {
@@ -439,7 +443,8 @@ function isRecoverySlot(value: unknown): value is SyncRecoveryPlayerSlot {
   return Boolean(slot) &&
     typeof slot === "object" &&
     typeof slot.id === "string" &&
-    typeof slot.name === "string";
+    typeof slot.name === "string" &&
+    (slot.color === null || RECOVERY_PLAYER_COLORS.includes(slot.color as PlayerColor));
 }
 
 function parseRecoverySlots(value: string) {

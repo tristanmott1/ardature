@@ -194,6 +194,7 @@ async function runSourceChecks() {
   assert(appSource.includes("hostTransportRef.current = new SyncHostTransport") && appSource.includes("restoredSyncHost"), "Restored sync hosts rebuild transport for recovery QR generation.");
   assert(appSource.includes('const showRecoveryTools = mode === "sync" && Boolean(onScanRecoveryAnswer)'), "Recovery QR tools render only for the sync host pause modal.");
   assert(appSource.includes("createRecoveryAnswer") && appSource.includes("onChooseRecoveryPlayer"), "Joiners choose a disconnected slot before creating a recovery answer.");
+  assert(syncTransportSource.includes("color: PlayerColor | null") && syncTransportSource.includes("RECOVERY_PLAYER_COLORS"), "Recovery slots carry validated player colors.");
   assert(appSource.includes("hostTransportRef.current?.sendToPeer(playerId, { type: \"removed\" })"), "Host sends removed before closing a removed peer.");
   assert(gameStateSource.includes("pauseLocalGameForStorage") && appSource.includes("pagehide") && appSource.includes("beforeunload"), "Local refresh writes a paused active-game snapshot.");
   assert(gameStateSource.includes("applySyncProfileUpdate") && gameStateSource.includes("applySyncDraftConfirm") && gameStateSource.includes("applySyncPlayerQuit"), "Host command application is centralized in game helpers.");
@@ -1380,10 +1381,18 @@ async function runSyncRecoveryChecks(browser) {
   await recoveryJoiner.getByLabel("Sync player name").fill("Recovered");
   await recoveryJoiner.getByRole("button", { name: "Join" }).click();
   await pasteScannerText(recoveryJoiner, await qrText(host));
-  await recoveryJoiner.getByRole("button", { name: "Boromir" }).waitFor({ timeout: 15000 });
+  const recoverySlotButton = recoveryJoiner.getByRole("button", { name: "Boromir" });
+  await recoverySlotButton.waitFor({ timeout: 15000 });
+  assert((await recoverySlotButton.locator(".player-dot").count()) === 1, "Recovery slot picker shows the disconnected player's color.");
   await capture(recoveryJoiner, "22-sync-recovery-slot-picker-mobile.png");
-  await recoveryJoiner.getByRole("button", { name: "Boromir" }).click();
+  await recoverySlotButton.click();
   await recoveryJoiner.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
+  const answerColor = await recoveryJoiner
+    .locator(".player-row")
+    .filter({ has: recoveryJoiner.getByLabel("Boromir color") })
+    .locator(".color-select")
+    .evaluate((element) => getComputedStyle(element).getPropertyValue("--selected-color").trim());
+  assert(answerColor === "#b3444a", "Recovery answer QR page keeps the disconnected player's color visible.");
   await capture(recoveryJoiner, "23-sync-recovery-answer-qr-mobile.png");
 
   await host.getByRole("button", { name: "Scan" }).click();
@@ -1451,6 +1460,79 @@ async function runSyncHostLossChecks(browser) {
   await joiner.close();
 }
 
+async function runSyncTerminalEventChecks(browser) {
+  console.log("Checking sync terminal events");
+  const endedHost = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const endedJoiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const removeHost = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const removedJoiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  endedHost.setDefaultTimeout(20000);
+  endedJoiner.setDefaultTimeout(20000);
+  removeHost.setDefaultTimeout(20000);
+  removedJoiner.setDefaultTimeout(20000);
+
+  await connectSyncPair(endedHost, endedJoiner, {
+    hostName: "Theoden",
+    hostColor: "Yellow",
+    joinerName: "Eomer",
+    joinerColor: "Blue",
+  });
+  await endedHost.getByRole("button", { name: "Start game" }).click();
+  await endedJoiner.waitForSelector('.app-shell[data-app-phase="draft"]', { timeout: 15000 });
+  await endedHost.getByRole("button", { name: "End game" }).click();
+  await endedHost.getByRole("dialog", { name: "End this game and return home?" }).getByRole("button", { name: "End game" }).click();
+  await endedJoiner.waitForSelector('.app-shell[data-app-phase="home"]', { timeout: 15000 });
+  await capture(endedJoiner, "27-sync-joiner-host-ended-home-mobile.png");
+  assert((await endedJoiner.getByRole("button", { name: "Sync" }).count()) === 1, "Joiner returns home when host ends the game.");
+
+  await connectSyncPair(removeHost, removedJoiner, {
+    hostName: "Faramir",
+    hostColor: "Green",
+    joinerName: "Denethor",
+    joinerColor: "Red",
+  });
+  await removeHost.getByRole("button", { name: "Remove Denethor" }).click();
+  await removedJoiner.waitForSelector('.app-shell[data-app-phase="home"]', { timeout: 15000 });
+  await capture(removedJoiner, "28-sync-joiner-removed-home-mobile.png");
+  assert((await removedJoiner.getByRole("button", { name: "Sync" }).count()) === 1, "Removed joiner returns home immediately.");
+  await removeHost.waitForFunction(
+    () => !Array.from(document.querySelectorAll(".player-row input")).some((input) => input.value === "Denethor"),
+  );
+  assert((await removeHost.getByRole("button", { name: "Remove Denethor" }).count()) === 0, "Host setup removes the player after sending removed.");
+
+  await endedHost.close();
+  await endedJoiner.close();
+  await removeHost.close();
+  await removedJoiner.close();
+}
+
+async function connectSyncPair(host, joiner, { hostColor, hostName, joinerColor, joinerName }) {
+  await host.goto(baseUrl);
+  await host.evaluate(() => localStorage.clear());
+  await host.reload();
+  await host.getByRole("button", { name: "Sync" }).click();
+  await host.getByLabel("Sync player name").fill(hostName);
+  await host.getByRole("button", { name: "Sync player color" }).click();
+  await host.getByRole("menuitemradio", { name: hostColor }).click();
+  await host.getByRole("button", { name: "Host" }).click();
+  await host.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
+
+  await joiner.goto(baseUrl);
+  await joiner.evaluate(() => localStorage.clear());
+  await joiner.reload();
+  await joiner.getByRole("button", { name: "Sync" }).click();
+  await joiner.getByLabel("Sync player name").fill(joinerName);
+  await joiner.getByRole("button", { name: "Sync player color" }).click();
+  await joiner.getByRole("menuitemradio", { name: joinerColor }).click();
+  await joiner.getByRole("button", { name: "Join" }).click();
+  await pasteScannerText(joiner, await qrText(host));
+  await joiner.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
+
+  await host.getByRole("button", { name: "Scan" }).click();
+  await pasteScannerText(host, await qrText(joiner));
+  await host.getByText(joinerName).waitFor({ timeout: 15000 });
+}
+
 async function qrText(page) {
   const text = await page.locator(".qr-code[data-qr-text]").last().getAttribute("data-qr-text");
   assert(text, "QR text is exposed for verification.");
@@ -1508,6 +1590,7 @@ async function main() {
     await runSyncReadyPageChecks(browser);
     await runSyncRecoveryChecks(browser);
     await runSyncHostLossChecks(browser);
+    await runSyncTerminalEventChecks(browser);
 
     console.log("Closing browser");
     await Promise.race([

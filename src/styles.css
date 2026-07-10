@@ -1075,6 +1075,12 @@ select {
 .sync-session-actions {
   display: flex;
   justify-content: center;
+  width: 100%;
+}
+
+.sync-session-dialog {
+  justify-items: center;
+  text-align: center;
 }
 
 .sync-session-dialog .icon-button {
