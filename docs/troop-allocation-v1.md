@@ -87,6 +87,8 @@ Allocation rules:
 - The selected allocation territory is local UI state. In sync mode, selecting a territory for allocation does not highlight or focus any other device.
 - Every owned territory must have at least one troop total before the player can finish.
 - Allocation uses the shared colored game top bar: X on the left, current player name prominent near the left, timer near pause when present, and pause on the right in local mode or for the sync host.
+- The colored player bar is not the same thing as the controls section. It remains visible during allocation pause, waiting, handoff, and read-only map; the controls below it may hide.
+- The timer remains in the player bar whenever relevant, including paused remaining time, the time that will start after a local handoff, and shared sync allocation time while ready players wait.
 - The selected territory controls show two compact icon rows: remaining troops for adding and troops on the selected territory for removing.
 - The selected territory name is shown in bold between the add and remove rows, but its total troop count is not repeated in the controls because the map marker already shows that total.
 - The `+` and `-` row icons are non-clickable affordances. They are muted only when no troop in that row can currently be added or removed.
@@ -135,7 +137,7 @@ Sync mode is simultaneous and host-authoritative.
 - A ready player's allocation remains final even if a stale sync update arrives from that device.
 - Ready players go to a local waiting page while unready players stay in allocation.
 - The waiting page shows all remaining players in two columns: `READY` and `WAITING`.
-- The waiting page keeps the same colored top bar and shows the shared allocation timer when one is running.
+- The waiting page keeps the same colored top bar for the player whose device it is and shows the shared allocation timer whenever it is relevant.
 - All players can see readiness status, not only the host.
 - The host can advance only after every remaining player is ready.
 - One player becoming ready does not stop the shared timer for the remaining players.

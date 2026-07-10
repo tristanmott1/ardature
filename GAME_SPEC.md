@@ -772,6 +772,8 @@ In sync mode, pending selections are local-only. Another player's pending select
 
 The compact draft controls show the active player's draft progress as confirmed picks over expected final picks, such as `3 / 11`. The expected final pick count is computed from the current draft style, frozen turn order, active players, and remaining territories.
 
+The colored player bar is distinct from the controls section. Once draft starts, the player bar remains visible for the rest of the implemented game flow, including confirmation sheets, result notifications, pause, allocation, allocation waiting, local handoff, and read-only map. Pause and modal states may hide controls, but they do not hide the player/color bar. The bar shows the relevant timer whenever one exists: live remaining time, paused remaining time, upcoming handoff time, or shared sync allocation time while waiting.
+
 Timer behavior:
 
 - If a timed pick expires with a confirmation popup open, the pending territory is confirmed.
@@ -822,6 +824,7 @@ Sync allocation:
 - Ready players go to a local waiting page while unready players stay in allocation.
 - Ready is final unless another player is removed and redistribution affects that player.
 - The waiting page shows all remaining players in two columns: `READY` and `WAITING`.
+- The waiting page keeps the device player's colored top bar visible and shows the shared allocation timer while it is relevant.
 - The host can advance only when every remaining player is ready.
 - If time expires, the host randomly completes allocation for every unready player.
 

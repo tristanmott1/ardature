@@ -106,8 +106,10 @@ Manual draft interaction:
 
 - Game-stage screens use a shared colored top bar. The X button is always in the top-left, the current player name is bold and prominent near the left, the timer appears near the right when present, and pause appears in the top-right in local mode and for the sync host.
 - The top bar background uses the current player's color instead of a small color dot.
-- The current-player top bar stays visible through territory confirmation, draft result notifications, sync notifications, and troop allocation controls.
-- The current-player top bar stays visible during active game-stage screens. Local allocation handoff shows the next player's name in the bar and uses a popup with only the continue arrow.
+- The current-player top bar is distinct from the controls section. Once the draft starts, it stays visible for the rest of the implemented game flow, including confirmation sheets, draft result notifications, sync notifications, troop allocation controls, allocation waiting, read-only map, pause, and local allocation handoff.
+- Pause and other blocking states may hide the controls section, but they do not hide the player/color bar.
+- The top bar shows the relevant timer whenever one exists: live turn time, paused remaining time, upcoming handoff time, or shared sync allocation time while waiting.
+- Local allocation handoff shows the next player's name in the bar and uses a popup with only the continue arrow.
 - The active player picks by selecting a remaining territory on the map.
 - Selecting a territory opens a confirmation popup with cancel and confirm controls.
 - The shared top bar remains visible during draft confirmation and draft result notifications.
@@ -277,7 +279,7 @@ Local mode uses the same draft engine as sync mode, but without network messages
 
 ## Map Behavior
 
-The app should be a map-first shell. During game stages, the colored top bar sits at the top, optional controls sit below it, and the map fills the remaining space without sliding underneath either section. Draft confirmation and result sheets do not hide the top bar. Full-screen modal states such as pause, scanner, and exit confirmation may cover the map.
+The app should be a map-first shell. During game stages, the colored top bar sits at the top, optional controls sit below it, and the map fills the remaining space without sliding underneath either section. Draft confirmation, result sheets, pause, scanner, and exit confirmation do not remove the top bar. Full-screen modal states may hide controls and cover the map.
 
 Reusable map modes for this milestone:
 

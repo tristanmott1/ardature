@@ -1113,9 +1113,13 @@ select {
 
 @media (max-width: 520px) {
   .setup-panel,
-  .sync-entry-panel,
-  .pause-modal {
+  .sync-entry-panel {
     width: calc(100vw - 16px);
+    padding: 12px;
+  }
+
+  .pause-modal {
+    width: 100%;
     padding: 12px;
   }
 

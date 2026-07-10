@@ -193,7 +193,6 @@ function App() {
   const syncRevisionRef = useRef(restoredSyncHost?.revision ?? 0);
   const lastSnapshotRevisionRef = useRef(0);
   const active = activePlayer(game);
-  const activeDraftProgress = active ? draftProgressForPlayer(game, active.id) : null;
   const ownership = game.draft?.ownership ?? createOwnershipMap();
   const localAllocationPlayerId = game.allocation?.order[game.allocation.currentIndex] ?? null;
   const allocationPlayerId = game.mode === "local"
@@ -245,6 +244,7 @@ function App() {
     ? generatedMapData.territories.find((territory) => territory.id === gameMapSelectedTerritoryId) ?? null
     : null;
   const gameMapSelectedOwnTerritory = Boolean(gameMapSelectedTerritoryId && gameMapViewerId && ownership[gameMapSelectedTerritoryId] === gameMapViewerId);
+  const gameMapViewer = game.players.find((player) => player.id === gameMapViewerId) ?? game.players[0] ?? null;
   const viewerPendingTerritory = pendingDraftTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === pendingDraftTerritoryId) ?? null
     : null;
@@ -252,7 +252,7 @@ function App() {
     ? Math.max(0, game.draft.timerEndsAt - now)
     : game.phase === "allocation" && game.allocation?.timerEndsAt
       ? Math.max(0, game.allocation.timerEndsAt - now)
-      : game.phase === "allocation"
+      : game.phase === "allocation" || game.phase === "allocationHandoff" || (game.phase === "paused" && Boolean(game.allocation))
         ? game.allocation?.timerRemainingMs ?? null
         : game.draft?.timerRemainingMs ?? null;
   const canControlSetup = game.mode === "local" || syncRole === "host";
@@ -273,7 +273,28 @@ function App() {
   const showAllocationWaiting = game.mode === "sync" && game.phase === "allocation" && localAllocationReady && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const showAllocationHandoff = game.phase === "allocationHandoff" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const showGameMapControls = game.phase === "gameMap" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
-  const showGameStageLayout = showDraftPanel || showAllocationControls || showAllocationWaiting || showAllocationHandoff || showGameMapControls;
+  const pausedDraftPlayer = game.phase === "paused" && game.draft && !game.allocation
+    ? activePlayer({ ...game, phase: "draft" })
+    : null;
+  const gameTopBarPlayer = game.phase === "draft"
+    ? active
+    : game.phase === "allocation" || game.phase === "allocationHandoff"
+      ? allocationPlayer
+      : game.phase === "gameMap"
+        ? gameMapViewer
+        : game.phase === "paused" && pausedReturnPhase === "gameMap"
+          ? gameMapViewer
+          : game.phase === "paused" && game.allocation
+            ? allocationPlayer
+            : game.phase === "paused"
+              ? pausedDraftPlayer
+              : null;
+  const gameTopBarIsDraft = game.phase === "draft" || (game.phase === "paused" && Boolean(game.draft) && !game.allocation);
+  const gameTopBarProgress = gameTopBarIsDraft && gameTopBarPlayer
+    ? draftProgressForPlayer(game, gameTopBarPlayer.id)
+    : null;
+  const showGameTopBar = game.phase !== "home" && game.phase !== "setup" && Boolean(gameTopBarPlayer);
+  const showGameStageLayout = showGameTopBar || showDraftPanel || showAllocationControls || showAllocationWaiting || showAllocationHandoff || showGameMapControls;
   const canUseMapCameraControls = !Boolean(
     showArmyBuildModal ||
     syncCameraMode ||
@@ -365,7 +386,7 @@ function App() {
     function savePausedLocalGame() {
       const current = latestGameRef.current;
 
-      if (current.mode === "local" && localStorage.getItem(LOCAL_GAME_KEY)) {
+      if (current.mode === "local" && current.phase !== "home" && current.phase !== "setup" && localStorage.getItem(LOCAL_GAME_KEY)) {
         saveLocalGame(pauseLocalGameForStorage(current, Date.now()));
       }
     }
@@ -1483,26 +1504,16 @@ function App() {
       data-draft-controls={showDraftPanel ? "visible" : "hidden"}
       data-sync-role={syncRole ?? "none"}
     >
-      {showDraftPanel ? (
+      {showGameTopBar ? (
         <GameTopBar
-          detail={activeDraftProgress ? `${activeDraftProgress.drafted} / ${activeDraftProgress.total}` : null}
+          detail={gameTopBarProgress ? `${gameTopBarProgress.drafted} / ${gameTopBarProgress.total}` : null}
           onExit={returnHome}
-          onPause={game.mode === "local" || syncRole === "host" ? pauseDraft : undefined}
-          pauseLabel="Pause draft"
-          player={active}
+          onPause={game.phase !== "paused" && (game.mode === "local" || syncRole === "host") ? pauseDraft : undefined}
+          onTitlePress={game.phase === "gameMap" && game.mode === "local" ? cycleGameMapViewer : undefined}
+          pauseLabel={game.phase === "draft" ? "Pause draft" : game.phase === "gameMap" ? "Pause map" : "Pause allocation"}
+          player={gameTopBarPlayer}
           timerRemaining={timerRemaining}
-          title={active?.name ?? "Draft"}
-        />
-      ) : null}
-
-      {showAllocationControls && allocationPlayer ? (
-        <GameTopBar
-          onExit={returnHome}
-          onPause={game.mode === "local" || syncRole === "host" ? pauseDraft : undefined}
-          pauseLabel="Pause allocation"
-          player={allocationPlayer}
-          timerRemaining={timerRemaining}
-          title={allocationPlayer.name}
+          title={gameTopBarPlayer?.name ?? "Game"}
         />
       ) : null}
 
@@ -1519,17 +1530,6 @@ function App() {
       ) : null}
 
       {showGameMapControls ? (
-        <GameTopBar
-          onExit={returnHome}
-          onPause={game.mode === "local" || syncRole === "host" ? pauseDraft : undefined}
-          onTitlePress={game.mode === "local" ? cycleGameMapViewer : undefined}
-          pauseLabel="Pause map"
-          player={game.players.find((player) => player.id === gameMapViewerId) ?? game.players[0] ?? null}
-          title={game.players.find((player) => player.id === gameMapViewerId)?.name ?? game.players[0]?.name ?? "Map"}
-        />
-      ) : null}
-
-      {showGameMapControls ? (
         <GameMapPanel
           players={game.players}
           selectedTerritory={gameMapSelectedTerritory}
@@ -1539,32 +1539,11 @@ function App() {
       ) : null}
 
       {showAllocationWaiting && allocationPlayer ? (
-        <GameTopBar
-          onExit={returnHome}
-          onPause={game.mode === "local" || syncRole === "host" ? pauseDraft : undefined}
-          pauseLabel="Pause allocation"
-          player={allocationPlayer}
-          timerRemaining={timerRemaining}
-          title={allocationPlayer.name}
-        />
-      ) : null}
-
-      {showAllocationWaiting && allocationPlayer ? (
         <AllocationWaitingPanel
           players={game.players}
           allocation={game.allocation}
           canAdvance={syncRole === "host" && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
           onAdvance={startAllocatedGame}
-        />
-      ) : null}
-
-      {showAllocationHandoff && allocationPlayer ? (
-        <GameTopBar
-          onExit={returnHome}
-          onPause={pauseDraft}
-          pauseLabel="Pause allocation"
-          player={allocationPlayer}
-          title={allocationPlayer.name}
         />
       ) : null}
 

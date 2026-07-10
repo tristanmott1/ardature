@@ -101,6 +101,7 @@ async function runSourceChecks() {
   const mapViewSource = await readFile(new URL("../src/map/components/MapView.tsx", import.meta.url), "utf8");
   const staticMapInkSource = await readFile(new URL("../src/map/components/StaticMapInk.tsx", import.meta.url), "utf8");
   const territoryFillSource = await readFile(new URL("../src/map/components/TerritoryFillLayer.tsx", import.meta.url), "utf8");
+  const troopMarkerSource = await readFile(new URL("../src/map/components/TroopMarkerLayer.tsx", import.meta.url), "utf8");
   const mapPreferencesSource = await readFile(new URL("../src/map/mapPreferences.ts", import.meta.url), "utf8");
   const indexSource = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const manifestSource = await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8");
@@ -210,7 +211,7 @@ async function runSourceChecks() {
   assert(gameStateSource.includes('value === "allocationWaiting" ? "allocation"'), "Old allocationWaiting saves normalize to allocation.");
   assert(appSource.includes('game.mode === "sync" && game.phase === "allocation" && localAllocationReady'), "Ready page is derived from this device's ready state.");
   assert(appSource.includes("function ReadyColumn") && appSource.includes('title="Ready"') && appSource.includes('title="Waiting"'), "Allocation ready page uses ready and waiting columns.");
-  assert(allocationWaitingTopBarSource(appSource).includes("timerRemaining={timerRemaining}"), "Allocation ready page keeps the shared timer visible.");
+  assert(appSource.includes("showGameTopBar") && appSource.includes("timerRemaining={timerRemaining}"), "A persistent game top bar keeps relevant timers visible.");
   assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
   assert(appSource.includes("data-qr-text") && appSource.includes("handlePaste"), "QR scanner supports paste-driven verification.");
   assert(appSource.includes("canAdvance={syncRole === \"host\"") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
@@ -229,8 +230,10 @@ async function runSourceChecks() {
   assert(mapPreferencesSource.includes("ardature.mapPreferences.v1") && mapPreferencesSource.includes("autoFocusEnabled: false"), "Map preferences persist auto-focus with a default-off state.");
   assert(territoryFillSource.includes("mixWithWhite") && territoryFillSource.includes("SELECTED_WHITE_MIX = 0.35"), "Selected territory fill blends the current color with white.");
   assert(!territoryFillSource.includes('state.status === "selected" ? "#ffffff"'), "Selected territory fill is not hard-coded to white.");
+  assert(troopMarkerSource.includes("data-troop-marker"), "Troop markers expose territory ids for visibility verification.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
-  assert(appSource.includes("function GameTopBar") && appSource.includes("allocation-waiting-panel"), "Game stages use the shared game top bar.");
+  assert(appSource.includes("function GameTopBar") && appSource.includes("showGameTopBar") && appSource.includes("allocation-waiting-panel"), "Game stages use the shared persistent game top bar.");
+  assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
   assert(appSource.includes("TroopIconCount") && appSource.includes("troopIconSrc"), "Allocation UI uses troop image icons.");
   assert(!appSource.includes("TroopBadge") && !appSource.includes("troopLabel"), "Old letter troop badge components are removed.");
@@ -272,16 +275,6 @@ function showDraftPanelSource(source) {
 
   if (!match) {
     throw new Error("Missing showDraftPanel expression.");
-  }
-
-  return match[0];
-}
-
-function allocationWaitingTopBarSource(source) {
-  const match = source.match(/\{showAllocationWaiting && allocationPlayer \? \([\s\S]*?<GameTopBar[\s\S]*?\/>\s*\) : null\}/);
-
-  if (!match) {
-    throw new Error("Missing allocation waiting top bar.");
   }
 
   return match[0];
@@ -765,7 +758,7 @@ async function runLocalDraftChecks(page) {
   await page.waitForSelector("[data-background-piece]");
   await page.getByRole("dialog", { name: "Paused" }).waitFor();
   await capture(page, "06b-local-refresh-pause-mobile.png");
-  assert((await page.locator(".game-top-bar").count()) === 0, "Local refresh restores into pause instead of live draft.");
+  assert((await page.locator(".game-top-bar").count()) === 1, "Local refresh restores into pause while keeping the player bar visible.");
   await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Resume" }).click();
   await page.getByText("0 / 21").waitFor();
   assert((await page.getByRole("button", { name: "Disable automatic focus" }).count()) === 1, "Auto-focus enabled state persists after reload.");
@@ -802,7 +795,10 @@ async function runLocalDraftChecks(page) {
   await page.getByRole("button", { name: "Pause draft" }).click();
   await page.getByRole("dialog", { name: "Paused" }).waitFor();
   await capture(page, "08-local-pause-mobile.png");
-  assert((await page.locator(".game-top-bar").count()) === 0, "Pause hides the game top bar.");
+  assert((await page.locator(".game-top-bar").count()) === 1, "Pause keeps the game top bar visible.");
+  const pauseBox = await page.getByRole("dialog", { name: "Paused" }).boundingBox();
+  const pauseViewport = page.viewportSize();
+  assert(pauseBox && pauseViewport && Math.abs((pauseBox.x + pauseBox.width / 2) - (pauseViewport.width / 2)) < 1, "Pause modal is centered horizontally.");
   assert((await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "End game" }).count()) === 0, "Local pause has no end-game close button.");
   assert((await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart game" }).count()) === 1, "Local pause has a restart button.");
   await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart game" }).click();
@@ -1098,6 +1094,112 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Cycling local viewer reveals that player's own breakdowns.");
 }
 
+async function runReadOnlyVisibilityChecks(page) {
+  console.log("Checking read-only map visibility");
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
+  const savedState = readOnlyVisibilityGameState(territoryIds);
+
+  assert(territoryIds.length === 42, "Read-only visibility fixture has all territories.");
+  await page.addInitScript((state) => {
+    localStorage.clear();
+    localStorage.setItem("ardature.localGame.v1", JSON.stringify(state));
+  }, savedState);
+  await page.goto(baseUrl);
+  await page.waitForSelector('.app-shell[data-app-phase="gameMap"]');
+  await capture(page, "13b-read-only-visibility-mobile.png");
+  assert((await page.locator('[data-troop-marker="shire"]').count()) === 1, "Read-only map shows own territory troop total.");
+  assert((await page.locator('[data-troop-marker="bree"]').count()) === 1, "Read-only map shows connected opponent troop total.");
+  assert((await page.locator('[data-troop-marker="nurn"]').count()) === 0, "Read-only map hides distant opponent troop total.");
+  await clickTerritory(page, "shire");
+  assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Read-only map shows own territory breakdown.");
+  await clickTerritory(page, "bree");
+  assert((await page.locator(".game-map-panel .selected-territory-name").getByText("Bree").count()) === 1, "Read-only map shows connected opponent territory name.");
+  assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 0, "Read-only map hides connected opponent breakdown.");
+  await clickTerritory(page, "nurn");
+  assert((await page.locator(".game-map-panel .selected-territory-name").getByText("Nurn").count()) === 1, "Read-only map shows distant opponent territory name.");
+  assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 0, "Read-only map hides distant opponent breakdown.");
+  await page.getByRole("button", { name: "Change viewer" }).click();
+  assert((await page.locator('[data-troop-marker="nurn"]').count()) === 1, "Cycling local viewer shows that player's own distant territory total.");
+  await clickTerritory(page, "nurn");
+  assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Cycling local viewer reveals that player's own distant breakdown.");
+}
+
+function readOnlyVisibilityGameState(territoryIds) {
+  return {
+    phase: "gameMap",
+    mode: "local",
+    players: [
+      {
+        id: "viewer",
+        name: "Frodo",
+        color: "yellow",
+        nameLocked: false,
+        colorLocked: false,
+        connectionStatus: "connected",
+      },
+      {
+        id: "opponent",
+        name: "Sauron",
+        color: "red",
+        nameLocked: false,
+        colorLocked: false,
+        connectionStatus: "connected",
+      },
+    ],
+    config: {
+      draftStyle: "snake",
+      pickTimeLimit: 0,
+      troopAllocationTimeLimit: 0,
+    },
+    draft: {
+      originalTurnOrder: ["viewer", "opponent"],
+      startIndex: 0,
+      step: territoryIds.length,
+      ownership: Object.fromEntries(territoryIds.map((territoryId) => [
+        territoryId,
+        territoryId === "shire" ? "viewer" : "opponent",
+      ])),
+      resultTerritoryId: null,
+      resultPlayerId: null,
+      timerRemainingMs: null,
+      timerEndsAt: null,
+    },
+    allocation: {
+      originalPlayerCount: 2,
+      order: ["viewer", "opponent"],
+      currentIndex: 0,
+      timerRemainingMs: null,
+      timerEndsAt: null,
+      playerAllocations: {
+        viewer: {
+          marker: { heavy: 1 / 3, cavalry: 1 / 3, elite: 1 / 3 },
+          buildSubmitted: true,
+          baseTroops: { heavy: 2, cavalry: 1, elite: 0, leader: 1 },
+          inheritedTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
+          ready: true,
+          randomCompleted: false,
+          territories: {
+            shire: { heavy: 2, cavalry: 1, elite: 0, leader: 1 },
+          },
+        },
+        opponent: {
+          marker: { heavy: 1 / 3, cavalry: 1 / 3, elite: 1 / 3 },
+          buildSubmitted: true,
+          baseTroops: { heavy: 4, cavalry: 2, elite: 0, leader: 0 },
+          inheritedTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
+          ready: true,
+          randomCompleted: false,
+          territories: {
+            bree: { heavy: 3, cavalry: 0, elite: 0, leader: 0 },
+            nurn: { heavy: 1, cavalry: 2, elite: 0, leader: 0 },
+          },
+        },
+      },
+    },
+  };
+}
+
 async function finishAllocationTurn(page, skin, options = {}) {
   const territoryIds = await page.locator(`[data-territory-fill][data-territory-skin="${skin}"]`).evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("data-territory-fill")).filter(Boolean),
@@ -1308,6 +1410,10 @@ async function main() {
     await runMobileMapInteractionChecks(touchMobile);
     await touchMobile.close();
     await runRandomAllocationChecks(mobile);
+    const readOnlyMobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+    readOnlyMobile.setDefaultTimeout(10000);
+    await runReadOnlyVisibilityChecks(readOnlyMobile);
+    await readOnlyMobile.close();
     await runSyncEntryChecks(mobile);
     await runSyncReadyPageChecks(browser);
     await runSyncRecoveryChecks(browser);
