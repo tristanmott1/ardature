@@ -1397,6 +1397,51 @@ async function runSyncRecoveryChecks(browser) {
   await recoveryJoiner.close();
 }
 
+async function runSyncHostLossChecks(browser) {
+  console.log("Checking sync host loss");
+  const host = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const joiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  host.setDefaultTimeout(20000);
+  joiner.setDefaultTimeout(25000);
+
+  await host.goto(baseUrl);
+  await host.evaluate(() => localStorage.clear());
+  await host.reload();
+  await host.getByRole("button", { name: "Sync" }).click();
+  await host.getByLabel("Sync player name").fill("Aragorn");
+  await host.getByRole("button", { name: "Host" }).click();
+  await host.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
+
+  await joiner.goto(baseUrl);
+  await joiner.evaluate(() => localStorage.clear());
+  await joiner.reload();
+  await joiner.getByRole("button", { name: "Sync" }).click();
+  await joiner.getByLabel("Sync player name").fill("Legolas");
+  await joiner.getByRole("button", { name: "Sync player color" }).click();
+  await joiner.getByRole("menuitemradio", { name: "Blue" }).click();
+  await joiner.getByRole("button", { name: "Join" }).click();
+  await pasteScannerText(joiner, await qrText(host));
+  await joiner.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
+
+  await host.getByRole("button", { name: "Scan" }).click();
+  await pasteScannerText(host, await qrText(joiner));
+  await host.getByText("Legolas").waitFor({ timeout: 15000 });
+  await host.getByRole("button", { name: "Start game" }).click();
+  await joiner.waitForSelector('.app-shell[data-app-phase="draft"]', { timeout: 15000 });
+
+  await host.close();
+  await joiner.getByRole("alertdialog", { name: "Sync connection" }).getByText("Reconnecting").waitFor({ timeout: 15000 });
+  await capture(joiner, "25-sync-joiner-host-loss-reconnecting-mobile.png");
+  assert((await joiner.locator(".sync-session-dialog .qr-code").count()) === 0, "Host-loss reconnecting UI has no QR code.");
+  assert((await joiner.locator(".sync-session-dialog .player-row").count()) === 0, "Host-loss reconnecting UI does not show stale roster status.");
+
+  await joiner.waitForSelector('.app-shell[data-app-phase="home"]', { timeout: 20000 });
+  await capture(joiner, "26-sync-joiner-host-loss-home-mobile.png");
+  assert((await joiner.getByRole("button", { name: "Sync" }).count()) === 1, "Joiner returns home after host reconnect fails.");
+
+  await joiner.close();
+}
+
 async function qrText(page) {
   const text = await page.locator(".qr-code[data-qr-text]").last().getAttribute("data-qr-text");
   assert(text, "QR text is exposed for verification.");
@@ -1453,6 +1498,7 @@ async function main() {
     await runSyncEntryChecks(mobile);
     await runSyncReadyPageChecks(browser);
     await runSyncRecoveryChecks(browser);
+    await runSyncHostLossChecks(browser);
 
     console.log("Closing browser");
     await Promise.race([
