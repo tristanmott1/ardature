@@ -857,6 +857,8 @@ Local pause is a true pause of the single-device draft:
 - Local pause has no end-game or close button.
 - Local pause has no disconnected status, reconnect status, or QR reconnect controls.
 - Local players can be removed while paused.
+- Local refresh or close during an active game phase restores into local pause with timers stopped and remaining time preserved.
+- Local mode never requires reconnection when reopened because all players share one device.
 
 Sync host pause is a synchronization reset:
 
@@ -865,8 +867,9 @@ Sync host pause is a synchronization reset:
 - On unpause, the current player's turn starts over with a fresh timer.
 - The host can restart from pause after confirmation, returning everyone to setup while keeping current sync connections open.
 - Sync pause includes connected, disconnected, and reconnecting player status.
-- Sync pause includes QR reconnect controls when needed.
+- Sync pause always includes a recovery QR and scan button for disconnected-player recovery.
 - The host can remove players while paused.
+- Host refresh or close during active sync play restores the host game into paused recovery state with all non-host players disconnected.
 
 In both modes, removing a player during draft clears that player's territories and returns them to the remaining territory pool. If fewer than 2 players remain, the game ends and returns to home.
 
@@ -901,20 +904,50 @@ While paused:
 Graceful quit and ungraceful disconnect are different:
 
 - Graceful quit sends a quit message. The host removes that player, clears their territories, returns those territories to the draft pool, pauses the draft, and shows the pause page without that player.
-- Ungraceful disconnect keeps the player in the game as disconnected, keeps their territories owned, and forces pause.
+- Ungraceful disconnect keeps the player in the game, keeps their territories owned, marks them reconnecting on the host, and forces pause.
 - Host end-game sends `hostEnded` so joiners return home instead of staying in a disconnected game.
+- Host removal sends `removed` to that peer when possible. Removed players return home and cannot rejoin.
 
-Disconnected players should automatically attempt to reconnect when possible, following the Qwixx-style reconnect behavior. Joiner gameplay is blocked while the host is reconnecting or disconnected. Full QR reconnect slot selection is future work and should not be treated as completed until the host and joiner can explicitly reconnect an existing player identity.
+`connected` means the device is currently on the same authoritative game page as the host:
 
-Future fallback reconnect flow:
+- The host data channel is live.
+- Host and joiner heartbeat are healthy in both directions.
+- The joiner has heard a recent host heartbeat or snapshot.
+- The joiner is rendering the latest host-authoritative phase/page, not stale local assumptions.
 
-1. Host shows a reusable paused-game QR.
-2. The joiner scans it and sees the game information plus disconnected player names.
-3. The joiner chooses their existing disconnected player slot.
-4. The joiner generates an answer QR.
-5. The host scans the answer QR to reconnect that player.
+If any of these are false, the device must stop treating itself as connected. WebRTC channel state alone is not enough.
+
+Disconnected players should automatically attempt to reconnect when possible, following the Qwixx-style reconnect behavior. Host and joiner make reconnect/disconnect decisions independently because the failing connection cannot be trusted to carry those state changes:
+
+- Joiner detects missed heartbeat and enters local `reconnecting`.
+- Host detects missed heartbeat from that player and marks the player `reconnecting`.
+- Both sides use a 10-second reconnecting grace period.
+- If heartbeat recovers, the joiner receives the latest host snapshot and returns to connected.
+- If heartbeat does not recover, the joiner returns home exactly as if the host ended the game or removed them.
+- If heartbeat does not recover, the host marks that player disconnected and keeps them in the host game for QR recovery.
+
+Joiner reconnecting UI is local-only:
+
+- It may show the local player's name/color and the most recent map as inert background.
+- It must not show current roster status, timers, ready state, turn state, or other players' connection state.
+- The only choices are to wait or press X to stop trying and return home immediately.
+- Pressing X while reconnecting does not send `quit`, because the player is not connected enough to remove themselves from the host game.
+
+Connected pause UI is host-authored. If a joiner is still connected while the host game is paused, it may show the host's roster and connection statuses. A reconnecting joiner must never infer those facts from stale local state.
+
+QR recovery flow:
+
+1. Host pause always shows a recovery QR.
+2. The recovery QR contains only players the host currently marks disconnected.
+3. The joiner uses the normal Sync -> Join path and scans the recovery QR.
+4. The joiner chooses one disconnected player slot.
+5. The joiner generates a player-specific recovery answer QR.
+6. The host scans the answer QR to reconnect that player.
+7. The host accepts the answer only if that player is still disconnected; stale or duplicate answers fail cleanly.
 
 Reconnecting players cannot change the player identity. Names, colors, and host locks remain exactly as the host sees them.
+
+The host's persisted model must contain enough information to resume the game after recovery, including draft ownership, army builds, troop allocations, readiness, timers stopped at pause/restore, and the current phase.
 
 ## Sync Network Model
 
@@ -942,14 +975,25 @@ The completed sync contract through troop allocation separates authoritative gam
 
 - `GameState` stores game facts only.
 - `App` owns sync session state such as connecting, connected, reconnecting, disconnected, and host-ended.
+- Heartbeat defines whether a session is connected. A stale snapshot is not enough.
 - Host-to-joiner updates are revisioned snapshots: `{ type: "snapshot", revision, game }`.
 - Joiners ignore stale snapshots.
 - Joiner-to-host commands are limited to `profileUpdate`, `draftConfirm`, `allocationUpdate`, and `quit`.
 - The host validates every command against the current game state before applying it.
 - Host intentional end uses `hostEnded`.
+- Host player removal uses `removed` when the peer is still reachable.
 - Old unversioned `gameState`, `hostQuit`, and pending-pick messages are not part of the current sync contract.
 
 The host applies valid actions, persists active sync-host state separately from local pass-and-play saves, and broadcasts the resulting revisioned snapshot.
+
+Sync frequency should follow a resume-safety rule:
+
+- Send committed game facts promptly enough that the host can resume without outside help.
+- Avoid syncing noisy transient UI.
+- Draft confirmations, army-build submission, ready, timeout completion, pause, resume, removal, and phase advance are immediate committed facts.
+- Allocation troop placement is committed game data. It may be batched or lightly throttled, but must be flushed on ready, pause, visibility change, or page unload where practical.
+- Future attack, battle, spy, reinforcement, fortify, elimination, and game-over events should follow the same pattern: host must receive enough committed data to resume; local previews and controls remain local.
+- Never sync map camera, focus animation, selected inspection territory, open modal state, hover/press state, local pending draft preview, or other purely visual state.
 
 Because this is for personal use, hidden state may exist client-side. However, the UI should still render strictly from the local player's viewer perspective. When practical, the host may send redacted player-specific views to make accidental spoilers less likely.
 
@@ -1142,11 +1186,12 @@ Setup preferences are separate from active saved games. Each device should remem
 Sync host persistence is conservative:
 
 - Host state should be saved after setup starts, draft starts, each pick, pause, removal, and other authoritative changes.
-- If the host reloads during an active sync draft, the game restores into the paused reconnect lobby instead of trying to continue a live timer.
+- If the host reloads during active sync play, the game restores into paused recovery state instead of trying to continue a live timer.
+- On sync host restore, all non-host players are disconnected immediately because no live heartbeat survives the refresh.
 - The host can close the app while paused, reopen later, reconnect everyone, and unpause.
 - Joiners do not need independent game persistence for the setup/draft milestone.
 
-Because the game can be long, local mode should support refresh recovery. Local draft refresh restores the draft and restarts the active pick timer fresh.
+Because the game can be long, local mode should support refresh recovery. Local refresh during active play restores into local pause, clears running timer deadlines, and preserves remaining time so resume continues from the paused state.
 
 ## PWA and Deployment
 
@@ -1229,7 +1274,7 @@ Suggested build order:
 6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardatúrë-specific payload names and prefixes.
 7. Implement sync setup with host/join flows, joiner editable name/color, host edit/lock/unlock, duplicate-color blocking, host roster controls, and setup broadcasts.
 8. Implement sync draft as host-authoritative state: host timers, pick requests, confirmed picks, random fallback picks, broadcasts, and read-only views for inactive devices.
-9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, blocked joiner disconnect state, and unpause validation. QR reconnect slot selection remains future work.
+9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, blocked joiner reconnecting state, QR disconnected-player recovery, and unpause validation.
 10. Update verification to cover local setup/draft/pause, sync handshake/setup, sync draft, timeout behavior, pause/reconnect behavior, persistence recovery, and map interaction modes.
 11. Generate territory visual centers from the large green circles in the territory drawing.
 12. Implement army-build triangle, troop budget calculation, and exact rounded troop counts.
@@ -1247,8 +1292,7 @@ Suggested build order:
 Current implementation status:
 
 - Steps 1 through 16 are implemented for the current setup, draft, troop allocation, and read-only map scope.
-- Sync mode now uses the cleaned contract documented above: revisioned host snapshots, validated joiner commands, explicit `hostEnded`, blocked joiner play on host loss, and separate sync-host active game persistence.
-- Full QR reconnect slot selection is not implemented yet.
+- Sync mode now uses the cleaned contract documented above: revisioned host snapshots, validated joiner commands, explicit `hostEnded` and `removed`, blocked joiner play during host reconnecting, QR disconnected-player recovery from host pause, and separate sync-host active game persistence.
 23. Implement fortify.
 24. Implement elimination and game over.
 
@@ -1259,8 +1303,11 @@ Before considering the first playable version complete:
 - Verify local setup supports 2 to 6 players, names, unique colors, turn order, draft style, draft timer, and troop allocation timer.
 - Verify sync setup supports Qwixx-style QR handshake, host lobby, joiner lobby, name/color edits, host locks, duplicate-color blocking, and host-authoritative setup state.
 - Verify local and sync drafts support snake, round-robin, random simulation, timed picks, confirmation timeout, random timeout fallback, and transition into troop allocation.
-- Verify local pause preserves the active pick timer, pending confirmation, and result popup state, and supports player removal without reconnect state.
-- Verify sync pause/reconnect supports manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, blocked joiner disconnect state, and unpause validation.
+- Verify local pause preserves active timers, pending confirmation, result popup state, army/allocation progress, and player removal without reconnect state.
+- Verify local refresh during active play restores into pause with timers stopped and remaining time preserved.
+- Verify sync heartbeat defines connected state, missed heartbeat immediately enters reconnecting, and host/joiner independently transition after the 10-second grace period.
+- Verify joiner reconnecting UI shows only local identity/inert background plus wait/X controls, never stale host roster, timer, ready, or connection-status facts.
+- Verify sync pause/reconnect supports manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, QR disconnected-player recovery, stale recovery-answer failure, and unpause validation.
 - Verify every territory is assigned to exactly one player before troop allocation.
 - Verify territory visual centers are generated from the large green circles in the territory drawing and are used for troop-count circles.
 - Verify army-build triangle barycentric coordinates, leader budget reservation, fixed-point costs, hard budget limits, closest-ratio selection, and budget-maximal non-dominated results.
@@ -1281,7 +1328,6 @@ Before considering the first playable version complete:
 - Verify fortify allows one adjacent mixed-source move and additional cavalry movement through owned territory.
 - Verify eliminated players are skipped and cannot act.
 - Verify game over triggers when one player owns all territories.
-- Verify local refresh recovery.
-- Verify sync host-authoritative state updates.
+- Verify sync host-authoritative state updates include committed game facts promptly enough to resume, without syncing transient visual UI state.
 - Verify sync private battle preparation works on separate devices.
 - Verify PWA installability and GitHub Pages build output.

@@ -153,6 +153,7 @@ Local pause is a true pause of the single-device draft:
 - Local pause has no disconnected or reconnecting state.
 - Local pause has no QR/reconnect controls.
 - Local players can be removed while paused.
+- Local refresh or close during draft restores into local pause, with the timer stopped and remaining time preserved.
 
 Sync host pause is a synchronization reset:
 
@@ -161,7 +162,7 @@ Sync host pause is a synchronization reset:
 - On unpause, the current player's turn starts over with a fresh timer.
 - The host can restart from pause after confirmation, returning everyone to setup while keeping current sync connections open.
 - Sync pause includes connected, disconnected, and reconnecting player status.
-- Sync pause includes QR reconnect controls when needed.
+- Sync pause always includes a recovery QR and scan button for disconnected-player recovery.
 - The host can remove players while paused.
 
 In both modes, removing a player during draft clears that player's territories and returns them to the remaining territory pool. If fewer than 2 players remain, the game ends and returns to home.
@@ -193,14 +194,24 @@ The completed sync contract separates authoritative game facts from connection/s
 - Joiners ignore stale snapshots.
 - Joiner-to-host commands are limited to `profileUpdate`, `draftConfirm`, `allocationUpdate`, and `quit`.
 - Host intentional end sends `hostEnded`; joiners return home.
-- Lost host connection blocks joiner gameplay immediately behind reconnecting/disconnected UI.
+- Host removal sends `removed`; that joiner returns home through the same path as host-ended.
+- Lost host connection blocks joiner gameplay during the 10-second reconnecting grace period. If automatic reconnect fails, the joiner returns home.
 - The old unversioned `gameState`, `hostQuit`, and pending-pick messages are not part of the contract.
+
+`connected` is defined strictly:
+
+- The device has a live host data channel.
+- Host and joiner heartbeat are healthy in both directions.
+- The joiner has received a recent host heartbeat or snapshot for the current game.
+- The joiner is rendering host-authoritative state for the same page/phase the host is on.
+
+If any of those are false, the device must stop treating itself as connected. Stale local snapshots are allowed only as inert background while reconnecting; they are not current truth.
 
 The sync transport should be copied and adapted from Qwixx:
 
 - WebRTC data channels.
-- QR host offer.
-- QR joiner answer.
+- QR host offer and joiner answer for first-time setup joining.
+- QR recovery offer and recovery answer for paused disconnected-player recovery.
 - camera scanner with native QR detection when available and JavaScript fallback.
 - project-specific Ardatúrë payload kinds and compact QR prefixes.
 
@@ -208,7 +219,7 @@ Sync reconnect and pause:
 
 - The host can manually pause a draft.
 - Any ungraceful disconnect during draft forces pause.
-- Host refresh during an unpaused sync draft restores into paused mode.
+- Host refresh during an unpaused sync draft restores into paused mode with all non-host players disconnected.
 - While paused, the host shows a lobby-style page with the current players and connection status.
 - The host cannot unpause until every remaining player is connected and at least 2 players remain.
 - Host pause state and full draft/allocation details are saved in sync-host local storage, separate from local pass-and-play saves, so the host can close the app, return later, reconnect everyone, and unpause.
@@ -217,11 +228,36 @@ Sync reconnect and pause:
 Graceful quit and ungraceful disconnect are different:
 
 - Graceful quit during sync draft sends a quit message. The host removes that player, clears their territories, returns those territories to the remaining pool, pauses the draft, then shows the pause page without that player.
-- Ungraceful disconnect keeps the player in the game as disconnected, keeps their territories owned, forces pause, and allows automatic reconnect.
+- Ungraceful disconnect first marks the player `reconnecting`, keeps their territories owned, and forces pause.
+- `reconnecting` lasts 10 seconds. If WebRTC recovers during that window, the player returns to `connected`.
+- Host and joiner make this transition independently. The host marks the player `disconnected` after its own 10-second reconnect window. The joiner returns home after its own 10-second reconnect window. The host cannot tell the joiner to become disconnected because the connection is already unhealthy.
+- The disconnected player remains in the host game and can return only through the host pause recovery QR.
 - If the host intentionally ends the game, it sends `hostEnded` so joiners return home instead of remaining in a disconnected game.
-- Automatic WebRTC reconnect should behave like Qwixx where possible.
-- Full QR reconnect slot selection is future work. Do not document or test it as completed until the host can issue a paused-game reconnect QR, the joiner can choose an existing disconnected slot, and the host can accept that answer back into the same player identity.
+- If the host removes a player, it sends `removed` when possible, then closes that peer. Removed players cannot rejoin.
+- Automatic WebRTC reconnect should behave like Qwixx where possible inside the 10-second reconnecting window.
+- QR recovery is available only from sync host pause. The host recovery QR contains only currently disconnected players. The rejoining device scans from the normal Sync -> Join flow, chooses one disconnected slot, shows a player-specific answer QR, and the host scanner accepts it only if that player is still disconnected.
+- Stale recovery answers fail cleanly. If two devices try to reclaim the same player, only the first accepted answer can reconnect.
 - Reconnecting players cannot change the underlying player identity. Names, colors, and locks remain exactly as the host sees them.
+
+Joiner reconnecting UI is deliberately local and minimal:
+
+- Show the local player's name/color if known.
+- The most recent map may remain visible as inert background.
+- Do not show current roster status, timers, ready state, turn state, or other players' connection state.
+- The only choices are waiting or pressing X to stop trying and return home immediately.
+- Pressing X while reconnecting does not send `quit`; it only moves that device to the same local outcome as automatic reconnect failure.
+
+Connected pause UI is different:
+
+- If a joiner is still connected and the host game is paused, the joiner may render the host-authored pause state.
+- Connected pause may show roster and connection statuses because the device is still receiving source-of-truth data from the host.
+- A disconnected/reconnecting joiner must never infer or display those statuses from stale local state.
+
+Sync should share committed game facts promptly enough for the host to resume without outside help:
+
+- Confirmed draft picks are sent immediately.
+- Future setup/turn actions should follow the same rule: send meaningful committed facts, not local visual state.
+- Transient UI such as pending selection, camera position, focus animation, open modals, and selected inspection territory is never part of the sync contract.
 
 If a sync player is removed during pause:
 
@@ -235,7 +271,7 @@ If a sync player is removed during pause:
 Local mode uses the same draft engine as sync mode, but without network messages, disconnected status, or reconnect state.
 
 - Ending the local game requires confirmation.
-- Local refresh during draft restores the draft and restarts the active pick timer fresh.
+- Local refresh during draft restores into local pause and preserves the active pick timer's remaining time.
 - Local manual pause preserves the active timer, pending confirmation, or result popup exactly as-is.
 - Local player removal is only available while paused.
 
@@ -268,7 +304,7 @@ Build this milestone in this order:
 6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardatúrë-specific payload names and prefixes.
 7. Implement sync setup with host/join flows, joiner editable name/color, host edit/lock/unlock, duplicate-color blocking, host roster controls, and setup broadcasts.
 8. Implement sync draft as host-authoritative state: host timers, pick requests, confirmed picks, random fallback picks, broadcasts, and read-only views for inactive devices.
-9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, blocked joiner disconnect state, and unpause validation. QR reconnect slot selection remains future work.
+9. Implement sync pause/reconnect: host manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, host refresh recovery into pause, automatic reconnect where possible, blocked joiner reconnecting state, QR disconnected-player recovery, and unpause validation.
 10. Update verification to cover local setup/draft/pause, sync handshake/setup, sync draft, timeout behavior, pause/reconnect behavior, persistence recovery, and map interaction modes.
 
 Do not build troop allocation, spy, reinforcements, attacks, fortify, or fog of war in this milestone.

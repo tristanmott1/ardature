@@ -850,6 +850,30 @@ export function saveLocalGame(state: GameState) {
   localStorage.setItem(LOCAL_GAME_KEY, JSON.stringify(state));
 }
 
+export function pauseLocalGameForStorage(state: GameState, now: number): GameState {
+  if (state.mode !== "local") {
+    return state;
+  }
+
+  if (state.phase === "draft" && state.draft) {
+    return {
+      ...state,
+      phase: "paused",
+      draft: pauseDraftTimer(state.draft, now),
+    };
+  }
+
+  if (state.phase === "allocation" && state.allocation) {
+    return {
+      ...state,
+      phase: "paused",
+      allocation: pauseAllocationTimer(state.allocation, now),
+    };
+  }
+
+  return state;
+}
+
 export function saveSyncHostGame(state: GameState, localPlayerId: string | null, revision: number) {
   if (state.mode !== "sync" || !localPlayerId) {
     return;

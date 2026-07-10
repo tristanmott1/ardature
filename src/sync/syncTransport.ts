@@ -32,6 +32,32 @@ export type SyncAnswerPayload = {
   sdp: RTCSessionDescriptionInit;
 };
 
+export type SyncRecoveryPlayerSlot = {
+  id: string;
+  name: string;
+};
+
+export type SyncRecoveryOfferPayload = {
+  kind: "ardature-sync-recovery-offer";
+  version: 1;
+  roomId: string;
+  offerId: string;
+  hostPlayerId: string;
+  hostName: string;
+  disconnectedPlayers: SyncRecoveryPlayerSlot[];
+  sdp: RTCSessionDescriptionInit;
+};
+
+export type SyncRecoveryAnswerPayload = {
+  kind: "ardature-sync-recovery-answer";
+  version: 1;
+  roomId: string;
+  offerId: string;
+  playerId: string;
+  playerName: string;
+  sdp: RTCSessionDescriptionInit;
+};
+
 type PendingOffer = {
   channel: RTCDataChannel;
   peerConnection: RTCPeerConnection;
@@ -40,6 +66,8 @@ type PendingOffer = {
 type HostPeer = {
   channel: RTCDataChannel;
   closedNotified: boolean;
+  heartbeatInterval: number;
+  lastHeardAt: number;
   peerConnection: RTCPeerConnection;
   playerName: string;
   reconnectTimer: number;
@@ -55,9 +83,15 @@ type SyncTransportCallbacks = {
 
 const CHANNEL_NAME = "ardature";
 const ICE_TIMEOUT_MS = 1800;
-const DEFAULT_RECONNECT_GRACE_MS = 60000;
+const HEARTBEAT_INTERVAL_MS = 1000;
+const HEARTBEAT_TIMEOUT_MS = 3000;
+const DEFAULT_RECONNECT_GRACE_MS = 10000;
+const HEARTBEAT_PING = "__ardatureHeartbeat";
+const HEARTBEAT_PONG = "__ardatureHeartbeatAck";
 const COMPACT_OFFER_PREFIX = "ARO:";
 const COMPACT_ANSWER_PREFIX = "ARA:";
+const COMPACT_RECOVERY_OFFER_PREFIX = "ARR:";
+const COMPACT_RECOVERY_ANSWER_PREFIX = "ARY:";
 const QR_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
 
 function createPeerConnection() {
@@ -201,12 +235,21 @@ function encodeCompactPayload(prefix: string, fields: string[]) {
 function parseCompactPayload(value: string) {
   const isOffer = value.startsWith(COMPACT_OFFER_PREFIX);
   const isAnswer = value.startsWith(COMPACT_ANSWER_PREFIX);
+  const isRecoveryOffer = value.startsWith(COMPACT_RECOVERY_OFFER_PREFIX);
+  const isRecoveryAnswer = value.startsWith(COMPACT_RECOVERY_ANSWER_PREFIX);
 
-  if (!isOffer && !isAnswer) {
+  if (!isOffer && !isAnswer && !isRecoveryOffer && !isRecoveryAnswer) {
     return null;
   }
 
-  const bytes = decodeBase45(value.slice(COMPACT_OFFER_PREFIX.length));
+  const prefix = isOffer
+    ? COMPACT_OFFER_PREFIX
+    : isAnswer
+      ? COMPACT_ANSWER_PREFIX
+      : isRecoveryOffer
+        ? COMPACT_RECOVERY_OFFER_PREFIX
+        : COMPACT_RECOVERY_ANSWER_PREFIX;
+  const bytes = decodeBase45(value.slice(prefix.length));
   const decompressed = bytes ? decompressFromUint8Array(bytes) : null;
   const fields = decompressed ? (JSON.parse(decompressed) as unknown) : null;
 
@@ -242,6 +285,40 @@ function parseCompactPayload(value: string) {
     } satisfies SyncAnswerPayload;
   }
 
+  if (isRecoveryOffer && fields.length === 6) {
+    const [roomId, offerId, hostPlayerId, hostName, disconnectedPlayers, sdp] = fields;
+    const slots = parseRecoverySlots(disconnectedPlayers);
+
+    if (!slots) {
+      return null;
+    }
+
+    return {
+      kind: "ardature-sync-recovery-offer",
+      version: 1,
+      roomId,
+      offerId,
+      hostPlayerId,
+      hostName,
+      disconnectedPlayers: slots,
+      sdp: { type: "offer", sdp },
+    } satisfies SyncRecoveryOfferPayload;
+  }
+
+  if (isRecoveryAnswer && fields.length === 5) {
+    const [roomId, offerId, playerId, playerName, sdp] = fields;
+
+    return {
+      kind: "ardature-sync-recovery-answer",
+      version: 1,
+      roomId,
+      offerId,
+      playerId,
+      playerName,
+      sdp: { type: "answer", sdp },
+    } satisfies SyncRecoveryAnswerPayload;
+  }
+
   return null;
 }
 
@@ -272,7 +349,7 @@ function parseWireMessage(value: string) {
   }
 }
 
-function encodePayload(value: SyncOfferPayload | SyncAnswerPayload) {
+function encodePayload(value: SyncOfferPayload | SyncAnswerPayload | SyncRecoveryOfferPayload | SyncRecoveryAnswerPayload) {
   if (value.kind === "ardature-sync-offer") {
     return encodeCompactPayload(COMPACT_OFFER_PREFIX, [
       value.roomId,
@@ -283,7 +360,28 @@ function encodePayload(value: SyncOfferPayload | SyncAnswerPayload) {
     ]);
   }
 
-  return encodeCompactPayload(COMPACT_ANSWER_PREFIX, [
+  if (value.kind === "ardature-sync-answer") {
+    return encodeCompactPayload(COMPACT_ANSWER_PREFIX, [
+      value.roomId,
+      value.offerId,
+      value.playerId,
+      value.playerName,
+      typeof value.sdp.sdp === "string" ? value.sdp.sdp : "",
+    ]);
+  }
+
+  if (value.kind === "ardature-sync-recovery-offer") {
+    return encodeCompactPayload(COMPACT_RECOVERY_OFFER_PREFIX, [
+      value.roomId,
+      value.offerId,
+      value.hostPlayerId,
+      value.hostName,
+      JSON.stringify(value.disconnectedPlayers),
+      typeof value.sdp.sdp === "string" ? value.sdp.sdp : "",
+    ]);
+  }
+
+  return encodeCompactPayload(COMPACT_RECOVERY_ANSWER_PREFIX, [
     value.roomId,
     value.offerId,
     value.playerId,
@@ -306,6 +404,55 @@ function isOfferPayload(value: unknown): value is SyncOfferPayload {
   );
 }
 
+function isRecoveryOfferPayload(value: unknown): value is SyncRecoveryOfferPayload {
+  const payload = value as Partial<SyncRecoveryOfferPayload>;
+  return (
+    Boolean(payload) &&
+    payload.kind === "ardature-sync-recovery-offer" &&
+    payload.version === 1 &&
+    typeof payload.roomId === "string" &&
+    typeof payload.offerId === "string" &&
+    typeof payload.hostPlayerId === "string" &&
+    typeof payload.hostName === "string" &&
+    Array.isArray(payload.disconnectedPlayers) &&
+    payload.disconnectedPlayers.every(isRecoverySlot) &&
+    Boolean(payload.sdp)
+  );
+}
+
+function isRecoveryAnswerPayload(value: unknown): value is SyncRecoveryAnswerPayload {
+  const payload = value as Partial<SyncRecoveryAnswerPayload>;
+  return (
+    Boolean(payload) &&
+    payload.kind === "ardature-sync-recovery-answer" &&
+    payload.version === 1 &&
+    typeof payload.roomId === "string" &&
+    typeof payload.offerId === "string" &&
+    typeof payload.playerId === "string" &&
+    typeof payload.playerName === "string" &&
+    Boolean(payload.sdp)
+  );
+}
+
+function isRecoverySlot(value: unknown): value is SyncRecoveryPlayerSlot {
+  const slot = value as Partial<SyncRecoveryPlayerSlot>;
+  return Boolean(slot) &&
+    typeof slot === "object" &&
+    typeof slot.id === "string" &&
+    typeof slot.name === "string";
+}
+
+function parseRecoverySlots(value: string) {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) && parsed.every(isRecoverySlot)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function isAnswerPayload(value: unknown): value is SyncAnswerPayload {
   const payload = value as Partial<SyncAnswerPayload>;
   return (
@@ -324,6 +471,7 @@ function attachMessageHandler(
   channel: RTCDataChannel,
   playerId: string,
   callbacks: SyncTransportCallbacks,
+  onHeartbeat?: (message: SyncWireMessage) => void,
 ) {
   channel.addEventListener("message", (event) => {
     if (typeof event.data !== "string") {
@@ -332,6 +480,11 @@ function attachMessageHandler(
 
     const message = parseWireMessage(event.data);
     if (!message || typeof message !== "object" || typeof (message as SyncWireMessage).type !== "string") {
+      return;
+    }
+
+    if (isHeartbeatMessage(message)) {
+      onHeartbeat?.(message);
       return;
     }
 
@@ -347,6 +500,11 @@ function sendChannelMessage(channel: RTCDataChannel, message: SyncWireMessage) {
   channel.send(JSON.stringify(message));
 }
 
+function isHeartbeatMessage(message: unknown): message is SyncWireMessage {
+  const wireMessage = message as Partial<SyncWireMessage>;
+  return wireMessage.type === HEARTBEAT_PING || wireMessage.type === HEARTBEAT_PONG;
+}
+
 export function parseSyncOffer(value: string) {
   const payload = parseQrPayload(value);
   return isOfferPayload(payload) ? payload : null;
@@ -355,6 +513,16 @@ export function parseSyncOffer(value: string) {
 export function parseSyncAnswer(value: string) {
   const payload = parseQrPayload(value);
   return isAnswerPayload(payload) ? payload : null;
+}
+
+export function parseSyncRecoveryOffer(value: string) {
+  const payload = parseQrPayload(value);
+  return isRecoveryOfferPayload(payload) ? payload : null;
+}
+
+export function parseSyncRecoveryAnswer(value: string) {
+  const payload = parseQrPayload(value);
+  return isRecoveryAnswerPayload(payload) ? payload : null;
 }
 
 export class SyncHostTransport {
@@ -387,6 +555,39 @@ export class SyncHostTransport {
   }
 
   async createOffer() {
+    const offer = await this.createPendingOffer();
+
+    const payload: SyncOfferPayload = {
+      kind: "ardature-sync-offer",
+      version: 1,
+      roomId: this.roomId,
+      offerId: offer.offerId,
+      hostPlayerId: this.hostPlayerId,
+      hostName: this.hostName,
+      sdp: offer.sdp,
+    };
+
+    return encodePayload(payload);
+  }
+
+  async createRecoveryOffer(disconnectedPlayers: SyncRecoveryPlayerSlot[]) {
+    const offer = await this.createPendingOffer();
+
+    const payload: SyncRecoveryOfferPayload = {
+      kind: "ardature-sync-recovery-offer",
+      version: 1,
+      roomId: this.roomId,
+      offerId: offer.offerId,
+      hostPlayerId: this.hostPlayerId,
+      hostName: this.hostName,
+      disconnectedPlayers,
+      sdp: offer.sdp,
+    };
+
+    return encodePayload(payload);
+  }
+
+  private async createPendingOffer() {
     const offerId = crypto.randomUUID();
     const peerConnection = createPeerConnection();
     const channel = peerConnection.createDataChannel(CHANNEL_NAME);
@@ -402,17 +603,10 @@ export class SyncHostTransport {
     await peerConnection.setLocalDescription(offer);
     await waitForIceGathering(peerConnection);
 
-    const payload: SyncOfferPayload = {
-      kind: "ardature-sync-offer",
-      version: 1,
-      roomId: this.roomId,
+    return {
       offerId,
-      hostPlayerId: this.hostPlayerId,
-      hostName: this.hostName,
       sdp: peerConnection.localDescription?.toJSON() ?? offer,
     };
-
-    return encodePayload(payload);
   }
 
   async acceptAnswer(value: string) {
@@ -422,53 +616,29 @@ export class SyncHostTransport {
       throw new Error("this is not an answer QR for this room.");
     }
 
-    const pending = this.pendingOffers.get(answer.offerId);
+    return this.acceptParsedAnswer(answer);
+  }
 
-    if (!pending) {
-      throw new Error("this answer does not match the current host QR.");
+  async acceptRecoveryAnswer(value: string) {
+    const answer = parseSyncRecoveryAnswer(value);
+
+    if (!answer || answer.roomId !== this.roomId) {
+      throw new Error("this is not a recovery answer QR for this room.");
     }
 
-    attachMessageHandler(pending.channel, answer.playerId, {
-      ...this.callbacks,
-      onMessage: (playerId, message) => {
-        this.markPeerConnected(playerId);
-        this.callbacks.onMessage?.(playerId, message);
-      },
-    });
-
-    try {
-      await pending.peerConnection.setRemoteDescription(answer.sdp);
-      await waitForChannelOpen(pending.channel);
-    } catch (error) {
-      this.closePendingOffer(answer.offerId);
-      throw error;
-    }
-
-    this.pendingOffers.delete(answer.offerId);
-    this.peers.set(answer.playerId, {
-      channel: pending.channel,
-      closedNotified: false,
-      peerConnection: pending.peerConnection,
-      playerName: answer.playerName,
-      reconnectTimer: 0,
-      status: "connected",
-    });
-
-    this.callbacks.onPeerOpen?.(answer.playerId);
-    this.callbacks.onPeerStatus?.(answer.playerId, "connected");
-    pending.channel.addEventListener("close", () => this.markPeerGone(answer.playerId));
-    pending.peerConnection.addEventListener("connectionstatechange", () => {
-      this.handlePeerConnectionState(answer.playerId, pending.peerConnection.connectionState);
-    });
-
-    return {
-      id: answer.playerId,
-      name: answer.playerName,
-    };
+    return this.acceptParsedAnswer(answer);
   }
 
   broadcast(message: SyncWireMessage) {
     this.peers.forEach((peer) => sendChannelMessage(peer.channel, message));
+  }
+
+  sendToPeer(playerId: string, message: SyncWireMessage) {
+    const peer = this.peers.get(playerId);
+
+    if (peer) {
+      sendChannelMessage(peer.channel, message);
+    }
   }
 
   removePeer(playerId: string) {
@@ -495,7 +665,6 @@ export class SyncHostTransport {
 
   private handlePeerConnectionState(playerId: string, state: RTCPeerConnectionState) {
     if (state === "connected") {
-      this.markPeerConnected(playerId);
       return;
     }
 
@@ -505,8 +674,62 @@ export class SyncHostTransport {
     }
 
     if (state === "failed" || state === "closed") {
-      this.markPeerGone(playerId);
+      this.markPeerReconnecting(playerId);
     }
+  }
+
+  private async acceptParsedAnswer(answer: SyncAnswerPayload | SyncRecoveryAnswerPayload) {
+    const pending = this.pendingOffers.get(answer.offerId);
+
+    if (!pending) {
+      throw new Error("this answer does not match the current host QR.");
+    }
+
+    attachMessageHandler(pending.channel, answer.playerId, {
+      ...this.callbacks,
+      onMessage: (playerId, message) => {
+        this.notePeerHeartbeat(playerId);
+        this.callbacks.onMessage?.(playerId, message);
+      },
+    }, (message) => {
+      this.notePeerHeartbeat(answer.playerId);
+      if (message.type === HEARTBEAT_PING) {
+        sendChannelMessage(pending.channel, { type: HEARTBEAT_PONG, sentAt: Date.now() });
+      }
+    });
+
+    try {
+      await pending.peerConnection.setRemoteDescription(answer.sdp);
+      await waitForChannelOpen(pending.channel);
+    } catch (error) {
+      this.closePendingOffer(answer.offerId);
+      throw error;
+    }
+
+    this.pendingOffers.delete(answer.offerId);
+    this.peers.set(answer.playerId, {
+      channel: pending.channel,
+      closedNotified: false,
+      heartbeatInterval: 0,
+      lastHeardAt: Date.now(),
+      peerConnection: pending.peerConnection,
+      playerName: answer.playerName,
+      reconnectTimer: 0,
+      status: "connected",
+    });
+    this.startPeerHeartbeat(answer.playerId);
+
+    this.callbacks.onPeerOpen?.(answer.playerId);
+    this.callbacks.onPeerStatus?.(answer.playerId, "connected");
+    pending.channel.addEventListener("close", () => this.markPeerReconnecting(answer.playerId));
+    pending.peerConnection.addEventListener("connectionstatechange", () => {
+      this.handlePeerConnectionState(answer.playerId, pending.peerConnection.connectionState);
+    });
+
+    return {
+      id: answer.playerId,
+      name: answer.playerName,
+    };
   }
 
   private markPeerConnected(playerId: string) {
@@ -527,10 +750,43 @@ export class SyncHostTransport {
     this.callbacks.onPeerStatus?.(playerId, "connected");
   }
 
+  private notePeerHeartbeat(playerId: string) {
+    const peer = this.peers.get(playerId);
+
+    if (!peer || peer.closedNotified) {
+      return;
+    }
+
+    peer.lastHeardAt = Date.now();
+    this.markPeerConnected(playerId);
+  }
+
+  private startPeerHeartbeat(playerId: string) {
+    const peer = this.peers.get(playerId);
+
+    if (!peer || peer.closedNotified) {
+      return;
+    }
+
+    window.clearInterval(peer.heartbeatInterval);
+    peer.lastHeardAt = Date.now();
+    peer.heartbeatInterval = window.setInterval(() => {
+      if (peer.closedNotified || peer.status === "gone") {
+        return;
+      }
+
+      if (Date.now() - peer.lastHeardAt > HEARTBEAT_TIMEOUT_MS) {
+        this.markPeerReconnecting(playerId);
+      }
+
+      sendChannelMessage(peer.channel, { type: HEARTBEAT_PING, sentAt: Date.now() });
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
   private markPeerReconnecting(playerId: string) {
     const peer = this.peers.get(playerId);
 
-    if (!peer || peer.closedNotified || peer.status === "reconnecting") {
+    if (!peer || peer.closedNotified || peer.status === "reconnecting" || peer.status === "gone") {
       return;
     }
 
@@ -549,6 +805,7 @@ export class SyncHostTransport {
 
     peer.status = "gone";
     peer.closedNotified = true;
+    window.clearInterval(peer.heartbeatInterval);
     window.clearTimeout(peer.reconnectTimer);
     peer.reconnectTimer = 0;
     this.callbacks.onPeerStatus?.(playerId, "gone");
@@ -557,6 +814,7 @@ export class SyncHostTransport {
 
   private closePeer(peer: HostPeer) {
     peer.closedNotified = true;
+    window.clearInterval(peer.heartbeatInterval);
     window.clearTimeout(peer.reconnectTimer);
     peer.channel.close();
     peer.peerConnection.close();
@@ -583,6 +841,8 @@ export class SyncJoinTransport {
   };
   private channel: RTCDataChannel | null = null;
   private closedNotified = false;
+  private heartbeatInterval = 0;
+  private lastHeardAt = 0;
   private locallyClosed = false;
   private peerConnection: RTCPeerConnection | null = null;
   private reconnectGraceMs: number;
@@ -615,16 +875,22 @@ export class SyncJoinTransport {
       attachMessageHandler(event.channel, offer.hostPlayerId, {
         ...this.callbacks,
         onMessage: (playerId, message) => {
-          this.markConnected();
+          this.noteHeartbeat();
           this.callbacks.onMessage?.(playerId, message);
         },
+      }, (message) => {
+        this.noteHeartbeat();
+        if (message.type === HEARTBEAT_PING) {
+          sendChannelMessage(event.channel, { type: HEARTBEAT_PONG, sentAt: Date.now() });
+        }
       });
       event.channel.addEventListener("open", () => {
         this.markConnected();
+        this.startHeartbeat();
         this.callbacks.onOpen?.();
         this.send({ type: "join", playerId: player.id, playerName: player.name });
       });
-      event.channel.addEventListener("close", () => this.markGone());
+      event.channel.addEventListener("close", () => this.markReconnecting());
     });
     peerConnection.addEventListener("connectionstatechange", () => {
       this.handleConnectionState(peerConnection.connectionState);
@@ -653,6 +919,77 @@ export class SyncJoinTransport {
     };
   }
 
+  async createRecoveryAnswer(value: string, player: { id: string; name: string }) {
+    const offer = parseSyncRecoveryOffer(value);
+
+    if (!offer) {
+      throw new Error("this is not an Ardatúrë recovery QR.");
+    }
+
+    return this.createAnswerForOffer(offer, player, "ardature-sync-recovery-answer");
+  }
+
+  private async createAnswerForOffer(
+    offer: SyncOfferPayload | SyncRecoveryOfferPayload,
+    player: { id: string; name: string },
+    kind: SyncAnswerPayload["kind"] | SyncRecoveryAnswerPayload["kind"],
+  ) {
+    const peerConnection = createPeerConnection();
+    this.closedNotified = false;
+    this.locallyClosed = false;
+    this.peerConnection = peerConnection;
+
+    peerConnection.addEventListener("datachannel", (event) => {
+      this.channel = event.channel;
+      attachMessageHandler(event.channel, offer.hostPlayerId, {
+        ...this.callbacks,
+        onMessage: (playerId, message) => {
+          this.noteHeartbeat();
+          this.callbacks.onMessage?.(playerId, message);
+        },
+      }, (message) => {
+        this.noteHeartbeat();
+        if (message.type === HEARTBEAT_PING) {
+          sendChannelMessage(event.channel, { type: HEARTBEAT_PONG, sentAt: Date.now() });
+        }
+      });
+      event.channel.addEventListener("open", () => {
+        this.markConnected();
+        this.startHeartbeat();
+        this.callbacks.onOpen?.();
+        if (kind === "ardature-sync-answer") {
+          this.send({ type: "join", playerId: player.id, playerName: player.name });
+        }
+      });
+      event.channel.addEventListener("close", () => this.markReconnecting());
+    });
+    peerConnection.addEventListener("connectionstatechange", () => {
+      this.handleConnectionState(peerConnection.connectionState);
+    });
+
+    await peerConnection.setRemoteDescription(offer.sdp);
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    await waitForIceGathering(peerConnection);
+
+    const payload = {
+      kind,
+      version: 1,
+      roomId: offer.roomId,
+      offerId: offer.offerId,
+      playerId: player.id,
+      playerName: player.name,
+      sdp: peerConnection.localDescription?.toJSON() ?? answer,
+    } satisfies SyncAnswerPayload | SyncRecoveryAnswerPayload;
+
+    return {
+      answerText: encodePayload(payload),
+      hostName: offer.hostName,
+      hostPlayerId: offer.hostPlayerId,
+      roomId: offer.roomId,
+    };
+  }
+
   send(message: SyncWireMessage) {
     if (!this.channel) {
       return;
@@ -664,6 +1001,7 @@ export class SyncJoinTransport {
   close() {
     this.locallyClosed = true;
     this.closedNotified = true;
+    window.clearInterval(this.heartbeatInterval);
     window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = 0;
     this.channel?.close();
@@ -674,7 +1012,6 @@ export class SyncJoinTransport {
 
   private handleConnectionState(state: RTCPeerConnectionState) {
     if (state === "connected") {
-      this.markConnected();
       return;
     }
 
@@ -684,7 +1021,7 @@ export class SyncJoinTransport {
     }
 
     if (state === "failed" || state === "closed") {
-      this.markGone();
+      this.markReconnecting();
     }
   }
 
@@ -702,6 +1039,35 @@ export class SyncJoinTransport {
 
     this.status = "connected";
     this.callbacks.onStatus?.("connected");
+  }
+
+  private noteHeartbeat() {
+    if (this.locallyClosed || this.closedNotified) {
+      return;
+    }
+
+    this.lastHeardAt = Date.now();
+    this.markConnected();
+  }
+
+  private startHeartbeat() {
+    if (!this.channel || this.locallyClosed || this.closedNotified) {
+      return;
+    }
+
+    window.clearInterval(this.heartbeatInterval);
+    this.lastHeardAt = Date.now();
+    this.heartbeatInterval = window.setInterval(() => {
+      if (!this.channel || this.locallyClosed || this.closedNotified || this.status === "gone") {
+        return;
+      }
+
+      if (Date.now() - this.lastHeardAt > HEARTBEAT_TIMEOUT_MS) {
+        this.markReconnecting();
+      }
+
+      sendChannelMessage(this.channel, { type: HEARTBEAT_PING, sentAt: Date.now() });
+    }, HEARTBEAT_INTERVAL_MS);
   }
 
   private markReconnecting() {
@@ -722,6 +1088,7 @@ export class SyncJoinTransport {
 
     this.status = "gone";
     this.closedNotified = true;
+    window.clearInterval(this.heartbeatInterval);
     window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = 0;
     this.callbacks.onStatus?.("gone");

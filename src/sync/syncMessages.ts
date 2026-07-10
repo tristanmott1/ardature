@@ -24,6 +24,9 @@ export type ArdatureSyncMessage =
     }
   | {
       type: "hostEnded";
+    }
+  | {
+      type: "removed";
     };
 
 const PLAYER_COLORS = ["green", "blue", "yellow", "red", "purple", "black"];
@@ -52,7 +55,7 @@ export function isArdatureSyncMessage(value: unknown): value is ArdatureSyncMess
     return isPlayerAllocation(message.allocation);
   }
 
-  return message.type === "quit" || message.type === "hostEnded";
+  return message.type === "quit" || message.type === "hostEnded" || message.type === "removed";
 }
 
 function isGameState(value: unknown): value is GameState {

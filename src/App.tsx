@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import {
   PICK_TIME_LIMITS,
+  LOCAL_GAME_KEY,
   PLAYER_COLORS,
   TROOP_ALLOCATION_TIME_LIMITS,
   TROOP_TYPES,
@@ -54,6 +55,7 @@ import {
   ownedTerritoryIds,
   pauseDraftTimer,
   pauseAllocationTimer,
+  pauseLocalGameForStorage,
   randomCompleteAllocationForPlayer,
   randomPickForActivePlayer,
   pauseSyncGame,
@@ -100,7 +102,15 @@ import { MapView } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import type { GeneratedTerritoryData } from "./map/mapTypes";
 import { isArdatureSyncMessage } from "./sync/syncMessages";
-import { SyncHostTransport, SyncJoinTransport, type SyncConnectionStatus, type SyncWireMessage } from "./sync/syncTransport";
+import {
+  SyncHostTransport,
+  SyncJoinTransport,
+  parseSyncRecoveryAnswer,
+  parseSyncRecoveryOffer,
+  type SyncConnectionStatus,
+  type SyncRecoveryPlayerSlot,
+  type SyncWireMessage,
+} from "./sync/syncTransport";
 
 type SyncRole = "host" | "joiner" | null;
 
@@ -158,6 +168,8 @@ function App() {
   const [localPlayerId, setLocalPlayerId] = useState<string | null>(() => restoredSyncHost?.localPlayerId ?? null);
   const [syncQrText, setSyncQrText] = useState("");
   const [syncAnswerText, setSyncAnswerText] = useState("");
+  const [syncRecoveryOfferText, setSyncRecoveryOfferText] = useState("");
+  const [syncRecoverySlots, setSyncRecoverySlots] = useState<SyncRecoveryPlayerSlot[]>([]);
   const [syncCameraMode, setSyncCameraMode] = useState<SyncCameraMode>(null);
   const [syncMessage, setSyncMessage] = useState("");
   const [isAcceptingAnswer, setIsAcceptingAnswer] = useState(false);
@@ -224,6 +236,11 @@ function App() {
   const noticePlayer = syncDraftNotice
     ? game.players.find((player) => player.id === syncDraftNotice.playerId) ?? null
     : null;
+  const disconnectedSyncPlayers = game.mode === "sync"
+    ? game.players
+        .filter((player) => player.id !== localPlayerId && player.connectionStatus === "disconnected")
+        .map((player) => ({ id: player.id, name: player.name }))
+    : [];
   const gameMapSelectedTerritory = gameMapSelectedTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === gameMapSelectedTerritoryId) ?? null
     : null;
@@ -345,6 +362,24 @@ function App() {
   }, [game]);
 
   useEffect(() => {
+    function savePausedLocalGame() {
+      const current = latestGameRef.current;
+
+      if (current.mode === "local" && localStorage.getItem(LOCAL_GAME_KEY)) {
+        saveLocalGame(pauseLocalGameForStorage(current, Date.now()));
+      }
+    }
+
+    window.addEventListener("pagehide", savePausedLocalGame);
+    window.addEventListener("beforeunload", savePausedLocalGame);
+
+    return () => {
+      window.removeEventListener("pagehide", savePausedLocalGame);
+      window.removeEventListener("beforeunload", savePausedLocalGame);
+    };
+  }, []);
+
+  useEffect(() => {
     if (game.phase !== "setup") {
       return;
     }
@@ -372,6 +407,14 @@ function App() {
       broadcastSnapshot(game);
     }
   }, [game, localPlayerId, syncRole]);
+
+  useEffect(() => {
+    if (game.mode !== "sync" || syncRole !== "host" || game.phase !== "paused") {
+      return;
+    }
+
+    void createRecoveryOffer();
+  }, [disconnectedSyncPlayers.map((player) => player.id).join("|"), game.mode, game.phase, syncRole]);
 
   useEffect(() => {
     if (game.mode !== "sync" || syncRole !== "joiner" || !canSendSyncCommand || !localPlayerId || !game.allocation) {
@@ -523,6 +566,8 @@ function App() {
     setSyncSession("idle");
     setLocalPlayerId(null);
     lastSentAllocationRef.current = "";
+    setSyncRecoveryOfferText("");
+    setSyncRecoverySlots([]);
     setGame({
       ...createInitialGameState(),
       config: gameConfigFromPreferences(),
@@ -547,6 +592,9 @@ function App() {
     setLocalPlayerId(null);
     setSyncName(profile.name);
     setSyncColor(profile.color ?? "green");
+    setSyncAnswerText("");
+    setSyncRecoveryOfferText("");
+    setSyncRecoverySlots([]);
     setGame({
       ...createInitialGameState(),
       config: gameConfigFromPreferences(),
@@ -600,6 +648,8 @@ function App() {
     setSyncSession("connected");
     setLocalPlayerId(hostPlayer.id);
     setSyncAnswerText("");
+    setSyncRecoveryOfferText("");
+    setSyncRecoverySlots([]);
     setSyncEntryOpen(false);
     setGame({
       ...createInitialGameState(),
@@ -627,6 +677,22 @@ function App() {
     }
   }
 
+  async function createRecoveryOffer(finalMessage = "") {
+    const hostTransport = hostTransportRef.current;
+
+    if (!hostTransport || game.mode !== "sync" || syncRole !== "host" || game.phase !== "paused") {
+      return;
+    }
+
+    setSyncMessage(finalMessage || "Creating recovery QR");
+    try {
+      setSyncQrText(await hostTransport.createRecoveryOffer(disconnectedSyncPlayers));
+      setSyncMessage(finalMessage);
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Could not create recovery QR");
+    }
+  }
+
   async function acceptJoinAnswer(value: string) {
     const hostTransport = hostTransportRef.current;
 
@@ -638,7 +704,26 @@ function App() {
     setIsAcceptingAnswer(true);
     setSyncMessage("QR found. Accepting answer");
     try {
-      const joinedPlayer = await hostTransport.acceptAnswer(value);
+      const recoveryAnswer = parseSyncRecoveryAnswer(value);
+      const recoveryPlayer = recoveryAnswer
+        ? game.players.find((player) => player.id === recoveryAnswer.playerId)
+        : null;
+
+      if (game.phase === "paused" && !recoveryAnswer) {
+        throw new Error("this is not a recovery answer QR.");
+      }
+
+      if (game.phase !== "paused" && recoveryAnswer) {
+        throw new Error("this is not a setup answer QR.");
+      }
+
+      if (recoveryAnswer && recoveryPlayer?.connectionStatus !== "disconnected") {
+        throw new Error("that player is not currently disconnected.");
+      }
+
+      const joinedPlayer = recoveryAnswer
+        ? await hostTransport.acceptRecoveryAnswer(value)
+        : await hostTransport.acceptAnswer(value);
 
       setGame((current) => {
         const existing = current.players.find((player) => player.id === joinedPlayer.id);
@@ -658,18 +743,37 @@ function App() {
 
         return { ...current, players };
       });
-      await createHostOffer(`${joinedPlayer.name} joined`);
+      if (recoveryAnswer) {
+        await createRecoveryOffer(`${joinedPlayer.name} rejoined`);
+      } else {
+        await createHostOffer(`${joinedPlayer.name} joined`);
+      }
     } catch (error) {
       const message = formatQrHandshakeError(error);
 
       setSyncMessage(message);
-      await createHostOffer(message);
+      if (game.phase === "paused") {
+        await createRecoveryOffer(message);
+      } else {
+        await createHostOffer(message);
+      }
     } finally {
       setIsAcceptingAnswer(false);
     }
   }
 
   async function scanHostOffer(value: string) {
+    const recoveryOffer = parseSyncRecoveryOffer(value);
+
+    if (recoveryOffer) {
+      setSyncCameraMode(null);
+      setSyncAnswerText("");
+      setSyncRecoveryOfferText(value);
+      setSyncRecoverySlots(recoveryOffer.disconnectedPlayers);
+      setSyncMessage(recoveryOffer.disconnectedPlayers.length > 0 ? "Choose player" : "No disconnected players");
+      return;
+    }
+
     const name = syncName.trim();
 
     if (!name || !syncColor) {
@@ -679,10 +783,7 @@ function App() {
 
     const localPlayer = { ...createPlayer(name), color: syncColor };
     const joinTransport = new SyncJoinTransport({
-      onClosed: () => {
-        setSyncSession("disconnected");
-        setSyncMessage("Host disconnected");
-      },
+      onClosed: resetAppToHome,
       onMessage: handleJoinerMessage,
       onOpen: () => {
         setSyncSession("connected");
@@ -711,6 +812,8 @@ function App() {
       lastSnapshotRevisionRef.current = 0;
       lastSentAllocationRef.current = "";
       setSyncAnswerText(answer.answerText);
+      setSyncRecoveryOfferText("");
+      setSyncRecoverySlots([]);
       setSyncQrText("");
       setSyncEntryOpen(false);
       setGame({
@@ -727,6 +830,65 @@ function App() {
             connectionStatus: "connected",
           },
           localPlayer,
+        ],
+      });
+      setSyncMessage("Show this answer to the host");
+    } catch (error) {
+      joinTransport.close();
+      setSyncMessage(formatQrHandshakeError(error));
+    }
+  }
+
+  async function chooseRecoveryPlayer(slot: SyncRecoveryPlayerSlot) {
+    const joinTransport = new SyncJoinTransport({
+      onClosed: resetAppToHome,
+      onMessage: handleJoinerMessage,
+      onOpen: () => {
+        setSyncSession("connected");
+        setSyncMessage("Connected");
+      },
+      onStatus: handleJoinerConnectionStatus,
+    });
+
+    setSyncSession("connecting");
+    setSyncMessage("Creating recovery answer");
+    try {
+      const answer = await joinTransport.createRecoveryAnswer(syncRecoveryOfferText, slot);
+
+      endSyncTransports();
+      joinTransportRef.current = joinTransport;
+      clearLocalGame();
+      setSyncRole("joiner");
+      setSyncSession("connecting");
+      setLocalPlayerId(slot.id);
+      lastSnapshotRevisionRef.current = 0;
+      lastSentAllocationRef.current = "";
+      setSyncAnswerText(answer.answerText);
+      setSyncQrText("");
+      setSyncRecoveryOfferText("");
+      setSyncRecoverySlots([]);
+      setSyncEntryOpen(false);
+      setGame({
+        ...createInitialGameState(),
+        phase: "setup",
+        mode: "sync",
+        players: [
+          {
+            id: answer.hostPlayerId,
+            name: answer.hostName,
+            color: null,
+            nameLocked: true,
+            colorLocked: true,
+            connectionStatus: "connected",
+          },
+          {
+            id: slot.id,
+            name: slot.name,
+            color: null,
+            nameLocked: true,
+            colorLocked: true,
+            connectionStatus: "connected",
+          },
         ],
       });
       setSyncMessage("Show this answer to the host");
@@ -770,7 +932,7 @@ function App() {
       return;
     }
 
-    if (rawMessage.type === "hostEnded") {
+    if (rawMessage.type === "hostEnded" || rawMessage.type === "removed") {
       resetAppToHome();
       return;
     }
@@ -799,6 +961,11 @@ function App() {
   }, []);
 
   const handleJoinerConnectionStatus = useCallback((status: SyncConnectionStatus) => {
+    if (status === "gone") {
+      resetAppToHome();
+      return;
+    }
+
     setSyncSession(status === "connected" ? "connected" : status === "reconnecting" ? "reconnecting" : "disconnected");
     setSyncMessage(status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting" : "Disconnected");
   }, []);
@@ -895,6 +1062,9 @@ function App() {
       return;
     }
 
+    if (game.mode === "sync" && syncRole === "host") {
+      hostTransportRef.current?.sendToPeer(playerId, { type: "removed" });
+    }
     hostTransportRef.current?.removePeer(playerId);
     setGame((current) => current.phase === "paused"
       ? removePlayerFromDraft(current, playerId)
@@ -1271,6 +1441,8 @@ function App() {
     setLocalPlayerId(null);
     setSyncQrText("");
     setSyncAnswerText("");
+    setSyncRecoveryOfferText("");
+    setSyncRecoverySlots([]);
     setSyncMessage("");
     setSyncDraftNotice(null);
     setIsEndGamePromptOpen(false);
@@ -1429,9 +1601,11 @@ function App() {
           name={syncName}
           onBack={returnHome}
           onColorChange={updateSyncColor}
+          onChooseRecoveryPlayer={chooseRecoveryPlayer}
           onHost={beginSyncHost}
           onNameChange={updateSyncName}
           onScan={() => setSyncCameraMode("hostOffer")}
+          recoverySlots={syncRecoverySlots}
         />
       ) : null}
 
@@ -1472,8 +1646,11 @@ function App() {
           onRemovePlayer={removePlayer}
           onRestart={game.mode === "local" || syncRole === "host" ? () => setIsRestartGamePromptOpen(true) : undefined}
           onResume={resumeDraft}
+          onScanRecoveryAnswer={game.mode === "sync" && syncRole === "host" ? () => setSyncCameraMode("joinAnswer") : undefined}
           players={game.players}
           remainingCount={remainingCount}
+          syncMessage={syncMessage}
+          syncQrText={game.mode === "sync" && syncRole === "host" ? syncQrText : ""}
         />
       ) : null}
 
@@ -1534,7 +1711,7 @@ function App() {
 
       {syncJoinerBlocked ? (
         <SyncSessionBlocker
-          onHome={syncSession === "reconnecting" ? undefined : resetAppToHome}
+          onHome={resetAppToHome}
           session={syncSession}
         />
       ) : null}
@@ -1571,48 +1748,66 @@ function SyncEntryPanel({
   name,
   onBack,
   onColorChange,
+  onChooseRecoveryPlayer,
   onHost,
   onNameChange,
   onScan,
+  recoverySlots,
 }: {
   color: PlayerColor | null;
   message: string;
   name: string;
   onBack: () => void;
   onColorChange: (color: PlayerColor) => void;
+  onChooseRecoveryPlayer: (slot: SyncRecoveryPlayerSlot) => void;
   onHost: () => void;
   onNameChange: (name: string) => void;
   onScan: () => void;
+  recoverySlots: SyncRecoveryPlayerSlot[];
 }) {
   const ready = Boolean(name.trim() && color);
+  const isRecovery = recoverySlots.length > 0 || message === "No disconnected players";
 
   return (
     <section className="hud-panel sync-entry-panel">
       <PanelHeader onClose={onBack} />
-      <div className="sync-player-entry-row">
-        <input
-          aria-label="Sync player name"
-          autoComplete="off"
-          onChange={(event) => onNameChange(event.target.value)}
-          placeholder="Name"
-          value={name}
-        />
-        <ColorSelect
-          label="Sync player color"
-          selectedColor={color}
-          onSelect={onColorChange}
-        />
-      </div>
-      <div className="mode-grid">
-        <button className="primary icon-text-button" type="button" onClick={onHost} disabled={!ready}>
-          <Wifi size={19} />
-          Host
-        </button>
-        <button className="secondary icon-text-button" type="button" onClick={onScan} disabled={!ready}>
-          <ScanLine size={19} />
-          Join
-        </button>
-      </div>
+      {isRecovery ? (
+        <div className="recovery-slot-list">
+          {recoverySlots.map((slot) => (
+            <button className="secondary icon-text-button wide-button" type="button" key={slot.id} onClick={() => onChooseRecoveryPlayer(slot)}>
+              <Users size={18} />
+              {slot.name}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <>
+          <div className="sync-player-entry-row">
+            <input
+              aria-label="Sync player name"
+              autoComplete="off"
+              onChange={(event) => onNameChange(event.target.value)}
+              placeholder="Name"
+              value={name}
+            />
+            <ColorSelect
+              label="Sync player color"
+              selectedColor={color}
+              onSelect={onColorChange}
+            />
+          </div>
+          <div className="mode-grid">
+            <button className="primary icon-text-button" type="button" onClick={onHost} disabled={!ready}>
+              <Wifi size={19} />
+              Host
+            </button>
+            <button className="secondary icon-text-button" type="button" onClick={onScan} disabled={!ready}>
+              <ScanLine size={19} />
+              Join
+            </button>
+          </div>
+        </>
+      )}
       {message ? <p className="sync-status">{message}</p> : null}
     </section>
   );
@@ -2185,8 +2380,11 @@ function PausePanel({
   onRemovePlayer,
   onRestart,
   onResume,
+  onScanRecoveryAnswer,
   players,
   remainingCount,
+  syncMessage,
+  syncQrText,
 }: {
   canRemove: boolean;
   canResume: boolean;
@@ -2195,8 +2393,11 @@ function PausePanel({
   onRemovePlayer: (playerId: string) => void;
   onRestart?: () => void;
   onResume: () => void;
+  onScanRecoveryAnswer?: () => void;
   players: GamePlayer[];
   remainingCount: number;
+  syncMessage?: string;
+  syncQrText?: string;
 }) {
   return (
     <div className="modal-scrim">
@@ -2228,6 +2429,18 @@ function PausePanel({
             </article>
           ))}
         </div>
+        {mode === "sync" ? (
+          <div className="pause-recovery-tools">
+            {syncQrText ? <QrPanel text={syncQrText} /> : <div className="qr-placeholder" />}
+            {onScanRecoveryAnswer ? (
+              <button className="secondary icon-text-button scan-answer-button" type="button" onClick={onScanRecoveryAnswer}>
+                <ScanLine size={18} />
+                Scan
+              </button>
+            ) : null}
+            {syncMessage ? <p className="sync-status">{syncMessage}</p> : null}
+          </div>
+        ) : null}
         <button className="primary icon-text-button wide-button" type="button" onClick={onResume} disabled={!canResume || players.length < 2}>
           <Play size={20} />
           Resume
@@ -2341,6 +2554,8 @@ function SyncSessionBlocker({ onHome, session }: { onHome?: () => void; session:
     : session === "disconnected"
       ? "Host disconnected"
       : "Reconnecting";
+  const Icon = session === "reconnecting" ? X : Check;
+  const label = session === "reconnecting" ? "Stop reconnecting" : "Return home";
 
   return (
     <div className="modal-scrim sync-session-scrim">
@@ -2348,8 +2563,8 @@ function SyncSessionBlocker({ onHome, session }: { onHome?: () => void; session:
         <h2>{message}</h2>
         {onHome ? (
           <div className="modal-actions">
-            <button className="icon-button primary large" type="button" onClick={onHome} aria-label="Return home">
-              <Check size={24} />
+            <button className="icon-button primary large" type="button" onClick={onHome} aria-label={label}>
+              <Icon size={24} />
             </button>
           </div>
         ) : null}

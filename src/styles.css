@@ -938,6 +938,21 @@ select {
   justify-items: center;
 }
 
+.pause-recovery-tools,
+.recovery-slot-list {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+.pause-recovery-tools {
+  padding-top: 2px;
+}
+
+.recovery-slot-list {
+  width: 100%;
+}
+
 .qr-panel {
   display: grid;
   justify-items: center;

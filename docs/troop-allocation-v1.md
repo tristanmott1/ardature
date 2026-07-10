@@ -142,16 +142,29 @@ Sync mode is simultaneous and host-authoritative.
 - If the host-authoritative timer expires, the host randomly completes allocation for every unready player using the same random completion rules as local mode.
 - Host random completion is final and cannot be overwritten by later stale allocation updates from an unready player's device.
 - Joiners send allocation updates as commands. The host accepts them only during allocation, only for that player, and never over a ready or random-completed allocation.
+- Allocation updates are committed game facts, not visual UI. They should be sent often enough that the host can resume from its authoritative model if a device disconnects, but not so noisily that every pointer gesture or modal change is synced.
+- Add/remove troop changes may be batched or lightly throttled, but they must be flushed on ready, pause, visibility change, or page unload where practical.
+- Selected territory, map camera, focus state, open army modal, and local control layout are never synced.
 
 ## Allocation Pause, Disconnect, And Removal
 
 Sync allocation uses the same pause/reconnect model as sync draft:
 
 - Any ungraceful disconnect during sync allocation forces pause.
-- The disconnected player remains in the game as disconnected/reconnecting.
+- The host first marks that player `reconnecting` for 10 seconds. If automatic reconnect fails from the host's perspective, the host marks them `disconnected`.
+- The joiner independently enters local `reconnecting` when heartbeat with the host fails. If automatic reconnect fails from the joiner's perspective, the joiner returns home.
+- The disconnected player remains in the host game and can return only through the sync pause recovery QR.
 - The host cannot unpause until every remaining player is connected and at least 2 players remain.
-- Joiners cannot continue allocating while the host is reconnecting or disconnected; controls remain visible only as inert background behind the blocking session UI.
-- Automatic WebRTC reconnect may restore the connection. QR reconnect slot selection is future work and is not part of this milestone's completed behavior.
+- Joiners cannot continue allocating while reconnecting. Their controls and latest map may remain visible only as inert background behind the blocking reconnecting UI.
+- If automatic reconnect fails, the joiner returns home and must rejoin through the host pause recovery QR.
+- Joiner reconnecting UI must not show current roster, timer, ready, or allocation status, because those facts belong to the host and the device is no longer connected to host truth.
+- If a joiner is still connected and the host game is paused, the joiner may show the host-authored pause/ready roster because heartbeat and snapshots are still healthy.
+
+Local allocation pause and recovery:
+
+- Manual local pause freezes the allocation timer and preserves army build, territory selection, pending counts, and placed troops.
+- Local refresh or close during allocation restores into local pause with the allocation timer stopped and remaining time preserved.
+- Local mode has no reconnecting, disconnected, recovery QR, or connection status concepts.
 
 If a player is removed during allocation:
 

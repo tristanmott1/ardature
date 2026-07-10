@@ -174,10 +174,23 @@ async function runSourceChecks() {
   assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".army-build-scrim"), "Map camera controls stack below army build modal.");
   assert(syncMessagesSource.includes('type: "snapshot"') && syncMessagesSource.includes("revision: number"), "Sync messages use revisioned host snapshots.");
   assert(syncMessagesSource.includes('type: "hostEnded"') && appSource.includes('type: "hostEnded"'), "Sync messages include an explicit host-ended event.");
+  assert(syncMessagesSource.includes('type: "removed"') && appSource.includes('type: "removed"'), "Sync messages include an explicit removed event.");
   assert(!syncMessagesSource.includes('type: "gameState"') && !appSource.includes('type: "gameState"'), "Old unversioned gameState sync messages are removed.");
   assert(!syncMessagesSource.includes('type: "hostQuit"') && !appSource.includes('type: "hostQuit"'), "Old hostQuit sync messages are removed.");
   assert(appSource.includes("SyncSessionState") && appSource.includes("syncJoinerBlocked"), "Joiners track disconnected session state outside GameState.");
   assert(appSource.includes("lastSnapshotRevisionRef") && appSource.includes("rawMessage.revision <= lastSnapshotRevisionRef.current"), "Joiners ignore stale snapshots.");
+  assert(syncTransportSource.includes("DEFAULT_RECONNECT_GRACE_MS = 10000"), "Sync reconnect grace is 10 seconds.");
+  assert(syncTransportSource.includes("HEARTBEAT_INTERVAL_MS = 1000") && syncTransportSource.includes("HEARTBEAT_TIMEOUT_MS = 3000"), "Sync transport has explicit heartbeat timing.");
+  assert(syncTransportSource.includes("HEARTBEAT_PING") && syncTransportSource.includes("HEARTBEAT_PONG") && syncTransportSource.includes("isHeartbeatMessage(message)"), "Sync heartbeat messages are handled inside the transport.");
+  assert(syncTransportSource.includes("Date.now() - peer.lastHeardAt > HEARTBEAT_TIMEOUT_MS") && syncTransportSource.includes("Date.now() - this.lastHeardAt > HEARTBEAT_TIMEOUT_MS"), "Host and joiner independently enter reconnecting when heartbeat is stale.");
+  assert(syncTransportSource.includes('event.channel.addEventListener("close", () => this.markReconnecting())') && syncTransportSource.includes("window.setTimeout(() => this.markGone(), this.reconnectGraceMs)"), "Ungraceful closes route through reconnecting before disconnected.");
+  assert(syncTransportSource.includes("ardature-sync-recovery-offer") && syncTransportSource.includes("ardature-sync-recovery-answer"), "Sync transport has distinct recovery payload kinds.");
+  assert(syncTransportSource.includes("ARR:") && syncTransportSource.includes("ARY:"), "Sync transport has distinct compact recovery QR prefixes.");
+  assert(appSource.includes("Stop reconnecting") && appSource.includes("<Icon size={24} />"), "Joiner reconnecting UI offers a local stop option.");
+  assert(appSource.includes('connectionStatus === "disconnected"') && appSource.includes("createRecoveryOffer(disconnectedSyncPlayers)"), "Host recovery QR slots are filtered from host disconnected state.");
+  assert(appSource.includes("createRecoveryAnswer") && appSource.includes("onChooseRecoveryPlayer"), "Joiners choose a disconnected slot before creating a recovery answer.");
+  assert(appSource.includes("hostTransportRef.current?.sendToPeer(playerId, { type: \"removed\" })"), "Host sends removed before closing a removed peer.");
+  assert(gameStateSource.includes("pauseLocalGameForStorage") && appSource.includes("pagehide") && appSource.includes("beforeunload"), "Local refresh writes a paused active-game snapshot.");
   assert(gameStateSource.includes("applySyncProfileUpdate") && gameStateSource.includes("applySyncDraftConfirm") && gameStateSource.includes("applySyncPlayerQuit"), "Host command application is centralized in game helpers.");
   assert(gameStateSource.includes("SYNC_HOST_GAME_KEY") && appSource.includes("saveSyncHostGame(nextGame, localPlayerId, revision)") && appSource.includes("readSyncHostGame()"), "Sync host active games persist separately from local games.");
   assert(!gameTypesSource.includes("noticeTerritoryId") && !gameTypesSource.includes("noticePlayerId"), "Shared draft state does not store local notices.");
@@ -748,6 +761,10 @@ async function runLocalDraftChecks(page) {
   assert(await page.evaluate(() => localStorage.getItem("ardature.mapPreferences.v1")?.includes('"autoFocusEnabled":true')), "Auto-focus preference is persisted.");
   await page.reload();
   await page.waitForSelector("[data-background-piece]");
+  await page.getByRole("dialog", { name: "Paused" }).waitFor();
+  await capture(page, "06b-local-refresh-pause-mobile.png");
+  assert((await page.locator(".game-top-bar").count()) === 0, "Local refresh restores into pause instead of live draft.");
+  await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Resume" }).click();
   await page.getByText("0 / 21").waitFor();
   assert((await page.getByRole("button", { name: "Disable automatic focus" }).count()) === 1, "Auto-focus enabled state persists after reload.");
   const beforeFocusedSelection = await viewBox(page);
@@ -1187,6 +1204,59 @@ async function runSyncReadyPageChecks(browser) {
   await joiner.close();
 }
 
+async function runSyncRecoveryChecks(browser) {
+  console.log("Checking sync recovery");
+  const host = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const joiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const rejoiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  host.setDefaultTimeout(20000);
+  joiner.setDefaultTimeout(20000);
+  rejoiner.setDefaultTimeout(20000);
+
+  await host.goto(baseUrl);
+  await host.evaluate(() => localStorage.clear());
+  await host.reload();
+  await host.getByRole("button", { name: "Sync" }).click();
+  await host.getByLabel("Sync player name").fill("Elrond");
+  await host.getByRole("button", { name: "Host" }).click();
+  await host.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
+
+  await joiner.goto(baseUrl);
+  await joiner.evaluate(() => localStorage.clear());
+  await joiner.reload();
+  await joiner.getByRole("button", { name: "Sync" }).click();
+  await joiner.getByLabel("Sync player name").fill("Boromir");
+  await joiner.getByRole("button", { name: "Sync player color" }).click();
+  await joiner.getByRole("menuitemradio", { name: "Red" }).click();
+  await joiner.getByRole("button", { name: "Join" }).click();
+  await pasteScannerText(joiner, await qrText(host));
+  await joiner.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
+
+  await host.getByRole("button", { name: "Scan" }).click();
+  await pasteScannerText(host, await qrText(joiner));
+  await host.getByText("Boromir").waitFor({ timeout: 15000 });
+  await host.getByRole("button", { name: "Start game" }).click();
+  await host.waitForSelector('.app-shell[data-app-phase="draft"]', { timeout: 15000 });
+  await host.getByRole("button", { name: "Pause draft" }).click();
+  await host.getByRole("dialog", { name: "Paused" }).waitFor();
+  await capture(host, "18-sync-pause-recovery-qr-mobile.png");
+  assert((await host.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").count()) === 1, "Sync pause always shows a recovery QR.");
+
+  await rejoiner.goto(baseUrl);
+  await rejoiner.evaluate(() => localStorage.clear());
+  await rejoiner.reload();
+  await rejoiner.getByRole("button", { name: "Sync" }).click();
+  await rejoiner.getByLabel("Sync player name").fill("Recovered");
+  await rejoiner.getByRole("button", { name: "Join" }).click();
+  await pasteScannerText(rejoiner, await qrText(host));
+  await rejoiner.getByText("No disconnected players").waitFor({ timeout: 15000 });
+  await capture(rejoiner, "19-sync-recovery-no-slots-mobile.png");
+
+  await host.close();
+  await joiner.close();
+  await rejoiner.close();
+}
+
 async function qrText(page) {
   const text = await page.locator(".qr-code[data-qr-text]").last().getAttribute("data-qr-text");
   assert(text, "QR text is exposed for verification.");
@@ -1238,6 +1308,7 @@ async function main() {
     await runRandomAllocationChecks(mobile);
     await runSyncEntryChecks(mobile);
     await runSyncReadyPageChecks(browser);
+    await runSyncRecoveryChecks(browser);
 
     console.log("Closing browser");
     await Promise.race([
