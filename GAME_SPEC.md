@@ -162,10 +162,10 @@ Rules:
 - The leader troop is not part of the triangle mixture and allocates like any other troop.
 - Original player count determines budget: 2 players `40`, 3 players `35`, 4 players `30`, 5 players `25`, 6 players `20`.
 - The leader troop costs `1` budget and is guaranteed exactly once in each player's base army.
-- The effective triangle budget is `startingBudget - 1`.
-- Troop costs are heavy `0.8`, cavalry `1.0`, and elite `1.2`.
-- The adjusted triangle troop count is `round(effectiveTriangleBudget / weightedCostPerTroop)`.
-- Rounded heavy/cavalry/elite counts must be corrected so their sum exactly equals the adjusted triangle troop count.
+- Army costs use fixed-point units. The current scale is `5` units per budget point: leader `5`, heavy `4`, cavalry `5`, and elite `6`.
+- After reserving the leader, every candidate heavy/cavalry/elite army must stay within budget and leave fewer units than the cheapest troop costs.
+- From those budget-maximal integer armies, choose the actual troop ratio closest to the triangle marker by squared ratio error. Break ties by unused budget, then stable heavy/cavalry/elite order.
+- No resulting army can be strictly improved by adding a troop without exceeding its budget. Triangle corners express the strongest possible preference but are not guaranteed to remain literally pure when a pure army would leave enough budget for another class.
 - Every owned territory must contain at least one troop total before the game can begin.
 - A player may not place troops on another player's territory.
 - During allocation, troop-count circles appear on all territories owned by the allocating player.
@@ -1263,7 +1263,7 @@ Before considering the first playable version complete:
 - Verify sync pause/reconnect supports manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, blocked joiner disconnect state, and unpause validation.
 - Verify every territory is assigned to exactly one player before troop allocation.
 - Verify territory visual centers are generated from the large green circles in the territory drawing and are used for troop-count circles.
-- Verify army-build triangle barycentric coordinates, leader budget reservation, effective triangle budget calculation, and rounded troop count correction.
+- Verify army-build triangle barycentric coordinates, leader budget reservation, fixed-point costs, hard budget limits, closest-ratio selection, and budget-maximal non-dominated results.
 - Verify troop allocation requires at least one troop per owned territory and prevents placements that would make that impossible.
 - Verify local allocation uses configured turn order, pass-and-play handoff screens, allocation timer, timeout random completion, and second allocation turns after redistribution.
 - Verify sync allocation uses simultaneous private allocation, host-authoritative timer, ready/waiting state visible to all players, and host advance only when all remaining players are ready.

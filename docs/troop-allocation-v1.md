@@ -57,23 +57,24 @@ Budget rules:
   - 5 players: `25`
   - 6 players: `20`
 - The leader troop costs `1` budget and is guaranteed exactly once in the player's base army no matter where the triangle marker is placed.
-- The effective triangle budget is `startingBudget - 1`.
-- Troop costs are:
-  - heavy: `0.8`
-  - cavalry: `1.0`
-  - elite: `1.2`
-- Weighted cost per troop is `(heavyPercent * 0.8) + (cavalryPercent * 1.0) + (elitePercent * 1.2)`.
-- Adjusted triangle troop count is `round(effectiveTriangleBudget / weightedCostPerTroop)`.
-- Raw heavy/cavalry/elite counts are each troop percentage multiplied by the adjusted triangle troop count.
-- Each raw troop count is rounded to the nearest integer.
-- If the rounded heavy/cavalry/elite counts do not sum to the adjusted triangle troop count, force them to match:
-  - If the sum is too high, reduce the troop class whose raw count is closest to the next lower integer. Repeat with another troop class if needed.
-  - If the sum is too low, increase the troop class whose raw count is closest to the next higher integer. Repeat with another troop class if needed.
+- Army costs use fixed-point integer units so changing costs does not introduce floating-point errors. The current scale is `5` units per budget point:
+  - leader: `5` units (`1.0` budget)
+  - heavy: `4` units (`0.8` budget)
+  - cavalry: `5` units (`1.0` budget)
+  - elite: `6` units (`1.2` budget)
+- The regular-troop budget is `(startingBudget * 5) - 5` cost units after reserving the leader.
+- Generate every nonnegative integer heavy/cavalry/elite army that stays within that regular-troop budget and leaves fewer than `4` units unused. Because `4` is the cheapest regular troop, no generated army can add another troop without exceeding its budget.
+- Compare each candidate's actual troop ratios with the marker percentages using the sum of the three squared ratio differences. Choose the candidate with the smallest error.
+- If ratio errors tie, choose the candidate with less unused budget. Remaining exact ties resolve deterministically in heavy, cavalry, elite order.
+- This budget-maximal rule prevents moving the marker from producing an army that keeps every existing troop and receives an additional troop for free.
+- A corner is a strongest-possible preference for that troop class. Integer budget constraints may still add another class when a literally pure army would leave enough budget to buy another troop.
 - A final count of `0` for any troop class is valid.
 - While the marker moves, the UI shows live final heavy/cavalry/elite counts plus the guaranteed leader as four circular troop icons with count badges above the triangle.
 - Once the player submits the army build, the heavy/cavalry/elite counts plus the guaranteed leader become that player's base army.
 
 Inherited troops from removed players are additive. They do not change the player's budget and they do not get converted into budget. Leaders from removed players are not inherited as leaders; each removed wizard or witch-king is randomly replaced with one heavy, cavalry, or elite troop before redistribution. If a player selected a `100%` cavalry mixture and later receives `2` heavy and `1` elite from a removed player, their live allocation pool shows their original cavalry count, their original leader, plus the inherited `2` heavy and `1` elite.
+
+All starting budgets, the fixed-point scale, the leader cost, and regular troop costs are kept together in `src/game/armyBuild.ts`. Future cost tuning should change those rule constants rather than the candidate-selection algorithm.
 
 ## Territory Allocation
 

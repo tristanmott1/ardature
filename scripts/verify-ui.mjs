@@ -92,6 +92,7 @@ async function launchBrowser() {
 async function runSourceChecks() {
   console.log("Checking sources");
   const appSource = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const armyBuildSource = await readFile(new URL("../src/game/armyBuild.ts", import.meta.url), "utf8");
   const gameStateSource = await readFile(new URL("../src/game/gameState.ts", import.meta.url), "utf8");
   const gameTypesSource = await readFile(new URL("../src/game/gameTypes.ts", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
@@ -162,6 +163,9 @@ async function runSourceChecks() {
   assert(!gameTypesSource.includes("noticeTerritoryId") && !gameTypesSource.includes("noticePlayerId"), "Shared draft state does not store local notices.");
   assert(!gameStateSource.includes("timerMs(state.config.pickTimeLimit) ?? 0") && gameStateSource.includes('draft: state.mode === "sync" ? beginDraftTimer'), "Sync draft timers preserve unlimited pick time.");
   assert(gameStateSource.includes("expandRemovedTroops(removedTroopPool") && gameStateSource.includes('troopType === "leader" ? randomMixtureTroop() : troopType'), "Removed-player leaders are replaced by random regular troops.");
+  assert(armyBuildSource.includes("ARMY_ECONOMY") && armyBuildSource.includes("costScale: 5") && armyBuildSource.includes("heavy: 4") && armyBuildSource.includes("cavalry: 5") && armyBuildSource.includes("elite: 6"), "Army economy keeps tunable fixed-point costs together.");
+  assert(armyBuildSource.includes("remainingCostUnits >= minimumCost") && armyBuildSource.includes("mixtureError"), "Army builds use budget-maximal closest-ratio candidates.");
+  assert(!gameStateSource.includes("weightedCost") && !gameStateSource.includes("adjustedCount"), "Old average-cost army rounding is removed.");
   assert(!gameTypesSource.includes("allocationWaiting"), "AppPhase does not include allocationWaiting.");
   assert(gameStateSource.includes('return { ...state, phase: "allocation", allocation: nextAllocation };'), "Sync ready keeps the shared phase in allocation.");
   assert(gameStateSource.includes("const readyAllocation = markAllocationReady(allocation, playerId)") && gameStateSource.includes("allAllocationsReady(readyAllocation, state.players)"), "Sync ready preserves the allocation timer until every player is ready.");
@@ -585,6 +589,51 @@ async function runSetupPreferenceChecks(page) {
   await page.getByRole("button", { name: "Local" }).click();
   assert(JSON.stringify(await playerNames(page)) === JSON.stringify(savedLocalNames), "Sync setup does not overwrite local players.");
   await closeActiveSetup(page);
+}
+
+async function runArmyRuleChecks(page) {
+  console.log("Checking army build rules");
+  await page.goto(baseUrl);
+  const result = await page.evaluate(async () => {
+    const { ARMY_ECONOMY, armyCountsForMarker } = await import("/src/game/armyBuild.ts");
+    const minimumCost = Math.min(...Object.values(ARMY_ECONOMY.mixtureTroopCostUnits));
+    const violations = [];
+
+    // Sample the full triangle on a regular barycentric grid for every player budget.
+    for (let playerCount = 2; playerCount <= 6; playerCount += 1) {
+      const budgetUnits = ARMY_ECONOMY.startingBudgetByPlayerCount[playerCount] * ARMY_ECONOMY.costScale;
+
+      for (let heavyStep = 0; heavyStep <= 20; heavyStep += 1) {
+        for (let cavalryStep = 0; cavalryStep <= 20 - heavyStep; cavalryStep += 1) {
+          const marker = {
+            heavy: heavyStep / 20,
+            cavalry: cavalryStep / 20,
+            elite: (20 - heavyStep - cavalryStep) / 20,
+          };
+          const counts = armyCountsForMarker(marker, "green", playerCount);
+          const spentUnits = counts.leader * ARMY_ECONOMY.leaderCostUnits +
+            counts.heavy * ARMY_ECONOMY.mixtureTroopCostUnits.heavy +
+            counts.cavalry * ARMY_ECONOMY.mixtureTroopCostUnits.cavalry +
+            counts.elite * ARMY_ECONOMY.mixtureTroopCostUnits.elite;
+          const validCounts = Object.values(counts).every((count) => Number.isInteger(count) && count >= 0);
+
+          if (!validCounts || counts.leader !== 1 || spentUnits > budgetUnits || budgetUnits - spentUnits >= minimumCost) {
+            violations.push({ playerCount, marker, counts, spentUnits, budgetUnits });
+          }
+        }
+      }
+    }
+
+    return {
+      centerThreePlayer: armyCountsForMarker({ heavy: 1 / 3, cavalry: 1 / 3, elite: 1 / 3 }, "green", 3),
+      eliteThreePlayer: armyCountsForMarker({ heavy: 0, cavalry: 0, elite: 1 }, "green", 3),
+      violations,
+    };
+  });
+
+  assert(result.violations.length === 0, "Every sampled army is integral, within budget, and cannot add another troop.");
+  assert(JSON.stringify(result.centerThreePlayer) === JSON.stringify({ heavy: 11, cavalry: 12, elite: 11, leader: 1 }), "Three-player center chooses the closest full-budget uniform army.");
+  assert(JSON.stringify(result.eliteThreePlayer) === JSON.stringify({ heavy: 0, cavalry: 0, elite: 28, leader: 1 }), "Three-player elite corner remains pure when its remainder cannot buy another troop.");
 }
 
 async function runLocalDraftChecks(page) {
@@ -1083,6 +1132,7 @@ async function main() {
     const browser = await launchBrowser();
     const mobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
     mobile.setDefaultTimeout(10000);
+    await runArmyRuleChecks(mobile);
     await runSetupPreferenceChecks(mobile);
     await runLocalDraftChecks(mobile);
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 800 } });

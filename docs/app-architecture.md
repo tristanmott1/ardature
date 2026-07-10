@@ -30,6 +30,7 @@ src/
   main.tsx
   styles.css
   game/
+    armyBuild.ts
     gameState.ts
     gameTypes.ts
   map/
@@ -52,6 +53,7 @@ The exact file list can evolve, but the boundaries should stay clear:
 - `maps/` owns the drawing-to-geometry pipeline.
 - `src/map/` owns map rendering and map-specific UI.
 - `src/game/` owns game state, reducers, and rules.
+- `src/game/armyBuild.ts` owns the tunable starting budgets and fixed-point troop costs, plus the deterministic integer army selector.
 - `src/sync/` owns Qwixx-style local network synchronization adapted for Ardatúrë.
 
 ## Public Assets

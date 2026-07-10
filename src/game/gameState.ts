@@ -1,5 +1,6 @@
 import { generatedMapData } from "../map/generated/mapData";
 import type { MapSkin, TerritoryState } from "../map/mapTypes";
+import { MIXTURE_TROOP_TYPES, armyCountsForMarker } from "./armyBuild";
 import type {
   AllocationState,
   ArmyMarker,
@@ -24,21 +25,7 @@ export const TROOP_ALLOCATION_TIME_LIMITS: TroopAllocationTimeLimit[] = [60, 120
 export const LOCAL_GAME_KEY = "ardature.localGame.v1";
 export const SYNC_HOST_GAME_KEY = "ardature.syncHostGame.v1";
 export const TROOP_TYPES: TroopType[] = ["heavy", "cavalry", "elite", "leader"];
-export const MIXTURE_TROOP_TYPES: Exclude<TroopType, "leader">[] = ["heavy", "cavalry", "elite"];
-
-const STARTING_BUDGET_BY_PLAYER_COUNT: Record<number, number> = {
-  2: 40,
-  3: 35,
-  4: 30,
-  5: 25,
-  6: 20,
-};
-
-const TROOP_COSTS: Record<Exclude<TroopType, "leader">, number> = {
-  heavy: 0.8,
-  cavalry: 1,
-  elite: 1.2,
-};
+export { MIXTURE_TROOP_TYPES, armyCountsForMarker } from "./armyBuild";
 
 const DEFAULT_CONFIG: GameConfig = {
   draftStyle: "snake",
@@ -203,40 +190,6 @@ export function allocationComplete(allocation: AllocationState, ownership: Terri
     playerAllocation.buildSubmitted &&
     troopTotal(remainingTroops(allocation, playerId)) === 0 &&
     ownedTerritoryIds(ownership, playerId).every((territoryId) => troopTotal(playerAllocation.territories[territoryId] ?? ZERO_TROOPS) > 0);
-}
-
-export function armyCountsForMarker(marker: ArmyMarker, playerColor: PlayerColor | null, playerCount: number) {
-  const budget = STARTING_BUDGET_BY_PLAYER_COUNT[playerCount] ?? 20;
-  const effectiveBudget = Math.max(0, budget - 1);
-  const weightedCost = marker.heavy * TROOP_COSTS.heavy + marker.cavalry * TROOP_COSTS.cavalry + marker.elite * TROOP_COSTS.elite;
-  const adjustedCount = Math.round(effectiveBudget / weightedCost);
-  const raw = {
-    heavy: marker.heavy * adjustedCount,
-    cavalry: marker.cavalry * adjustedCount,
-    elite: marker.elite * adjustedCount,
-  };
-  const counts = createTroopCounts({
-    heavy: Math.round(raw.heavy),
-    cavalry: Math.round(raw.cavalry),
-    elite: Math.round(raw.elite),
-    leader: playerColor ? 1 : 0,
-  });
-
-  // Correct rounded classes so they exactly spend the adjusted triangle count.
-  while (counts.heavy + counts.cavalry + counts.elite > adjustedCount) {
-    const troopType = [...MIXTURE_TROOP_TYPES]
-      .filter((type) => counts[type] > 0)
-      .sort((left, right) => (raw[left] - Math.floor(raw[left])) - (raw[right] - Math.floor(raw[right])))[0];
-    counts[troopType] -= 1;
-  }
-
-  while (counts.heavy + counts.cavalry + counts.elite < adjustedCount) {
-    const troopType = [...MIXTURE_TROOP_TYPES]
-      .sort((left, right) => (Math.ceil(raw[left]) - raw[left]) - (Math.ceil(raw[right]) - raw[right]))[0];
-    counts[troopType] += 1;
-  }
-
-  return counts;
 }
 
 export function remainingTerritoryIds(ownership: TerritoryOwnerMap) {
