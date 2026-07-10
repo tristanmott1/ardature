@@ -15,8 +15,12 @@ import type { GeneratedMapData, MapBounds, MapViewport, TerritoryState } from ".
 
 type PointerPoint = {
   id: number;
+  startClientX: number;
+  startClientY: number;
   clientX: number;
   clientY: number;
+  moved: boolean;
+  territoryId: string | null;
 };
 
 type ViewportPoint = {
@@ -29,6 +33,7 @@ const MAX_FOCUS_ANIMATION_MS = 850;
 const FOCUS_DURATION_PER_DISTANCE = 900;
 const FOCUS_SKIP_THRESHOLD = 0.01;
 const MIN_VIEWPORT_SIZE = 400;
+const PRESS_MOVE_THRESHOLD = 5;
 
 export function MapView({
   mapData,
@@ -55,7 +60,7 @@ export function MapView({
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const pointersRef = useRef(new Map<number, PointerPoint>());
-  const suppressClickRef = useRef(false);
+  const hadMultiplePointersRef = useRef(false);
   const isAnimatingRef = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
   const previousSelectedTerritoryIdRef = useRef<string | null>(null);
@@ -99,32 +104,50 @@ export function MapView({
   }
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
-    if (isAnimatingRef.current) {
-      return;
-    }
-
-    const point = viewportPoint(event.clientX, event.clientY);
-
-    if (!point) {
-      return;
-    }
-
-    if (!startedOnTerritory(event) && !event.currentTarget.hasPointerCapture(event.pointerId)) {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.setPointerCapture(event.pointerId);
     }
 
-    pointersRef.current.set(event.pointerId, { id: event.pointerId, clientX: event.clientX, clientY: event.clientY });
+    if (pointersRef.current.size > 0) {
+      hadMultiplePointersRef.current = true;
+    }
+
+    pointersRef.current.set(event.pointerId, {
+      id: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      moved: false,
+      territoryId: territoryIdFromTarget(event.target),
+    });
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
-    if (isAnimatingRef.current || !pointersRef.current.has(event.pointerId)) {
+    const pointer = pointersRef.current.get(event.pointerId);
+
+    if (!pointer) {
       return;
     }
 
     const before = orderedPointers();
     const beforePoints = viewportPoints(before);
+    const moved = pointer.moved || Math.hypot(
+      event.clientX - pointer.startClientX,
+      event.clientY - pointer.startClientY,
+    ) > PRESS_MOVE_THRESHOLD;
 
-    pointersRef.current.set(event.pointerId, { id: event.pointerId, clientX: event.clientX, clientY: event.clientY });
+    pointersRef.current.set(event.pointerId, {
+      ...pointer,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      moved,
+    });
+
+    if (isAnimatingRef.current) {
+      return;
+    }
+
     const after = orderedPointers();
     const afterPoints = viewportPoints(after);
 
@@ -137,16 +160,11 @@ export function MapView({
       const dy = beforePoints[0].y - afterPoints[0].y;
       const current = viewportRef.current;
 
-      if (Math.hypot(before[0].clientX - after[0].clientX, before[0].clientY - after[0].clientY) > 4) {
-        suppressClickRef.current = true;
-      }
-
       setViewport({ ...current, x: current.x + dx, y: current.y + dy });
       return;
     }
 
     if (before.length >= 2 && after.length >= 2) {
-      suppressClickRef.current = true;
       const previousCenter = midpoint(beforePoints[0], beforePoints[1]);
       const nextCenter = midpoint(afterPoints[0], afterPoints[1]);
       const previousDistance = screenDistance(before[0], before[1]);
@@ -158,16 +176,48 @@ export function MapView({
     }
   }
 
-  function handlePointerEnd(event: ReactPointerEvent<SVGSVGElement>) {
-    pointersRef.current.delete(event.pointerId);
+  function handlePointerUp(event: ReactPointerEvent<SVGSVGElement>) {
+    const pointer = pointersRef.current.get(event.pointerId);
 
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    if (!pointer) {
+      return;
     }
 
-    window.setTimeout(() => {
-      suppressClickRef.current = false;
-    });
+    const moved = pointer.moved || Math.hypot(
+      event.clientX - pointer.startClientX,
+      event.clientY - pointer.startClientY,
+    ) > PRESS_MOVE_THRESHOLD;
+    const shouldPress = !moved && !hadMultiplePointersRef.current;
+
+    pointersRef.current.delete(event.pointerId);
+    resetGestureWhenComplete();
+
+    if (!shouldPress) {
+      return;
+    }
+
+    if (pointer.territoryId) {
+      onTerritoryPress?.(pointer.territoryId);
+      return;
+    }
+
+    onMapPress?.();
+  }
+
+  function handlePointerCancel(event: ReactPointerEvent<SVGSVGElement>) {
+    pointersRef.current.delete(event.pointerId);
+    resetGestureWhenComplete();
+  }
+
+  function handleLostPointerCapture(event: ReactPointerEvent<SVGSVGElement>) {
+    pointersRef.current.delete(event.pointerId);
+    resetGestureWhenComplete();
+  }
+
+  function resetGestureWhenComplete() {
+    if (pointersRef.current.size === 0) {
+      hadMultiplePointersRef.current = false;
+    }
   }
 
   function handleWheel(event: WheelEvent<SVGSVGElement>) {
@@ -210,10 +260,6 @@ export function MapView({
     onAutoFocusChange?.(!autoFocusEnabled);
   }
 
-  function stopCameraControlEvent(event: ReactPointerEvent<HTMLButtonElement> | WheelEvent<HTMLButtonElement>) {
-    event.stopPropagation();
-  }
-
   function startFocusAnimation(targetViewport: MapViewport) {
     stopFocusAnimation();
 
@@ -241,7 +287,6 @@ export function MapView({
 
       animationFrameRef.current = null;
       setViewport(target);
-      suppressClickRef.current = false;
       setIsAnimating(false);
     }
 
@@ -255,7 +300,7 @@ export function MapView({
     }
 
     pointersRef.current.clear();
-    suppressClickRef.current = false;
+    hadMultiplePointersRef.current = false;
     setIsAnimating(false);
   }
 
@@ -340,10 +385,11 @@ export function MapView({
         aria-label="Ardatúrë map"
         className="map-svg"
         data-map-animating={isAnimating ? "true" : "false"}
-        onPointerCancel={handlePointerEnd}
+        onLostPointerCapture={handleLostPointerCapture}
+        onPointerCancel={handlePointerCancel}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerEnd}
+        onPointerUp={handlePointerUp}
         onWheel={handleWheel}
         ref={svgRef}
         viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`}
@@ -353,11 +399,6 @@ export function MapView({
           data-background-piece="true"
           fill={mapData.backgroundColor}
           height={mapData.height}
-          onClick={() => {
-            if (!suppressClickRef.current) {
-              onMapPress?.();
-            }
-          }}
           width={mapData.width}
           x="0"
           y="0"
@@ -368,7 +409,6 @@ export function MapView({
           <TroopMarkerLayer markers={troopMarkers} />
           {onTerritoryPress ? (
             <HitTargetLayer
-              isClickSuppressed={() => suppressClickRef.current}
               mapData={mapData}
               onTerritoryPress={onTerritoryPress}
             />
@@ -381,8 +421,6 @@ export function MapView({
             aria-label="Return to map view"
             className="map-camera-control map-zoom-out"
             onClick={returnToMapView}
-            onPointerDown={stopCameraControlEvent}
-            onWheel={stopCameraControlEvent}
             type="button"
           >
             <Maximize size={34} strokeWidth={2.2} />
@@ -393,8 +431,6 @@ export function MapView({
             className="map-camera-control map-auto-focus"
             data-enabled={autoFocusEnabled ? "true" : "false"}
             onClick={toggleAutoFocus}
-            onPointerDown={stopCameraControlEvent}
-            onWheel={stopCameraControlEvent}
             type="button"
           >
             <Crosshair size={31} strokeWidth={2.2} />
@@ -405,8 +441,12 @@ export function MapView({
   );
 }
 
-function startedOnTerritory(event: ReactPointerEvent<SVGSVGElement>) {
-  return event.target instanceof Element && Boolean(event.target.closest("[data-territory-hit]"));
+function territoryIdFromTarget(target: EventTarget) {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  return target.closest("[data-territory-hit]")?.getAttribute("data-territory-hit") ?? null;
 }
 
 function fitBoundsToAspect(bounds: MapBounds, aspect: number): MapViewport {

@@ -96,6 +96,7 @@ async function runSourceChecks() {
   const gameTypesSource = await readFile(new URL("../src/game/gameTypes.ts", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapConnectionsSource = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
+  const hitTargetSource = await readFile(new URL("../src/map/components/HitTargetLayer.tsx", import.meta.url), "utf8");
   const mapViewSource = await readFile(new URL("../src/map/components/MapView.tsx", import.meta.url), "utf8");
   const territoryFillSource = await readFile(new URL("../src/map/components/TerritoryFillLayer.tsx", import.meta.url), "utf8");
   const mapPreferencesSource = await readFile(new URL("../src/map/mapPreferences.ts", import.meta.url), "utf8");
@@ -179,8 +180,9 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
   assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
   assert(mapViewSource.includes("onMapPress"), "Map view supports map-background presses.");
-  assert(mapViewSource.includes("startedOnTerritory") && !mapViewSource.includes("isImmediatePress"), "Map view does not capture territory-originated desktop clicks.");
-  assert(mapViewSource.includes("stopCameraControlEvent"), "Map camera controls stop pointer and wheel propagation.");
+  assert(mapViewSource.includes("setPointerCapture") && mapViewSource.includes("territoryIdFromTarget"), "Map view captures and classifies every pointer gesture.");
+  assert(mapViewSource.includes("hadMultiplePointersRef") && mapViewSource.includes("onLostPointerCapture"), "Map view cleans up multi-touch and lost pointer capture state.");
+  assert(!hitTargetSource.includes("onPointerDown") && !hitTargetSource.includes("onPointerUp") && !hitTargetSource.includes("pendingPress"), "Hit targets do not duplicate map pointer gesture state.");
   assert(mapViewSource.includes("Maximize") && mapViewSource.includes("Return to map view"), "Map view uses a corner-only return-to-map control.");
   assert(mapViewSource.includes("Crosshair") && mapViewSource.includes("Disable automatic focus") && mapViewSource.includes("Enable automatic focus"), "Map view exposes an auto-focus toggle.");
   assert(mapPreferencesSource.includes("ardature.mapPreferences.v1") && mapPreferencesSource.includes("autoFocusEnabled: false"), "Map preferences persist auto-focus with a default-off state.");
@@ -384,28 +386,66 @@ async function mapPointToScreen(page, point) {
   }, point);
 }
 
+function touchPoint(point, id) {
+  return {
+    x: Math.round(point.x),
+    y: Math.round(point.y),
+    id,
+    radiusX: 1,
+    radiusY: 1,
+    force: 1,
+  };
+}
+
+async function dispatchTouch(client, type, points) {
+  await client.send("Input.dispatchTouchEvent", {
+    type,
+    touchPoints: points.map((point) => touchPoint(point, point.id)),
+  });
+  await new Promise((resolve) => setTimeout(resolve, 24));
+}
+
+async function touchTap(client, point, id) {
+  await dispatchTouch(client, "touchStart", [{ ...point, id }]);
+  await dispatchTouch(client, "touchEnd", []);
+}
+
+async function touchDrag(client, start, end, id) {
+  await dispatchTouch(client, "touchStart", [{ ...start, id }]);
+  await dispatchTouch(client, "touchMove", [{ ...end, id }]);
+  await dispatchTouch(client, "touchEnd", []);
+}
+
 async function clickTerritory(page, territoryId) {
-  await page.evaluate((id) => {
-    const target = document.querySelector(`[data-territory-hit="${id}"]`);
-
-    if (!target) {
-      throw new Error(`Missing hit target ${id}.`);
-    }
-
-    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
-  }, territoryId);
+  const target = page.locator(`[data-territory-hit="${territoryId}"]`);
+  await target.focus();
+  await target.press("Enter");
 }
 
 async function clickMapBackground(page) {
-  await page.evaluate(() => {
-    const target = document.querySelector("[data-background-piece]");
+  const point = await page.evaluate(() => {
+    const svg = document.querySelector(".map-svg");
 
-    if (!target) {
-      throw new Error("Missing map background.");
+    if (!(svg instanceof SVGSVGElement)) {
+      return null;
     }
 
-    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+    const bounds = svg.getBoundingClientRect();
+
+    // Find a visible ocean point that is not covered by a territory hit target.
+    for (let y = bounds.top + 8; y < bounds.bottom; y += 12) {
+      for (let x = bounds.left + 8; x < bounds.right; x += 12) {
+        if (document.elementFromPoint(x, y)?.matches("[data-background-piece]")) {
+          return { x, y };
+        }
+      }
+    }
+
+    return null;
   });
+
+  assert(point, "Map has a visible background press point.");
+  await page.mouse.click(point.x, point.y);
 }
 
 function assertBoxEquals(actual, expected, message) {
@@ -748,6 +788,75 @@ async function runDesktopMapInteractionChecks(page) {
   assert((await page.locator('[data-territory-fill-state="selected"]').count()) === 0, "Auto-focus control does not select a territory.");
 }
 
+async function runMobileMapInteractionChecks(page) {
+  console.log("Checking mobile map interaction");
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const shireCenter = generatedTerritoryCenter(mapDataSource, "shire");
+  const client = await page.context().newCDPSession(page);
+
+  await page.goto(baseUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForSelector("[data-background-piece]");
+  await startLocalSnakeDraft(page);
+
+  // A real touch tap selects once through the root map gesture controller.
+  await touchTap(client, await mapPointToScreen(page, shireCenter), 1);
+  await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
+  assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Mobile touch tap selects a territory.");
+  await page.getByRole("button", { name: "Cancel pick" }).click();
+
+  // A one-finger drag beginning on a territory pans without selecting it.
+  const dragStart = await mapPointToScreen(page, shireCenter);
+  const beforeDrag = parseViewBox(await viewBox(page));
+  await touchDrag(client, dragStart, { x: dragStart.x + 64, y: dragStart.y + 28 }, 2);
+  const afterDrag = parseViewBox(await viewBox(page));
+  assert(afterDrag.x !== beforeDrag.x || afterDrag.y !== beforeDrag.y, "Mobile one-finger drag pans the map.");
+  assert(Math.abs(afterDrag.width - beforeDrag.width) < 0.001, "Mobile one-finger drag does not zoom the map.");
+  assert((await page.getByRole("dialog", { name: "Confirm territory" }).count()) === 0, "Mobile one-finger drag does not select a territory.");
+
+  // A two-finger gesture zooms, then the next one-finger gesture returns to panning.
+  const mapBox = await page.locator(".map-svg").boundingBox();
+  assert(mapBox, "Mobile map has a bounding box.");
+  const center = { x: mapBox.x + mapBox.width / 2, y: mapBox.y + mapBox.height / 2 };
+  const beforePinch = parseViewBox(await viewBox(page));
+  await dispatchTouch(client, "touchStart", [
+    { x: center.x - 34, y: center.y, id: 3 },
+    { x: center.x + 34, y: center.y, id: 4 },
+  ]);
+  await dispatchTouch(client, "touchMove", [
+    { x: center.x - 74, y: center.y, id: 3 },
+    { x: center.x + 74, y: center.y, id: 4 },
+  ]);
+  await dispatchTouch(client, "touchEnd", []);
+  const afterPinch = parseViewBox(await viewBox(page));
+  assert(afterPinch.width < beforePinch.width, "Mobile two-finger gesture zooms the map.");
+
+  const beforePostPinchDrag = parseViewBox(await viewBox(page));
+  await touchDrag(client, center, { x: center.x - 48, y: center.y + 26 }, 5);
+  const afterPostPinchDrag = parseViewBox(await viewBox(page));
+  assert(Math.abs(afterPostPinchDrag.width - beforePostPinchDrag.width) < 0.001, "One finger pans without zooming after a pinch.");
+  assert(afterPostPinchDrag.x !== beforePostPinchDrag.x || afterPostPinchDrag.y !== beforePostPinchDrag.y, "One-finger pan remains responsive after a pinch.");
+
+  // A canceled territory touch is removed before the next gesture begins.
+  const canceledTouch = await mapPointToScreen(page, shireCenter);
+  await dispatchTouch(client, "touchStart", [{ ...canceledTouch, id: 6 }]);
+  await dispatchTouch(client, "touchCancel", []);
+  const beforePostCancelDrag = parseViewBox(await viewBox(page));
+  await touchDrag(client, center, { x: center.x + 42, y: center.y - 24 }, 7);
+  const afterPostCancelDrag = parseViewBox(await viewBox(page));
+  assert(Math.abs(afterPostCancelDrag.width - beforePostCancelDrag.width) < 0.001, "Canceled touch does not turn the next pan into a zoom.");
+  assert(afterPostCancelDrag.x !== beforePostCancelDrag.x || afterPostCancelDrag.y !== beforePostCancelDrag.y, "Map remains responsive after a canceled touch.");
+
+  // Territory selection can redirect an active focus animation.
+  await page.getByRole("button", { name: "Enable automatic focus" }).click();
+  await clickTerritory(page, "shire");
+  await page.waitForFunction(() => document.querySelector(".map-svg")?.getAttribute("data-map-animating") === "true");
+  await clickTerritory(page, "bree");
+  await page.getByRole("dialog", { name: "Confirm territory" }).getByRole("heading", { name: "Bree" }).waitFor();
+  await page.waitForFunction(() => document.querySelector(".map-svg")?.getAttribute("data-map-animating") === "false");
+}
+
 async function runRandomAllocationChecks(page) {
   console.log("Checking random draft allocation");
   await page.goto(baseUrl);
@@ -979,6 +1088,10 @@ async function main() {
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     desktop.setDefaultTimeout(10000);
     await runDesktopMapInteractionChecks(desktop);
+    const touchMobile = await browser.newPage({ deviceScaleFactor: 2, hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+    touchMobile.setDefaultTimeout(10000);
+    await runMobileMapInteractionChecks(touchMobile);
+    await touchMobile.close();
     await runRandomAllocationChecks(mobile);
     await runSyncEntryChecks(mobile);
     await runSyncReadyPageChecks(browser);

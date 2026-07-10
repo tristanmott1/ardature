@@ -192,7 +192,7 @@ Layer order:
 
 `MapView` owns pan, zoom, and selected-territory camera movement. The `viewBox` is bounded by the generated app map dimensions, which include a 1500 map-unit display margin around the extracted source map. The generated `homeViewport` is the normal unbuffered map view inside that larger frame, and the bottom-left overlay control returns to that home view rather than to the maximum zoom-out frame. Manual zoom and selected edge territories may still reveal the larger display margin. The bottom-right crosshair overlay toggles automatic selected-territory focus and is stored as a device-local map preference. Automatic focus defaults to off. When automatic focus is enabled and a territory is selected, `MapView` fits that territory's generated `focusBounds` rectangle to the current screen shape, then clamps the result inside the framed map. Nearly identical focus moves happen instantly; visible moves use a short ease-in-out animation. Focus duration is based on a combined pan and zoom distance, with both values normalized against the halfway viewport diagonal. The focus rectangle is generated from the canonical territory fill loops with 500 map units of padding on every side.
 
-While a focus animation is running, manual camera gestures are locked. Pointer panning, pinch zooming, and wheel zooming are ignored until the animation finishes. Territory taps and skin changes remain active; selecting a different territory redirects the focus animation from the current view. The SVG exposes `data-map-animating="true"` while the camera is moving. Camera controls are DOM overlay buttons, not SVG map content, and should stop their own pointer and wheel events from reaching the map.
+While a focus animation is running, manual camera gestures are locked. Pointer panning, pinch zooming, and wheel zooming are ignored until the animation finishes. Territory taps and skin changes remain active; selecting a different territory redirects the focus animation from the current view. The SVG exposes `data-map-animating="true"` while the camera is moving. Camera controls are DOM overlay buttons outside the SVG interaction path, not SVG map content.
 
 ### TerritoryFillLayer
 
@@ -220,7 +220,7 @@ Dynamic game marker layer. During allocation and the read-only game map, this la
 
 ### HitTargetLayer
 
-Invisible topmost territory shapes used for taps/clicks. It should receive pointer events even where landmarks or borders visually cover a territory. `HitTargetLayer` owns territory press selection on pointer-up after a small movement threshold, while `MapView` owns background drag/pan and does not capture pointer events that begin on territory hit targets.
+Invisible topmost territory shapes identify territory geometry even where landmarks or borders visually cover it. `MapView` owns the complete pointer lifecycle: it captures every pointer, tracks tap movement, distinguishes one-finger pan from multi-touch pinch, and routes valid presses to a territory or the map background on pointer-up. Canceled or lost pointers are always removed before another gesture begins. `HitTargetLayer` keeps only generated hit geometry and keyboard activation, so pointer gestures have one owner.
 
 The background component is rendered but not selectable.
 
