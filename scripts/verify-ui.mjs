@@ -186,6 +186,8 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("onMapPress"), "Map view supports map-background presses.");
   assert(mapViewSource.includes("setPointerCapture") && mapViewSource.includes("territoryIdFromTarget"), "Map view captures and classifies every pointer gesture.");
   assert(mapViewSource.includes("hadMultiplePointersRef") && mapViewSource.includes("onLostPointerCapture"), "Map view cleans up multi-touch and lost pointer capture state.");
+  assert(mapViewSource.includes('pointer.pointerType === "touch"') && mapViewSource.includes("startPanMomentum") && mapViewSource.includes("stopPanMomentum"), "Map view applies momentum only to touch panning.");
+  assert(mapViewSource.includes("PAN_MOMENTUM_DECAY_MS = 300") && mapViewSource.includes("PAN_MOMENTUM_MAX_MS = 900"), "Touch momentum uses restrained fixed tuning.");
   assert(!hitTargetSource.includes("onPointerDown") && !hitTargetSource.includes("onPointerUp") && !hitTargetSource.includes("pendingPress"), "Hit targets do not duplicate map pointer gesture state.");
   assert(mapViewSource.includes("Maximize") && mapViewSource.includes("Return to map view"), "Map view uses a corner-only return-to-map control.");
   assert(mapViewSource.includes("Crosshair") && mapViewSource.includes("Disable automatic focus") && mapViewSource.includes("Enable automatic focus"), "Map view exposes an auto-focus toggle.");
@@ -813,6 +815,9 @@ async function runDesktopMapInteractionChecks(page) {
   await page.mouse.move(shireScreen.x + 70, shireScreen.y + 24);
   await page.mouse.up();
   await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeDragViewBox);
+  const afterDesktopDrag = parseViewBox(await viewBox(page));
+  await page.waitForTimeout(140);
+  assertViewBoxEquals(await viewBox(page), afterDesktopDrag, "Desktop mouse drag has no release momentum.");
   assert((await page.getByRole("dialog", { name: "Confirm territory" }).count()) === 0, "Desktop drag pans instead of selecting.");
   assertBoxEquals(await page.getByRole("button", { name: "Return to map view" }).boundingBox(), returnButtonBox, "Return-to-map control stays anchored after desktop drag.");
   assertBoxEquals(await page.getByRole("button", { name: "Enable automatic focus" }).boundingBox(), focusButtonBox, "Auto-focus control stays anchored after desktop drag.");
@@ -880,22 +885,60 @@ async function runMobileMapInteractionChecks(page) {
   await dispatchTouch(client, "touchEnd", []);
   const afterPinch = parseViewBox(await viewBox(page));
   assert(afterPinch.width < beforePinch.width, "Mobile two-finger gesture zooms the map.");
+  await page.waitForTimeout(140);
+  assertViewBoxEquals(await viewBox(page), afterPinch, "Mobile pinch does not launch momentum.");
 
+  // A quick touch pan coasts after release without changing zoom.
   const beforePostPinchDrag = parseViewBox(await viewBox(page));
   await touchDrag(client, center, { x: center.x - 48, y: center.y + 26 }, 5);
   const afterPostPinchDrag = parseViewBox(await viewBox(page));
   assert(Math.abs(afterPostPinchDrag.width - beforePostPinchDrag.width) < 0.001, "One finger pans without zooming after a pinch.");
   assert(afterPostPinchDrag.x !== beforePostPinchDrag.x || afterPostPinchDrag.y !== beforePostPinchDrag.y, "One-finger pan remains responsive after a pinch.");
+  await page.waitForTimeout(140);
+  const afterMomentum = parseViewBox(await viewBox(page));
+  assert(afterMomentum.x !== afterPostPinchDrag.x || afterMomentum.y !== afterPostPinchDrag.y, "Quick mobile pan continues after release.");
+  assert(Math.abs(afterMomentum.width - afterPostPinchDrag.width) < 0.001, "Touch pan momentum never changes zoom.");
+
+  // A new slow gesture interrupts momentum and does not launch another coast.
+  await dispatchTouch(client, "touchStart", [{ ...center, id: 8 }]);
+  await dispatchTouch(client, "touchMove", [{ x: center.x + 30, y: center.y + 18, id: 8 }]);
+  await page.waitForTimeout(130);
+  await dispatchTouch(client, "touchEnd", []);
+  const afterSlowRelease = parseViewBox(await viewBox(page));
+  await page.waitForTimeout(140);
+  assertViewBoxEquals(await viewBox(page), afterSlowRelease, "Slow held touch pan stops immediately on release.");
 
   // A canceled territory touch is removed before the next gesture begins.
   const canceledTouch = await mapPointToScreen(page, shireCenter);
   await dispatchTouch(client, "touchStart", [{ ...canceledTouch, id: 6 }]);
   await dispatchTouch(client, "touchCancel", []);
+  const afterCanceledTouch = parseViewBox(await viewBox(page));
+  await page.waitForTimeout(140);
+  assertViewBoxEquals(await viewBox(page), afterCanceledTouch, "Canceled touch does not launch momentum.");
   const beforePostCancelDrag = parseViewBox(await viewBox(page));
   await touchDrag(client, center, { x: center.x + 42, y: center.y - 24 }, 7);
   const afterPostCancelDrag = parseViewBox(await viewBox(page));
   assert(Math.abs(afterPostCancelDrag.width - beforePostCancelDrag.width) < 0.001, "Canceled touch does not turn the next pan into a zoom.");
   assert(afterPostCancelDrag.x !== beforePostCancelDrag.x || afterPostCancelDrag.y !== beforePostCancelDrag.y, "Map remains responsive after a canceled touch.");
+
+  // Return-to-map replaces active momentum and settles at the home viewport.
+  await page.getByRole("button", { name: "Return to map view" }).click();
+  await page.waitForFunction(() => document.querySelector(".map-svg")?.getAttribute("data-map-animating") === "false");
+  const size = await mapSize(page);
+  const homeViewport = homeViewportFromSize(size);
+  await waitForViewBox(page, homeViewport);
+  await page.waitForTimeout(140);
+  assertViewBoxEquals(await viewBox(page), homeViewport, "Return-to-map cancels touch momentum.");
+
+  // A fast edge swipe remains constrained and settles without bouncing.
+  await touchDrag(client, center, { x: center.x + 170, y: center.y, id: 9 });
+  await page.waitForTimeout(950);
+  assertViewBoxInside(await viewBox(page), size, "Touch momentum remains inside map bounds.");
+  const atMomentumRest = parseViewBox(await viewBox(page));
+  await page.waitForTimeout(140);
+  assertViewBoxEquals(await viewBox(page), atMomentumRest, "Touch momentum stops at the map edge.");
+  await page.getByRole("button", { name: "Return to map view" }).click();
+  await waitForViewBox(page, homeViewport);
 
   // Territory selection can redirect an active focus animation.
   await page.getByRole("button", { name: "Enable automatic focus" }).click();

@@ -15,12 +15,24 @@ import type { GeneratedMapData, MapBounds, MapViewport, TerritoryState } from ".
 
 type PointerPoint = {
   id: number;
+  pointerType: string;
   startClientX: number;
   startClientY: number;
   clientX: number;
   clientY: number;
   moved: boolean;
   territoryId: string | null;
+};
+
+type PanSample = {
+  clientX: number;
+  clientY: number;
+  time: number;
+};
+
+type PanVelocity = {
+  x: number;
+  y: number;
 };
 
 type ViewportPoint = {
@@ -34,6 +46,12 @@ const FOCUS_DURATION_PER_DISTANCE = 900;
 const FOCUS_SKIP_THRESHOLD = 0.01;
 const MIN_VIEWPORT_SIZE = 400;
 const PRESS_MOVE_THRESHOLD = 5;
+const PAN_MOMENTUM_SAMPLE_MS = 100;
+const PAN_MOMENTUM_MIN_SPEED = 0.1;
+const PAN_MOMENTUM_MAX_SPEED = 2.5;
+const PAN_MOMENTUM_STOP_SPEED = 0.02;
+const PAN_MOMENTUM_DECAY_MS = 300;
+const PAN_MOMENTUM_MAX_MS = 900;
 
 export function MapView({
   mapData,
@@ -61,6 +79,8 @@ export function MapView({
   const svgRef = useRef<SVGSVGElement>(null);
   const pointersRef = useRef(new Map<number, PointerPoint>());
   const hadMultiplePointersRef = useRef(false);
+  const panSamplesRef = useRef<PanSample[]>([]);
+  const momentumFrameRef = useRef<number | null>(null);
   const isAnimatingRef = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
   const previousSelectedTerritoryIdRef = useRef<string | null>(null);
@@ -72,6 +92,7 @@ export function MapView({
     const next = constrainViewport(nextViewport, mapData.width, mapData.height);
     viewportRef.current = next;
     setViewportState(next);
+    return next;
   }
 
   function setIsAnimating(nextIsAnimating: boolean) {
@@ -104,16 +125,20 @@ export function MapView({
   }
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
+    stopPanMomentum();
+
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.setPointerCapture(event.pointerId);
     }
 
     if (pointersRef.current.size > 0) {
       hadMultiplePointersRef.current = true;
+      panSamplesRef.current = [];
     }
 
     pointersRef.current.set(event.pointerId, {
       id: event.pointerId,
+      pointerType: event.pointerType,
       startClientX: event.clientX,
       startClientY: event.clientY,
       clientX: event.clientX,
@@ -121,6 +146,10 @@ export function MapView({
       moved: false,
       territoryId: territoryIdFromTarget(event.target),
     });
+
+    if (event.pointerType === "touch" && pointersRef.current.size === 1 && !isAnimatingRef.current) {
+      addPanSample(event.clientX, event.clientY);
+    }
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
@@ -150,6 +179,10 @@ export function MapView({
 
     const after = orderedPointers();
     const afterPoints = viewportPoints(after);
+
+    if (pointer.pointerType === "touch" && after.length === 1 && !hadMultiplePointersRef.current) {
+      addPanSample(event.clientX, event.clientY);
+    }
 
     if (!beforePoints || !afterPoints) {
       return;
@@ -188,11 +221,18 @@ export function MapView({
       event.clientY - pointer.startClientY,
     ) > PRESS_MOVE_THRESHOLD;
     const shouldPress = !moved && !hadMultiplePointersRef.current;
+    const momentum = moved && pointer.pointerType === "touch" && !hadMultiplePointersRef.current && !isAnimatingRef.current
+      ? panVelocity(event.clientX, event.clientY)
+      : null;
 
     pointersRef.current.delete(event.pointerId);
     resetGestureWhenComplete();
 
     if (!shouldPress) {
+      if (momentum) {
+        startPanMomentum(momentum);
+      }
+
       return;
     }
 
@@ -205,11 +245,19 @@ export function MapView({
   }
 
   function handlePointerCancel(event: ReactPointerEvent<SVGSVGElement>) {
+    stopPanMomentum();
+    panSamplesRef.current = [];
     pointersRef.current.delete(event.pointerId);
     resetGestureWhenComplete();
   }
 
   function handleLostPointerCapture(event: ReactPointerEvent<SVGSVGElement>) {
+    if (!pointersRef.current.has(event.pointerId)) {
+      return;
+    }
+
+    stopPanMomentum();
+    panSamplesRef.current = [];
     pointersRef.current.delete(event.pointerId);
     resetGestureWhenComplete();
   }
@@ -217,11 +265,13 @@ export function MapView({
   function resetGestureWhenComplete() {
     if (pointersRef.current.size === 0) {
       hadMultiplePointersRef.current = false;
+      panSamplesRef.current = [];
     }
   }
 
   function handleWheel(event: WheelEvent<SVGSVGElement>) {
     event.preventDefault();
+    stopPanMomentum();
 
     if (isAnimatingRef.current) {
       return;
@@ -294,6 +344,8 @@ export function MapView({
   }
 
   function stopFocusAnimation() {
+    stopPanMomentum();
+
     if (animationFrameRef.current !== null) {
       window.cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
@@ -302,6 +354,96 @@ export function MapView({
     pointersRef.current.clear();
     hadMultiplePointersRef.current = false;
     setIsAnimating(false);
+  }
+
+  function addPanSample(clientX: number, clientY: number) {
+    const time = performance.now();
+    const cutoff = time - PAN_MOMENTUM_SAMPLE_MS;
+    panSamplesRef.current.push({ clientX, clientY, time });
+    panSamplesRef.current = panSamplesRef.current.filter((sample) => sample.time >= cutoff);
+  }
+
+  function panVelocity(clientX: number, clientY: number) {
+    addPanSample(clientX, clientY);
+    const first = panSamplesRef.current[0];
+    const last = panSamplesRef.current[panSamplesRef.current.length - 1];
+    const duration = last.time - first.time;
+
+    if (duration <= 0) {
+      return null;
+    }
+
+    let x = (last.clientX - first.clientX) / duration;
+    let y = (last.clientY - first.clientY) / duration;
+    const speed = Math.hypot(x, y);
+
+    if (speed < PAN_MOMENTUM_MIN_SPEED) {
+      return null;
+    }
+
+    if (speed > PAN_MOMENTUM_MAX_SPEED) {
+      const scale = PAN_MOMENTUM_MAX_SPEED / speed;
+      x *= scale;
+      y *= scale;
+    }
+
+    return { x, y };
+  }
+
+  function startPanMomentum(velocity: PanVelocity) {
+    stopPanMomentum();
+    const startTime = performance.now();
+    let previousTime = startTime;
+    let velocityX = velocity.x;
+    let velocityY = velocity.y;
+
+    // Continue the released touch pan with frame-rate-independent friction.
+    function step(now: number) {
+      const svg = svgRef.current;
+
+      if (!svg || svg.clientWidth <= 0 || svg.clientHeight <= 0 || now - startTime >= PAN_MOMENTUM_MAX_MS) {
+        stopPanMomentum();
+        return;
+      }
+
+      const elapsed = Math.min(32, Math.max(0, now - previousTime));
+      const current = viewportRef.current;
+      const requested = {
+        ...current,
+        x: current.x - velocityX * (current.width / svg.clientWidth) * elapsed,
+        y: current.y - velocityY * (current.height / svg.clientHeight) * elapsed,
+      };
+      const next = setViewport(requested);
+
+      if (Math.abs(next.x - requested.x) > 0.001) {
+        velocityX = 0;
+      }
+
+      if (Math.abs(next.y - requested.y) > 0.001) {
+        velocityY = 0;
+      }
+
+      const decay = Math.exp(-elapsed / PAN_MOMENTUM_DECAY_MS);
+      velocityX *= decay;
+      velocityY *= decay;
+      previousTime = now;
+
+      if (Math.hypot(velocityX, velocityY) < PAN_MOMENTUM_STOP_SPEED) {
+        stopPanMomentum();
+        return;
+      }
+
+      momentumFrameRef.current = window.requestAnimationFrame(step);
+    }
+
+    momentumFrameRef.current = window.requestAnimationFrame(step);
+  }
+
+  function stopPanMomentum() {
+    if (momentumFrameRef.current !== null) {
+      window.cancelAnimationFrame(momentumFrameRef.current);
+      momentumFrameRef.current = null;
+    }
   }
 
   function orderedPointers() {
@@ -326,6 +468,7 @@ export function MapView({
   }
 
   useLayoutEffect(() => {
+    stopPanMomentum();
     setViewport(mapData.homeViewport);
   }, [mapData.homeViewport]);
 
@@ -371,9 +514,28 @@ export function MapView({
   }, [resetCameraKey]);
 
   useEffect(() => {
+    if (!showCameraControls) {
+      stopPanMomentum();
+    }
+  }, [showCameraControls]);
+
+  useEffect(() => {
+    function stopForResize() {
+      stopPanMomentum();
+    }
+
+    window.addEventListener("resize", stopForResize);
+    return () => window.removeEventListener("resize", stopForResize);
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (animationFrameRef.current !== null) {
         window.cancelAnimationFrame(animationFrameRef.current);
+      }
+
+      if (momentumFrameRef.current !== null) {
+        window.cancelAnimationFrame(momentumFrameRef.current);
       }
 
     };

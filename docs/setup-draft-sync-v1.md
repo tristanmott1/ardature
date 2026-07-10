@@ -248,6 +248,7 @@ Reusable map modes for this milestone:
 - Setup/draft ownership map: pan and zoom only.
 - Draft active pick: pan, zoom, and selectable remaining territories.
 - Draft inactive player or non-owning sync device: pan and zoom; no valid pick action.
+- On touch devices, a quick one-finger pan may coast briefly after release. Pinch zoom, mouse drag, and wheel input stop normally, and any new map action interrupts the coast immediately.
 - Confirmation popup: map remains visible; pending pick is confirmed, canceled by the bottom sheet, canceled by tapping the map background, or replaced by tapping another remaining territory.
 - Draft ownership map: pan and zoom; no selection.
 
