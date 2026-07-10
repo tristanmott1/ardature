@@ -192,6 +192,7 @@ async function runSourceChecks() {
   assert(appSource.includes("Stop reconnecting") && appSource.includes("<Icon size={24} />"), "Joiner reconnecting UI offers a local stop option.");
   assert(appSource.includes('connectionStatus === "disconnected"') && appSource.includes("createRecoveryOffer(disconnectedSyncPlayers)"), "Host recovery QR slots are filtered from host disconnected state.");
   assert(appSource.includes("hostTransportRef.current = new SyncHostTransport") && appSource.includes("restoredSyncHost"), "Restored sync hosts rebuild transport for recovery QR generation.");
+  assert(appSource.includes('const showRecoveryTools = mode === "sync" && Boolean(onScanRecoveryAnswer)'), "Recovery QR tools render only for the sync host pause modal.");
   assert(appSource.includes("createRecoveryAnswer") && appSource.includes("onChooseRecoveryPlayer"), "Joiners choose a disconnected slot before creating a recovery answer.");
   assert(appSource.includes("hostTransportRef.current?.sendToPeer(playerId, { type: \"removed\" })"), "Host sends removed before closing a removed peer.");
   assert(gameStateSource.includes("pauseLocalGameForStorage") && appSource.includes("pagehide") && appSource.includes("beforeunload"), "Local refresh writes a paused active-game snapshot.");
@@ -1347,7 +1348,11 @@ async function runSyncRecoveryChecks(browser) {
   await host.getByRole("button", { name: "Pause draft" }).click();
   await host.getByRole("dialog", { name: "Paused" }).waitFor();
   await capture(host, "18-sync-pause-recovery-qr-mobile.png");
-  assert((await host.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").count()) === 1, "Sync pause always shows a recovery QR.");
+  assert((await host.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").count()) === 1, "Sync host pause always shows a recovery QR.");
+  await joiner.getByRole("dialog", { name: "Paused" }).waitFor({ timeout: 15000 });
+  await capture(joiner, "18b-sync-joiner-pause-no-qr-mobile.png");
+  assert((await joiner.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").count()) === 0, "Sync joiner pause does not show a recovery QR.");
+  assert((await joiner.getByRole("dialog", { name: "Paused" }).locator(".qr-placeholder").count()) === 0, "Sync joiner pause does not show a blank QR placeholder.");
 
   await rejoiner.goto(baseUrl);
   await rejoiner.evaluate(() => localStorage.clear());
