@@ -1072,6 +1072,15 @@ select {
   width: 100%;
 }
 
+.sync-session-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.sync-session-dialog .icon-button {
+  width: 54px;
+}
+
 .scanner-modal {
   display: grid;
   gap: 12px;

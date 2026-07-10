@@ -2559,7 +2559,7 @@ function SyncSessionBlocker({ onHome, session }: { onHome?: () => void; session:
     ? "Host ended the game"
     : session === "disconnected"
       ? "Host disconnected"
-      : "Reconnecting";
+      : "Reconnecting...";
   const Icon = session === "reconnecting" ? X : Check;
   const label = session === "reconnecting" ? "Stop reconnecting" : "Return home";
 
@@ -2568,7 +2568,7 @@ function SyncSessionBlocker({ onHome, session }: { onHome?: () => void; session:
       <section className="modal-panel decision-modal sync-session-dialog" role="alertdialog" aria-label="Sync connection">
         <h2>{message}</h2>
         {onHome ? (
-          <div className="modal-actions">
+          <div className="sync-session-actions">
             <button className="icon-button primary large" type="button" onClick={onHome} aria-label={label}>
               <Icon size={24} />
             </button>

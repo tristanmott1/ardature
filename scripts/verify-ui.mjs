@@ -1430,10 +1430,19 @@ async function runSyncHostLossChecks(browser) {
   await joiner.waitForSelector('.app-shell[data-app-phase="draft"]', { timeout: 15000 });
 
   await host.close();
-  await joiner.getByRole("alertdialog", { name: "Sync connection" }).getByText("Reconnecting").waitFor({ timeout: 15000 });
+  await joiner.getByRole("alertdialog", { name: "Sync connection" }).getByText("Reconnecting...").waitFor({ timeout: 15000 });
   await capture(joiner, "25-sync-joiner-host-loss-reconnecting-mobile.png");
   assert((await joiner.locator(".sync-session-dialog .qr-code").count()) === 0, "Host-loss reconnecting UI has no QR code.");
   assert((await joiner.locator(".sync-session-dialog .player-row").count()) === 0, "Host-loss reconnecting UI does not show stale roster status.");
+  const reconnectDialogBox = await joiner.locator(".sync-session-dialog").boundingBox();
+  const stopReconnectBox = await joiner.getByRole("button", { name: "Stop reconnecting" }).boundingBox();
+  assert(
+    reconnectDialogBox &&
+      stopReconnectBox &&
+      Math.abs((stopReconnectBox.x + stopReconnectBox.width / 2) - (reconnectDialogBox.x + reconnectDialogBox.width / 2)) < 1,
+    "Reconnect stop button is centered below the text.",
+  );
+  assert(stopReconnectBox && stopReconnectBox.width < 80, "Reconnect stop button is compact.");
 
   await joiner.waitForSelector('.app-shell[data-app-phase="home"]', { timeout: 20000 });
   await capture(joiner, "26-sync-joiner-host-loss-home-mobile.png");
