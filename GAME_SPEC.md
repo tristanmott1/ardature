@@ -870,9 +870,10 @@ Sync host pause is a synchronization reset:
 - On unpause, the current player's turn starts over with a fresh timer.
 - The host can restart from pause after confirmation, returning everyone to setup while keeping current sync connections open.
 - Sync pause includes connected, disconnected, and reconnecting player status.
-- Sync pause always includes a recovery QR and scan button for disconnected-player recovery.
+- Sync host pause always includes a recovery QR and scan button for disconnected-player recovery.
+- Sync non-host pause does not include a blank QR placeholder or recovery tools.
 - The host can remove players while paused.
-- Host refresh or close during active sync play restores the host game into paused recovery state with all non-host players disconnected.
+- Host refresh or close during active sync play restores the host game into paused recovery state with all non-host players disconnected, creates a fresh recovery transport, and renders a new recovery QR.
 
 In both modes, removing a player during draft clears that player's territories and returns them to the remaining territory pool. If fewer than 2 players remain, the game ends and returns to home.
 

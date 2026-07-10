@@ -191,6 +191,7 @@ async function runSourceChecks() {
   assert(syncTransportSource.includes("ARR:") && syncTransportSource.includes("ARY:"), "Sync transport has distinct compact recovery QR prefixes.");
   assert(appSource.includes("Stop reconnecting") && appSource.includes("<Icon size={24} />"), "Joiner reconnecting UI offers a local stop option.");
   assert(appSource.includes('connectionStatus === "disconnected"') && appSource.includes("createRecoveryOffer(disconnectedSyncPlayers)"), "Host recovery QR slots are filtered from host disconnected state.");
+  assert(appSource.includes("hostTransportRef.current = new SyncHostTransport") && appSource.includes("restoredSyncHost"), "Restored sync hosts rebuild transport for recovery QR generation.");
   assert(appSource.includes("createRecoveryAnswer") && appSource.includes("onChooseRecoveryPlayer"), "Joiners choose a disconnected slot before creating a recovery answer.");
   assert(appSource.includes("hostTransportRef.current?.sendToPeer(playerId, { type: \"removed\" })"), "Host sends removed before closing a removed peer.");
   assert(gameStateSource.includes("pauseLocalGameForStorage") && appSource.includes("pagehide") && appSource.includes("beforeunload"), "Local refresh writes a paused active-game snapshot.");
@@ -1313,9 +1314,11 @@ async function runSyncRecoveryChecks(browser) {
   const host = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
   const joiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
   const rejoiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const recoveryJoiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
   host.setDefaultTimeout(20000);
   joiner.setDefaultTimeout(20000);
   rejoiner.setDefaultTimeout(20000);
+  recoveryJoiner.setDefaultTimeout(20000);
 
   await host.goto(baseUrl);
   await host.evaluate(() => localStorage.clear());
@@ -1356,9 +1359,37 @@ async function runSyncRecoveryChecks(browser) {
   await rejoiner.getByText("No disconnected players").waitFor({ timeout: 15000 });
   await capture(rejoiner, "19-sync-recovery-no-slots-mobile.png");
 
-  await host.close();
   await joiner.close();
+  await host.locator('.pause-modal [data-player-status="disconnected"]').waitFor({ timeout: 20000 });
+  await capture(host, "20-sync-pause-disconnected-slot-mobile.png");
+  await host.reload();
+  await host.getByRole("dialog", { name: "Paused" }).waitFor({ timeout: 15000 });
+  await host.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").waitFor({ timeout: 15000 });
+  await host.locator('.pause-modal [data-player-status="disconnected"]').waitFor({ timeout: 15000 });
+  await capture(host, "21-sync-host-refresh-recovery-qr-mobile.png");
+
+  await recoveryJoiner.goto(baseUrl);
+  await recoveryJoiner.evaluate(() => localStorage.clear());
+  await recoveryJoiner.reload();
+  await recoveryJoiner.getByRole("button", { name: "Sync" }).click();
+  await recoveryJoiner.getByLabel("Sync player name").fill("Recovered");
+  await recoveryJoiner.getByRole("button", { name: "Join" }).click();
+  await pasteScannerText(recoveryJoiner, await qrText(host));
+  await recoveryJoiner.getByRole("button", { name: "Boromir" }).waitFor({ timeout: 15000 });
+  await capture(recoveryJoiner, "22-sync-recovery-slot-picker-mobile.png");
+  await recoveryJoiner.getByRole("button", { name: "Boromir" }).click();
+  await recoveryJoiner.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
+  await capture(recoveryJoiner, "23-sync-recovery-answer-qr-mobile.png");
+
+  await host.getByRole("button", { name: "Scan" }).click();
+  await pasteScannerText(host, await qrText(recoveryJoiner));
+  await host.locator('.pause-modal [data-player-status="connected"]').filter({ hasText: "Boromir" }).waitFor({ timeout: 15000 });
+  await capture(host, "24-sync-pause-recovered-mobile.png");
+  assert((await host.locator('.pause-modal [data-player-status="disconnected"]').count()) === 0, "Recovered player is no longer listed as disconnected.");
+
+  await host.close();
   await rejoiner.close();
+  await recoveryJoiner.close();
 }
 
 async function qrText(page) {

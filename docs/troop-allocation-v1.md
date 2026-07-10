@@ -156,6 +156,7 @@ Sync allocation uses the same pause/reconnect model as sync draft:
 - The host first marks that player `reconnecting` for 10 seconds. If automatic reconnect fails from the host's perspective, the host marks them `disconnected`.
 - The joiner independently enters local `reconnecting` when heartbeat with the host fails. If automatic reconnect fails from the joiner's perspective, the joiner returns home.
 - The disconnected player remains in the host game and can return only through the sync pause recovery QR.
+- Recovery QR tools are host-only. Non-host pause screens must not show a blank QR placeholder.
 - The host cannot unpause until every remaining player is connected and at least 2 players remain.
 - Joiners cannot continue allocating while reconnecting. Their controls and latest map may remain visible only as inert background behind the blocking reconnecting UI.
 - If automatic reconnect fails, the joiner returns home and must rejoin through the host pause recovery QR.

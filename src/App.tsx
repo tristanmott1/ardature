@@ -438,6 +438,33 @@ function App() {
   }, [disconnectedSyncPlayers.map((player) => player.id).join("|"), game.mode, game.phase, syncRole]);
 
   useEffect(() => {
+    if (!restoredSyncHost || hostTransportRef.current || game.mode !== "sync" || syncRole !== "host" || !localPlayerId) {
+      return;
+    }
+
+    const hostPlayer = game.players.find((player) => player.id === localPlayerId);
+    if (!hostPlayer) {
+      return;
+    }
+
+    hostTransportRef.current = new SyncHostTransport({
+      callbacks: {
+        onMessage: handleHostMessage,
+        onPeerClosed: handleHostPeerClosed,
+        onPeerStatus: handleHostPeerStatus,
+      },
+      hostName: hostPlayer.name,
+      hostPlayerId: hostPlayer.id,
+      roomId: crypto.randomUUID(),
+    });
+    setSyncSession("connected");
+
+    if (game.phase === "paused") {
+      void createRecoveryOffer();
+    }
+  }, [game.mode, game.phase, game.players, localPlayerId, restoredSyncHost, syncRole]);
+
+  useEffect(() => {
     if (game.mode !== "sync" || syncRole !== "joiner" || !canSendSyncCommand || !localPlayerId || !game.allocation) {
       return;
     }
@@ -2378,6 +2405,8 @@ function PausePanel({
   syncMessage?: string;
   syncQrText?: string;
 }) {
+  const showRecoveryTools = mode === "sync" && Boolean(onScanRecoveryAnswer);
+
   return (
     <div className="modal-scrim">
       <section className="modal-panel pause-modal" role="dialog" aria-label="Paused">
@@ -2392,7 +2421,7 @@ function PausePanel({
         <p className="muted">{remainingCount} territories remain.</p>
         <div className="player-list paused-list">
           {players.map((player) => (
-            <article className="player-row compact-row" key={player.id}>
+            <article className="player-row compact-row" data-player-status={player.connectionStatus} key={player.id}>
               <span className="player-dot" style={{ background: colorCss(player.color) }} />
               <strong>{player.name}</strong>
               {mode === "sync" ? <span className="connection-label">{player.connectionStatus}</span> : null}
@@ -2400,23 +2429,21 @@ function PausePanel({
                 player.id === localPlayerId ? (
                   <span className="icon-button-spacer" aria-hidden="true" />
                 ) : (
-                <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
-                  <Trash2 size={16} />
-                </button>
+                  <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
+                    <Trash2 size={16} />
+                  </button>
                 )
               ) : null}
             </article>
           ))}
         </div>
-        {mode === "sync" ? (
+        {showRecoveryTools ? (
           <div className="pause-recovery-tools">
             {syncQrText ? <QrPanel text={syncQrText} /> : <div className="qr-placeholder" />}
-            {onScanRecoveryAnswer ? (
-              <button className="secondary icon-text-button scan-answer-button" type="button" onClick={onScanRecoveryAnswer}>
-                <ScanLine size={18} />
-                Scan
-              </button>
-            ) : null}
+            <button className="secondary icon-text-button scan-answer-button" type="button" onClick={onScanRecoveryAnswer}>
+              <ScanLine size={18} />
+              Scan
+            </button>
             {syncMessage ? <p className="sync-status">{syncMessage}</p> : null}
           </div>
         ) : null}
