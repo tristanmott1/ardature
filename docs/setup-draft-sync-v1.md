@@ -240,6 +240,7 @@ Graceful quit and ungraceful disconnect are different:
 - If the host removes a player, it sends `removed` when possible, then closes that peer. Removed players cannot rejoin.
 - Automatic WebRTC reconnect should behave like Qwixx where possible inside the 10-second reconnecting window.
 - QR recovery is available only from sync host pause. The host recovery QR contains only currently disconnected players. The rejoining device scans from the normal Sync -> Join flow, chooses one disconnected slot, shows a player-specific answer QR, and the host scanner accepts it only if that player is still disconnected.
+- Recovery slot and recovery answer screens must show the disconnected player's frozen color next to the player name, because color is part of the host-authoritative player identity being reclaimed.
 - Stale recovery answers fail cleanly. If two devices try to reclaim the same player, only the first accepted answer can reconnect.
 - Reconnecting players cannot change the underlying player identity. Names, colors, and locks remain exactly as the host sees them.
 
