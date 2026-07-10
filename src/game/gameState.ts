@@ -1277,9 +1277,12 @@ function normalizeGameState(value: unknown): GameState | null {
 
 function normalizeConfig(value: unknown): GameConfig {
   const config = value as Partial<GameConfig>;
+  const draftStyle = config.draftStyle === "random" || config.draftStyle === "roundRobin" || config.draftStyle === "snake" ? config.draftStyle : "snake";
+  const pickTimeLimit = PICK_TIME_LIMITS.includes(config.pickTimeLimit as PickTimeLimit) ? config.pickTimeLimit as PickTimeLimit : 0;
+
   return {
-    draftStyle: config.draftStyle === "random" || config.draftStyle === "roundRobin" || config.draftStyle === "snake" ? config.draftStyle : "snake",
-    pickTimeLimit: PICK_TIME_LIMITS.includes(config.pickTimeLimit as PickTimeLimit) ? config.pickTimeLimit as PickTimeLimit : 0,
+    draftStyle,
+    pickTimeLimit: draftStyle === "random" ? 0 : pickTimeLimit,
     troopAllocationTimeLimit: TROOP_ALLOCATION_TIME_LIMITS.includes(config.troopAllocationTimeLimit as TroopAllocationTimeLimit)
       ? config.troopAllocationTimeLimit as TroopAllocationTimeLimit
       : 0,

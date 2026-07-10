@@ -296,6 +296,8 @@ function App() {
   const showGameTopBar = game.phase !== "home" && game.phase !== "setup" && Boolean(gameTopBarPlayer);
   const showGameStageLayout = showGameTopBar || showDraftPanel || showAllocationControls || showAllocationWaiting || showAllocationHandoff || showGameMapControls;
   const canUseMapCameraControls = !Boolean(
+    game.phase === "home" ||
+    game.phase === "setup" ||
     showArmyBuildModal ||
     syncCameraMode ||
     syncJoinerBlocked ||
@@ -1172,10 +1174,17 @@ function App() {
       return;
     }
 
-    setGame((current) => ({
-      ...current,
-      config: { ...current.config, ...updates },
-    }));
+    setGame((current) => {
+      const config = { ...current.config, ...updates };
+
+      return {
+        ...current,
+        config: {
+          ...config,
+          pickTimeLimit: config.draftStyle === "random" ? 0 : config.pickTimeLimit,
+        },
+      };
+    });
   }
 
   function beginDraft() {

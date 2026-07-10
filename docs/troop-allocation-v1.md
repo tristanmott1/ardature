@@ -136,7 +136,7 @@ Sync mode is simultaneous and host-authoritative.
 - Ready is final. Players cannot manually unready.
 - A ready player's allocation remains final even if a stale sync update arrives from that device.
 - Ready players go to a local waiting page while unready players stay in allocation.
-- The waiting page shows all remaining players in two columns: `READY` and `WAITING`.
+- The waiting page shows all remaining players in two columns: `READY` and `WAITING`. Column headers are left-justified within their columns.
 - The waiting page keeps the same colored top bar for the player whose device it is and shows the shared allocation timer whenever it is relevant.
 - All players can see readiness status, not only the host.
 - The host can advance only after every remaining player is ready.

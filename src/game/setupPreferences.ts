@@ -128,13 +128,16 @@ function normalizeLocalPlayer(value: unknown) {
 
 function normalizeConfig(value: unknown): GameConfig {
   const config = value as Partial<GameConfig>;
+  const draftStyle = config?.draftStyle === "random" || config?.draftStyle === "roundRobin" || config?.draftStyle === "snake"
+    ? config.draftStyle
+    : DEFAULT_CONFIG.draftStyle;
+  const pickTimeLimit = PICK_TIME_LIMITS.includes(config?.pickTimeLimit as GameConfig["pickTimeLimit"])
+    ? config.pickTimeLimit as GameConfig["pickTimeLimit"]
+    : DEFAULT_CONFIG.pickTimeLimit;
+
   return {
-    draftStyle: config?.draftStyle === "random" || config?.draftStyle === "roundRobin" || config?.draftStyle === "snake"
-      ? config.draftStyle
-      : DEFAULT_CONFIG.draftStyle,
-    pickTimeLimit: PICK_TIME_LIMITS.includes(config?.pickTimeLimit as GameConfig["pickTimeLimit"])
-      ? config.pickTimeLimit as GameConfig["pickTimeLimit"]
-      : DEFAULT_CONFIG.pickTimeLimit,
+    draftStyle,
+    pickTimeLimit: draftStyle === "random" ? 0 : pickTimeLimit,
     troopAllocationTimeLimit: TROOP_ALLOCATION_TIME_LIMITS.includes(config?.troopAllocationTimeLimit as GameConfig["troopAllocationTimeLimit"])
       ? config.troopAllocationTimeLimit as GameConfig["troopAllocationTimeLimit"]
       : DEFAULT_CONFIG.troopAllocationTimeLimit,

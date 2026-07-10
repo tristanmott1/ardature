@@ -538,6 +538,14 @@ async function assertTopBarFullWidth(page, selector, message) {
   assert(bar && viewport && bar.x <= 1 && bar.width >= viewport.width - 2, message);
 }
 
+async function assertNoMapCameraControls(page, message) {
+  const returnCount = await page.getByRole("button", { name: "Return to map view" }).count();
+  const enableCount = await page.getByRole("button", { name: "Enable automatic focus" }).count();
+  const disableCount = await page.getByRole("button", { name: "Disable automatic focus" }).count();
+
+  assert(returnCount + enableCount + disableCount === 0, message);
+}
+
 async function assertCompactPlayerRowsAligned(page, selector, message) {
   const rows = await page.locator(selector).evaluateAll((elements) => elements.map((row) => {
     const dot = row.querySelector(".player-dot")?.getBoundingClientRect();
@@ -570,6 +578,21 @@ async function assertCompactPlayerRowsAligned(page, selector, message) {
   const statusRights = completeRows.map((row) => row.statusRight);
   assert(Math.max(...nameLefts) - Math.min(...nameLefts) < 1, `${message}: names are left-aligned.`);
   assert(Math.max(...statusRights) - Math.min(...statusRights) < 1, `${message}: statuses are right-aligned.`);
+}
+
+async function assertReadyColumnHeadersLeftAligned(page) {
+  const columns = await page.locator(".ready-column").evaluateAll((elements) => elements.map((column) => {
+    const header = column.querySelector("h2")?.getBoundingClientRect();
+    const firstName = column.querySelector(".ready-player-row strong")?.getBoundingClientRect();
+
+    return header && firstName
+      ? { headerLeft: header.left, nameLeft: firstName.left }
+      : null;
+  }));
+
+  for (const column of columns.filter(Boolean)) {
+    assert(column.headerLeft <= column.nameLeft + 1, "Ready/waiting column headers are left-justified within their columns.");
+  }
 }
 
 async function checkColorMenuDismissal(page) {
@@ -614,6 +637,7 @@ async function runSetupPreferenceChecks(page) {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await capture(page, "01-home-mobile.png");
+  await assertNoMapCameraControls(page, "Home overlay hides map camera controls.");
 
   await page.getByRole("button", { name: "Local" }).click();
   await setPlayerName(page, 0, "Aragorn");
@@ -625,10 +649,16 @@ async function runSetupPreferenceChecks(page) {
   await page.getByRole("button", { name: "Round robin" }).click();
   await page.getByLabel("PICK TIME").selectOption("10");
   await page.getByLabel("TROOP TIME").selectOption("120");
+  await page.getByRole("button", { name: "Random", exact: true }).click();
+  assert((await page.getByLabel("PICK TIME").inputValue()) === "0", "Random draft forces pick time to unlimited.");
+  assert(await page.getByLabel("PICK TIME").isDisabled(), "Random draft locks pick time after forcing unlimited.");
+  await page.getByRole("button", { name: "Round robin" }).click();
+  await page.getByLabel("PICK TIME").selectOption("10");
   await page.getByRole("button", { name: "Randomize" }).click();
   const savedLocalNames = await playerNames(page);
   await checkColorMenuDismissal(page);
   await capture(page, "02-local-setup-mobile.png");
+  await assertNoMapCameraControls(page, "Local setup/config overlay hides map camera controls.");
   await closeActiveSetup(page);
 
   await page.getByRole("button", { name: "Local" }).click();
@@ -1157,7 +1187,9 @@ async function runReadOnlyVisibilityChecks(page) {
   await page.waitForSelector('.app-shell[data-app-phase="gameMap"]');
   await capture(page, "13b-read-only-visibility-mobile.png");
   assert((await page.locator('[data-troop-marker="shire"]').count()) === 1, "Read-only map shows own territory troop total.");
-  assert((await page.locator('[data-troop-marker="bree"]').count()) === 1, "Read-only map shows connected opponent troop total.");
+  assert((await page.locator('[data-troop-marker="grey-havens"]').count()) === 1, "Read-only map shows Grey Havens as a connected opponent troop total.");
+  assert((await page.locator('[data-troop-marker="bree"]').count()) === 1, "Read-only map shows Bree as a connected opponent troop total.");
+  assert((await page.locator('[data-troop-marker="minhiriath"]').count()) === 1, "Read-only map shows Minhiriath as a connected opponent troop total.");
   assert((await page.locator('[data-troop-marker="nurn"]').count()) === 0, "Read-only map hides distant opponent troop total.");
   await clickTerritory(page, "shire");
   assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Read-only map shows own territory breakdown.");
@@ -1234,12 +1266,14 @@ function readOnlyVisibilityGameState(territoryIds) {
         opponent: {
           marker: { heavy: 1 / 3, cavalry: 1 / 3, elite: 1 / 3 },
           buildSubmitted: true,
-          baseTroops: { heavy: 4, cavalry: 2, elite: 0, leader: 0 },
+          baseTroops: { heavy: 6, cavalry: 4, elite: 0, leader: 0 },
           inheritedTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
           ready: true,
           randomCompleted: false,
           territories: {
+            "grey-havens": { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
             bree: { heavy: 3, cavalry: 0, elite: 0, leader: 0 },
+            minhiriath: { heavy: 1, cavalry: 1, elite: 0, leader: 0 },
             nurn: { heavy: 1, cavalry: 2, elite: 0, leader: 0 },
           },
         },
@@ -1289,6 +1323,7 @@ async function runSyncEntryChecks(page) {
   await page.getByRole("button", { name: "Host" }).click();
   await page.waitForSelector(".qr-code svg", { timeout: 10000 });
   await capture(page, "14-sync-host-lobby-mobile.png");
+  await assertNoMapCameraControls(page, "Sync setup/config overlay hides map camera controls.");
   await assertBelow(page, page.locator(".qr-code"), page.getByRole("button", { name: "Scan" }), "Sync scan sits below the host QR.");
   await assertBelow(page, page.locator(".player-list"), page.getByRole("button", { name: "Randomize" }), "Sync randomize sits below player names.");
   assert((await page.locator(".player-row").count()) === 1, "Host lobby starts with the host player.");
@@ -1351,6 +1386,7 @@ async function runSyncReadyPageChecks(browser) {
   await assertTopBarFullWidth(host, ".game-top-bar", "Sync ready page top bar spans the screen.");
   assert((await host.locator(".game-top-player span").count()) === 0, "Sync ready top bar shows name only.");
   assert((await host.locator(".ready-column").count()) === 2, "Sync ready page has two columns.");
+  await assertReadyColumnHeadersLeftAligned(host);
   assert((await host.locator(".ready-player-row .connection-label").count()) === 0, "Sync ready rows do not include row-level status.");
 
   await joiner.waitForSelector(".army-build-modal .army-triangle", { timeout: 15000 });
