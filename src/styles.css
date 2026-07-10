@@ -458,7 +458,20 @@ select {
 
 .player-row.compact-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) minmax(88px, auto) 38px;
+}
+
+.player-row.compact-row > strong {
+  justify-self: start;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-row.compact-row > .icon-button,
+.player-row.compact-row > .icon-button-spacer {
+  justify-self: end;
 }
 
 .player-row > input {
@@ -919,6 +932,7 @@ select {
 }
 
 .connection-label {
+  justify-self: end;
   color: rgba(24, 24, 27, 0.58);
   font-size: 0.78rem;
   font-weight: 760;
@@ -951,6 +965,24 @@ select {
 
 .recovery-slot-list {
   width: 100%;
+}
+
+.recovery-slot-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  justify-content: stretch;
+  padding: 0 12px;
+  font-weight: 760;
+}
+
+.recovery-slot-button > strong {
+  justify-self: start;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .qr-panel {
@@ -1024,7 +1056,7 @@ select {
 }
 
 .draft-sheet {
-  width: min(244px, calc(100vw - 144px));
+  width: min(320px, calc(100vw - 32px));
   height: 132px;
   align-content: center;
   gap: 10px;
@@ -1161,6 +1193,10 @@ select {
 
   .player-row .icon-button-spacer {
     width: 34px;
+  }
+
+  .player-row.compact-row {
+    grid-template-columns: auto minmax(0, 1fr) minmax(88px, auto) 34px;
   }
 
   .player-row input {

@@ -166,6 +166,7 @@ Sync host pause is a synchronization reset:
 - Sync pause includes connected, disconnected, and reconnecting player status.
 - Sync host pause always includes a recovery QR and scan button for disconnected-player recovery.
 - Sync non-host pause never includes a QR placeholder or recovery tools. Recovery is coordinated through the host because the host is the source of truth.
+- Pause and recovery rows use a compact aligned rhythm: color dot, left-aligned player name, right-aligned connection status when shown, then the far-right trash/action slot or an empty spacer.
 - The host can remove players while paused.
 
 In both modes, removing a player during draft clears that player's territories and returns them to the remaining territory pool. If fewer than 2 players remain, the game ends and returns to home.
@@ -291,6 +292,7 @@ Reusable map modes for this milestone:
 - Draft inactive player or non-owning sync device: pan and zoom; no valid pick action.
 - On touch devices, a quick one-finger pan may coast briefly after release. Pinch zoom, mouse drag, and wheel input stop normally, and any new map action interrupts the coast immediately.
 - Confirmation popup: map remains visible; pending pick is confirmed, canceled by the bottom sheet, canceled by tapping the map background, or replaced by tapping another remaining territory.
+- Camera controls hide while any popup, bottom sheet, or modal covers the map, including confirmation, result notification, pause, scanner, handoff, reconnect, and confirmation dialogs.
 - Draft ownership map: pan and zoom; no selection.
 
 The map renderer should continue using generated map data, shared SVG coordinates, static ink, territory fill paths, hit targets, and territory focus bounds. Draft ownership coloring should replace the old sandbox skin picker behavior.

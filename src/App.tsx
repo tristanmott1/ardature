@@ -303,7 +303,10 @@ function App() {
     isRestartGamePromptOpen ||
     game.phase === "paused" ||
     showAllocationHandoff ||
-    showAllocationWaiting
+    showAllocationWaiting ||
+    canShowConfirm ||
+    Boolean(blockingResultTerritory && blockingResultPlayer) ||
+    Boolean(noticeTerritory && noticePlayer)
   );
 
   useEffect(() => {
@@ -1780,10 +1783,9 @@ function SyncEntryPanel({
       {isRecovery ? (
         <div className="recovery-slot-list">
           {recoverySlots.map((slot) => (
-            <button className="secondary icon-text-button wide-button" type="button" key={slot.id} onClick={() => onChooseRecoveryPlayer(slot)}>
-              <Users size={18} />
+            <button className="secondary recovery-slot-button wide-button" type="button" key={slot.id} onClick={() => onChooseRecoveryPlayer(slot)}>
               <span className="player-dot" style={{ background: colorCss(slot.color) }} />
-              {slot.name}
+              <strong>{slot.name}</strong>
             </button>
           ))}
         </div>
@@ -2426,13 +2428,17 @@ function PausePanel({
               <span className="player-dot" style={{ background: colorCss(player.color) }} />
               <strong>{player.name}</strong>
               {mode === "sync" ? <span className="connection-label">{player.connectionStatus}</span> : null}
-              {canRemove ? (
+              {canRemove || mode === "sync" ? (
                 player.id === localPlayerId ? (
                   <span className="icon-button-spacer" aria-hidden="true" />
                 ) : (
-                  <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
-                    <Trash2 size={16} />
-                  </button>
+                  canRemove ? (
+                    <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
+                      <Trash2 size={16} />
+                    </button>
+                  ) : (
+                    <span className="icon-button-spacer" aria-hidden="true" />
+                  )
                 )
               ) : null}
             </article>

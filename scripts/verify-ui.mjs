@@ -538,6 +538,40 @@ async function assertTopBarFullWidth(page, selector, message) {
   assert(bar && viewport && bar.x <= 1 && bar.width >= viewport.width - 2, message);
 }
 
+async function assertCompactPlayerRowsAligned(page, selector, message) {
+  const rows = await page.locator(selector).evaluateAll((elements) => elements.map((row) => {
+    const dot = row.querySelector(".player-dot")?.getBoundingClientRect();
+    const name = row.querySelector("strong")?.getBoundingClientRect();
+    const status = row.querySelector(".connection-label")?.getBoundingClientRect();
+    const action = row.querySelector(".icon-button, .icon-button-spacer")?.getBoundingClientRect();
+
+    return dot && name && status && action
+      ? {
+          actionRight: action.right,
+          actionLeft: action.left,
+          dotRight: dot.right,
+          nameLeft: name.left,
+          rowRight: row.getBoundingClientRect().right,
+          statusLeft: status.left,
+          statusRight: status.right,
+        }
+      : null;
+  }));
+  const completeRows = rows.filter(Boolean);
+
+  assert(completeRows.length >= 2, `${message}: expected at least two complete rows.`);
+  for (const row of completeRows) {
+    assert(row.nameLeft >= row.dotRight + 4, `${message}: names sit immediately to the right of colors.`);
+    assert(row.statusRight <= row.actionLeft - 4, `${message}: statuses sit to the left of the action slot.`);
+    assert(row.actionRight >= row.rowRight - 8, `${message}: action slots sit on the far right.`);
+  }
+
+  const nameLefts = completeRows.map((row) => row.nameLeft);
+  const statusRights = completeRows.map((row) => row.statusRight);
+  assert(Math.max(...nameLefts) - Math.min(...nameLefts) < 1, `${message}: names are left-aligned.`);
+  assert(Math.max(...statusRights) - Math.min(...statusRights) < 1, `${message}: statuses are right-aligned.`);
+}
+
 async function checkColorMenuDismissal(page) {
   const firstColorButton = page.locator(".player-row").nth(0).getByRole("button", { name: /color/i });
   const secondColorButton = page.locator(".player-row").nth(1).getByRole("button", { name: /color/i });
@@ -742,11 +776,11 @@ async function runLocalDraftChecks(page) {
   const confirmBox = await confirmDialog.boundingBox();
   const viewport = page.viewportSize();
   assert(confirmBox && viewport && confirmBox.y > viewport.height * 0.55, "Confirm sheet appears at the bottom.");
-  assert(confirmBox && viewport && confirmBox.width <= viewport.width - 140, "Confirm sheet leaves room for map camera controls.");
+  assert(confirmBox && viewport && confirmBox.width > 280 && confirmBox.width <= viewport.width - 32, "Confirm sheet uses the wider bottom-sheet layout.");
   assert((await page.locator(".game-top-bar").count()) === 1, "Draft top bar stays visible during territory confirmation.");
   assertViewBoxEquals(await viewBox(page), parseViewBox(beforeDefaultSelection), "Default-off auto-focus leaves the viewBox unchanged.");
-  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Confirm sheet keeps the return-to-map control available.");
-  assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Confirm sheet keeps the auto-focus control available.");
+  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 0, "Confirm sheet hides the return-to-map control.");
+  assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 0, "Confirm sheet hides the auto-focus control.");
   assert(await confirmDialog.getByRole("heading", { name: "Shire" }).isVisible(), "Confirm modal shows the territory name.");
   assert((await confirmDialog.locator(".territory-preview-shape").count()) === 0, "Confirm sheet has no territory preview.");
   assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Pending territory is selected on the map.");
@@ -756,6 +790,8 @@ async function runLocalDraftChecks(page) {
   await clickMapBackground(page);
   await confirmDialog.waitFor({ state: "detached" });
   assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 0, "Tapping the map background cancels the pending pick.");
+  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Return-to-map control returns after confirm cancellation.");
+  assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Auto-focus control returns after confirm cancellation.");
 
   await page.getByRole("button", { name: "Enable automatic focus" }).click();
   assert((await page.getByRole("button", { name: "Disable automatic focus" }).count()) === 1, "Auto-focus can be enabled.");
@@ -784,6 +820,8 @@ async function runLocalDraftChecks(page) {
   const resultBox = await resultDialog.boundingBox();
   await capture(page, "07-local-draft-result-mobile.png");
   assert((await page.locator(".game-top-bar").count()) === 1, "Draft top bar stays visible during draft notification.");
+  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 0, "Draft result sheet hides the return-to-map control.");
+  assert((await page.getByRole("button", { name: "Disable automatic focus" }).count()) === 0, "Draft result sheet hides the auto-focus control.");
   assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.width - resultBox.width) < 1, "Result sheet matches confirm sheet width.");
   assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.height - resultBox.height) < 1, "Result sheet matches confirm sheet height.");
   assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
@@ -791,6 +829,8 @@ async function runLocalDraftChecks(page) {
   await page.getByText("0 / 21").waitFor();
   await waitForViewBox(page, homeViewport);
   assertViewBoxEquals(await viewBox(page), homeViewport, "Local result dismissal returns to the home viewport.");
+  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Return-to-map control returns after draft notification.");
+  assert((await page.getByRole("button", { name: "Disable automatic focus" }).count()) === 1, "Auto-focus control returns after draft notification.");
 
   await clickTerritory(page, "shire");
   await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
@@ -873,11 +913,13 @@ async function runDesktopMapInteractionChecks(page) {
   await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
   assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Real desktop click selects a territory.");
   assertViewBoxEquals(await viewBox(page), parseViewBox(beforeClickViewBox), "Default-off auto-focus keeps desktop click from moving the camera.");
-  assertBoxEquals(await page.getByRole("button", { name: "Return to map view" }).boundingBox(), returnButtonBox, "Return-to-map control stays anchored after desktop click.");
-  assertBoxEquals(await page.getByRole("button", { name: "Enable automatic focus" }).boundingBox(), focusButtonBox, "Auto-focus control stays anchored after desktop click.");
+  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 0, "Desktop confirm sheet hides the return-to-map control.");
+  assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 0, "Desktop confirm sheet hides the auto-focus control.");
 
   await page.getByRole("button", { name: "Cancel pick" }).click();
   await page.getByRole("dialog", { name: "Confirm territory" }).waitFor({ state: "detached" });
+  assertBoxEquals(await page.getByRole("button", { name: "Return to map view" }).boundingBox(), returnButtonBox, "Return-to-map control returns anchored after desktop cancel.");
+  assertBoxEquals(await page.getByRole("button", { name: "Enable automatic focus" }).boundingBox(), focusButtonBox, "Auto-focus control returns anchored after desktop cancel.");
 
   const beforeDragViewBox = await viewBox(page);
   await page.mouse.move(shireScreen.x, shireScreen.y);
@@ -1353,6 +1395,7 @@ async function runSyncRecoveryChecks(browser) {
   await host.getByRole("dialog", { name: "Paused" }).waitFor();
   await capture(host, "18-sync-pause-recovery-qr-mobile.png");
   assert((await host.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").count()) === 1, "Sync host pause always shows a recovery QR.");
+  await assertCompactPlayerRowsAligned(host, ".pause-modal .player-row.compact-row", "Sync pause player rows align names, statuses, and actions");
   await joiner.getByRole("dialog", { name: "Paused" }).waitFor({ timeout: 15000 });
   await capture(joiner, "18b-sync-joiner-pause-no-qr-mobile.png");
   assert((await joiner.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").count()) === 0, "Sync joiner pause does not show a recovery QR.");
@@ -1371,6 +1414,7 @@ async function runSyncRecoveryChecks(browser) {
   await joiner.close();
   await host.locator('.pause-modal [data-player-status="disconnected"]').waitFor({ timeout: 20000 });
   await capture(host, "20-sync-pause-disconnected-slot-mobile.png");
+  await assertCompactPlayerRowsAligned(host, ".pause-modal .player-row.compact-row", "Disconnected sync pause rows keep names and statuses aligned");
   await host.reload();
   await host.getByRole("dialog", { name: "Paused" }).waitFor({ timeout: 15000 });
   await host.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").waitFor({ timeout: 15000 });
@@ -1387,6 +1431,16 @@ async function runSyncRecoveryChecks(browser) {
   const recoverySlotButton = recoveryJoiner.getByRole("button", { name: "Boromir" });
   await recoverySlotButton.waitFor({ timeout: 15000 });
   assert((await recoverySlotButton.locator(".player-dot").count()) === 1, "Recovery slot picker shows the disconnected player's color.");
+  const recoverySlotLayout = await recoverySlotButton.evaluate((button) => {
+    const dot = button.querySelector(".player-dot")?.getBoundingClientRect();
+    const name = button.querySelector("strong")?.getBoundingClientRect();
+
+    return dot && name
+      ? { dotRight: dot.right, nameLeft: name.left, svgCount: button.querySelectorAll("svg").length }
+      : null;
+  });
+  assert(recoverySlotLayout && recoverySlotLayout.svgCount === 0, "Recovery slot picker uses color plus name without an extra leading icon.");
+  assert(recoverySlotLayout.nameLeft >= recoverySlotLayout.dotRight + 4, "Recovery slot name is left-aligned just to the right of the color.");
   await capture(recoveryJoiner, "22-sync-recovery-slot-picker-mobile.png");
   await recoverySlotButton.click();
   await recoveryJoiner.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
