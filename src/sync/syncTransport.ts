@@ -630,13 +630,17 @@ export class SyncHostTransport {
   }
 
   broadcast(message: SyncWireMessage) {
-    this.peers.forEach((peer) => sendChannelMessage(peer.channel, message));
+    this.peers.forEach((peer) => {
+      if (!peer.closedNotified && peer.status === "connected") {
+        sendChannelMessage(peer.channel, message);
+      }
+    });
   }
 
   sendToPeer(playerId: string, message: SyncWireMessage) {
     const peer = this.peers.get(playerId);
 
-    if (peer) {
+    if (peer && !peer.closedNotified && peer.status === "connected") {
       sendChannelMessage(peer.channel, message);
     }
   }
@@ -808,6 +812,8 @@ export class SyncHostTransport {
     window.clearInterval(peer.heartbeatInterval);
     window.clearTimeout(peer.reconnectTimer);
     peer.reconnectTimer = 0;
+    peer.channel.close();
+    peer.peerConnection.close();
     this.callbacks.onPeerStatus?.(playerId, "gone");
     this.callbacks.onPeerClosed?.(playerId);
   }
