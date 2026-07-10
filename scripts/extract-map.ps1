@@ -152,6 +152,12 @@ public static class MapExtractor
         public List<List<PointD>> Paths;
     }
 
+    class PreviewBorderLayers
+    {
+        public List<string> TerritoryPaths = new List<string>();
+        public List<string> RegionPaths = new List<string>();
+    }
+
     class BorderBuilder
     {
         public string Id;
@@ -166,6 +172,15 @@ public static class MapExtractor
         public string Fill;
         public bool[] Mask;
         public List<List<PointD>> Paths;
+    }
+
+    class ShipRouteLayer
+    {
+        public string Stroke;
+        public double Opacity;
+        public double StrokeWidth;
+        public string DashArray;
+        public List<string> Paths;
     }
 
     class BoundsD
@@ -287,6 +302,17 @@ public static class MapExtractor
     const double ShadeContrastThreshold = 0.01;
     const double ShadeUniquenessThreshold = 0.0105;
     const double TerritoryFillBleedStrokeWidth = 12;
+    const string BorderStroke = "#111111";
+    const double BorderOpacity = 0.72;
+    const double TerritoryBorderStrokeWidth = 10;
+    const double RegionBorderStrokeWidth = 20;
+    const int ExpectedShipRouteCount = 4;
+    const int ShipRouteMinComponentArea = 20;
+    const double ShipRouteSampleSpacing = 8;
+    const string ShipRouteStroke = "#111111";
+    const double ShipRouteOpacity = 0.72;
+    const double ShipRouteStrokeWidth = 10;
+    const string ShipRouteDashArray = "42 40";
     const double AppFocusPadding = 500;
     const double AppDisplayMargin = 1500;
 
@@ -456,11 +482,19 @@ public static class MapExtractor
                 blueDominance,
                 landmarkMaxBrightness);
             ValidateLandmarks(landmarks, width * mapScale, height * mapScale);
+            ShipRouteLayer shipRoutes = ExtractShipRoutes(
+                landmarkOutlineImage,
+                width,
+                height,
+                mapScale,
+                minRed,
+                redDominance);
+            ValidateShipRoutes(shipRoutes);
 
-            WriteMapJson(outputJson, inputImage, territoryKey, landmarkImage, landmarkOutlineImage, width, height, mapScale, territories, borders, landmarks, keyEntries);
+            WriteMapJson(outputJson, inputImage, territoryKey, landmarkImage, landmarkOutlineImage, width, height, mapScale, territories, borders, landmarks, shipRoutes, keyEntries);
             WriteLandmarkSvg(landmarkSvg, width, height, mapScale, landmarks);
-            WriteTerritoryThemeSvgs(previewDirectory, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks);
-            WriteAppData(appData, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks);
+            WriteTerritoryThemeSvgs(previewDirectory, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks, shipRoutes);
+            WriteAppData(appData, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks, shipRoutes);
             WriteAppConnections(appConnections, territories);
 
             Console.WriteLine("Image: " + width.ToString(CultureInfo.InvariantCulture) + "x" + height.ToString(CultureInfo.InvariantCulture));
@@ -470,6 +504,7 @@ public static class MapExtractor
             Console.WriteLine("Playable territories: " + territories.Values.Count(t => t.Playable).ToString(CultureInfo.InvariantCulture));
             Console.WriteLine("Background territories: " + territories.Values.Count(t => !t.Playable).ToString(CultureInfo.InvariantCulture));
             Console.WriteLine("Borders: " + borders.Count.ToString(CultureInfo.InvariantCulture));
+            Console.WriteLine("Ship routes: " + shipRoutes.Paths.Count.ToString(CultureInfo.InvariantCulture));
             Console.WriteLine("Map JSON: " + outputJson);
             Console.WriteLine("App data: " + appData);
             Console.WriteLine("App connections: " + appConnections);
@@ -2211,7 +2246,7 @@ public static class MapExtractor
         return 2000;
     }
 
-    static void WriteMapJson(string outputJson, string inputImage, string territoryKey, string landmarkImage, string landmarkOutlineImage, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks, Dictionary<string, TerritoryKeyEntry> keyEntries)
+    static void WriteMapJson(string outputJson, string inputImage, string territoryKey, string landmarkImage, string landmarkOutlineImage, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks, ShipRouteLayer shipRoutes, Dictionary<string, TerritoryKeyEntry> keyEntries)
     {
         int mapWidth = width * mapScale;
         int mapHeight = height * mapScale;
@@ -2256,6 +2291,13 @@ public static class MapExtractor
         builder.AppendLine("    \"name\": " + JsonString(landmarks.Name) + ",");
         builder.AppendLine("    \"fill\": " + JsonString(landmarks.Fill) + ",");
         builder.AppendLine("    \"paths\": " + PathsJson(landmarks.Paths));
+        builder.AppendLine("  },");
+        builder.AppendLine("  \"shipRoutes\": {");
+        builder.AppendLine("    \"stroke\": " + JsonString(shipRoutes.Stroke) + ",");
+        builder.AppendLine("    \"opacity\": " + PointNumber(shipRoutes.Opacity) + ",");
+        builder.AppendLine("    \"strokeWidth\": " + PointNumber(shipRoutes.StrokeWidth) + ",");
+        builder.AppendLine("    \"dashArray\": " + JsonString(shipRoutes.DashArray) + ",");
+        builder.AppendLine("    \"paths\": " + StringArrayJson(shipRoutes.Paths.ToArray()));
         builder.AppendLine("  }");
         builder.AppendLine("}");
 
@@ -2406,6 +2448,168 @@ public static class MapExtractor
             Mask = mask,
             Paths = paths
         };
+    }
+
+    static ShipRouteLayer ExtractShipRoutes(
+        string landmarkOutlineImage,
+        int width,
+        int height,
+        int mapScale,
+        int minRed,
+        int redDominance)
+    {
+        using (var outlineBitmap = new Bitmap(landmarkOutlineImage))
+        {
+            if (outlineBitmap.Width != width || outlineBitmap.Height != height)
+            {
+                throw new InvalidOperationException("Landmark outline image size must match the territory boundary image.");
+            }
+
+            bool[] red = DetectRed(outlineBitmap, minRed, redDominance);
+            bool[] barrier = new bool[red.Length];
+            for (int i = 0; i < barrier.Length; i++)
+            {
+                barrier[i] = !red[i];
+            }
+
+            // Label only red guide strokes; tiny JPEG specks are ignored.
+            ComponentResult initialComponents = LabelComponents(barrier, width, height);
+            RemoveTinyComponents(initialComponents.Labels, initialComponents.Areas, ShipRouteMinComponentArea);
+            ComponentResult components = RelabelFromLabels(initialComponents.Labels, width, height);
+            List<ComponentStats> stats = CalculateComponentStats(components.Labels, components.Areas, width)
+                .OrderBy(stat => stat.CentroidY)
+                .ThenBy(stat => stat.CentroidX)
+                .ToList();
+
+            if (stats.Count != ExpectedShipRouteCount)
+            {
+                throw new InvalidOperationException("Expected " + ExpectedShipRouteCount.ToString(CultureInfo.InvariantCulture) + " ship route guide strokes, found " + stats.Count.ToString(CultureInfo.InvariantCulture) + ".");
+            }
+
+            List<string> paths = new List<string>();
+            foreach (ComponentStats stat in stats)
+            {
+                List<PointI> pixels = CollectComponentPixels(components.Labels, width, stat.Label);
+                List<PointD> samples = BuildShipRouteCenterSamples(pixels);
+                List<PointD> reduced = ReduceShipRouteSamples(samples, ShipRouteSampleSpacing);
+                List<PointD> scaled = reduced
+                    .Select(point => new PointD(point.X * mapScale, point.Y * mapScale))
+                    .ToList();
+                paths.Add(SvgSimpleShipRoutePath(scaled));
+            }
+
+            return new ShipRouteLayer
+            {
+                Stroke = ShipRouteStroke,
+                Opacity = ShipRouteOpacity,
+                StrokeWidth = ShipRouteStrokeWidth,
+                DashArray = ShipRouteDashArray,
+                Paths = paths
+            };
+        }
+    }
+
+    static List<PointI> CollectComponentPixels(int[] labels, int width, int label)
+    {
+        List<PointI> pixels = new List<PointI>();
+
+        for (int i = 0; i < labels.Length; i++)
+        {
+            if (labels[i] == label)
+            {
+                pixels.Add(new PointI(i % width, i / width));
+            }
+        }
+
+        return pixels;
+    }
+
+    static List<PointD> BuildShipRouteCenterSamples(List<PointI> pixels)
+    {
+        if (pixels.Count == 0)
+        {
+            throw new InvalidOperationException("Ship route guide has no red pixels.");
+        }
+
+        int minX = pixels.Min(point => point.X);
+        int maxX = pixels.Max(point => point.X);
+        int minY = pixels.Min(point => point.Y);
+        int maxY = pixels.Max(point => point.Y);
+        bool useRows = (maxY - minY) >= (maxX - minX);
+        Dictionary<int, List<int>> groups = new Dictionary<int, List<int>>();
+
+        // Average across the stroke width to get a center sample for each row or column.
+        foreach (PointI pixel in pixels)
+        {
+            int axis = useRows ? pixel.Y : pixel.X;
+            int cross = useRows ? pixel.X : pixel.Y;
+            List<int> values;
+            if (!groups.TryGetValue(axis, out values))
+            {
+                values = new List<int>();
+                groups[axis] = values;
+            }
+
+            values.Add(cross);
+        }
+
+        List<PointD> samples = new List<PointD>();
+        foreach (int axis in groups.Keys.OrderBy(value => value))
+        {
+            double cross = groups[axis].Average();
+            samples.Add(useRows
+                ? new PointD(cross, axis)
+                : new PointD(axis, cross));
+        }
+
+        if (samples.Count < 2)
+        {
+            throw new InvalidOperationException("Ship route guide did not produce enough center samples.");
+        }
+
+        return samples;
+    }
+
+    static List<PointD> ReduceShipRouteSamples(List<PointD> samples, double spacing)
+    {
+        List<PointD> result = new List<PointD>();
+        result.Add(samples[0]);
+
+        // Keep points far enough apart before fitting the single route bend.
+        for (int i = 1; i < samples.Count - 1; i++)
+        {
+            PointD last = result[result.Count - 1];
+            PointD point = samples[i];
+            if (Math.Sqrt(DistanceSquared(last.X, last.Y, point.X, point.Y)) >= spacing)
+            {
+                result.Add(point);
+            }
+        }
+
+        result.Add(samples[samples.Count - 1]);
+
+        if (result.Count < 2)
+        {
+            throw new InvalidOperationException("Ship route guide did not produce enough reduced samples.");
+        }
+
+        return result;
+    }
+
+    static void ValidateShipRoutes(ShipRouteLayer shipRoutes)
+    {
+        if (shipRoutes.Paths.Count != ExpectedShipRouteCount)
+        {
+            throw new InvalidOperationException("Expected " + ExpectedShipRouteCount.ToString(CultureInfo.InvariantCulture) + " ship route paths, found " + shipRoutes.Paths.Count.ToString(CultureInfo.InvariantCulture) + ".");
+        }
+
+        foreach (string path in shipRoutes.Paths)
+        {
+            if (String.IsNullOrWhiteSpace(path) || path.Contains("NaN") || path.Contains("Infinity"))
+            {
+                throw new InvalidOperationException("Ship route path is invalid.");
+            }
+        }
     }
 
     static bool[] BuildOutlineMask(bool[] outline, int width, int height, string name)
@@ -2575,7 +2779,7 @@ public static class MapExtractor
         return TraceBorderPaths(segments);
     }
 
-    static void WriteTerritoryThemeSvgs(string previewDirectory, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks)
+    static void WriteTerritoryThemeSvgs(string previewDirectory, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks, ShipRouteLayer shipRoutes)
     {
         Dictionary<string, double> shadeValues = BuildTerritoryShadeValues(territories, borders, width, height);
         DeleteStaleTerritoriesPreview(previewDirectory);
@@ -2583,7 +2787,7 @@ public static class MapExtractor
         foreach (PreviewTheme theme in PreviewThemes)
         {
             string outputSvg = Path.Combine(previewDirectory, "territories-" + theme.Id + ".svg");
-            WriteTerritoriesSvg(outputSvg, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks, theme, shadeValues);
+            WriteTerritoriesSvg(outputSvg, previewBackgroundColor, width, height, mapScale, territories, borders, landmarks, shipRoutes, theme, shadeValues);
         }
     }
 
@@ -2596,13 +2800,13 @@ public static class MapExtractor
         }
     }
 
-    static void WriteAppData(string outputTs, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks)
+    static void WriteAppData(string outputTs, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks, ShipRouteLayer shipRoutes)
     {
         double mapWidth = (width * mapScale) + (AppDisplayMargin * 2);
         double mapHeight = (height * mapScale) + (AppDisplayMargin * 2);
         Dictionary<string, double> shadeValues = BuildTerritoryShadeValues(territories, borders, width, height);
         Dictionary<string, BorderInfo> borderById = borders.ToDictionary(border => border.Id);
-        List<string> borderPaths = BuildPreviewBorderPathStrings(territories, borders, landmarks.Mask, width, height, mapScale, AppDisplayMargin, AppDisplayMargin);
+        PreviewBorderLayers borderLayers = BuildPreviewBorderLayers(territories, borders, landmarks.Mask, width, height, mapScale, AppDisplayMargin, AppDisplayMargin);
         StringBuilder builder = new StringBuilder();
 
         builder.AppendLine("import type { GeneratedMapData } from \"../mapTypes\";");
@@ -2628,10 +2832,17 @@ public static class MapExtractor
 
         builder.AppendLine("  ],");
         builder.AppendLine("  staticInk: {");
-        builder.AppendLine("    borderPaths: " + StringArrayTs(borderPaths.ToArray(), "      ", "    ") + ",");
-        builder.AppendLine("    borderStroke: \"#111111\",");
-        builder.AppendLine("    borderOpacity: 0.72,");
-        builder.AppendLine("    borderStrokeWidth: 10,");
+        builder.AppendLine("    territoryBorderPaths: " + StringArrayTs(borderLayers.TerritoryPaths.ToArray(), "      ", "    ") + ",");
+        builder.AppendLine("    regionBorderPaths: " + StringArrayTs(borderLayers.RegionPaths.ToArray(), "      ", "    ") + ",");
+        builder.AppendLine("    borderStroke: " + JsonString(BorderStroke) + ",");
+        builder.AppendLine("    borderOpacity: " + PointNumber(BorderOpacity) + ",");
+        builder.AppendLine("    territoryBorderStrokeWidth: " + PointNumber(TerritoryBorderStrokeWidth) + ",");
+        builder.AppendLine("    regionBorderStrokeWidth: " + PointNumber(RegionBorderStrokeWidth) + ",");
+        builder.AppendLine("    shipRoutePaths: " + StringArrayTs(OffsetSvgPaths(shipRoutes.Paths, AppDisplayMargin, AppDisplayMargin).ToArray(), "      ", "    ") + ",");
+        builder.AppendLine("    shipRouteStroke: " + JsonString(shipRoutes.Stroke) + ",");
+        builder.AppendLine("    shipRouteOpacity: " + PointNumber(shipRoutes.Opacity) + ",");
+        builder.AppendLine("    shipRouteStrokeWidth: " + PointNumber(shipRoutes.StrokeWidth) + ",");
+        builder.AppendLine("    shipRouteDashArray: " + JsonString(shipRoutes.DashArray) + ",");
         builder.AppendLine("    landmarkPath: " + JsonString(SvgCompoundPath(OffsetPaths(landmarks.Paths, AppDisplayMargin, AppDisplayMargin))) + ",");
         builder.AppendLine("    landmarkFill: " + JsonString(landmarks.Fill) + ",");
         builder.AppendLine("    landmarkOpacity: 0.82");
@@ -2775,9 +2986,9 @@ public static class MapExtractor
             " }";
     }
 
-    static List<string> BuildPreviewBorderPathStrings(Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, bool[] hiddenMask, int width, int height, int mapScale, double offsetX, double offsetY)
+    static PreviewBorderLayers BuildPreviewBorderLayers(Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, bool[] hiddenMask, int width, int height, int mapScale, double offsetX, double offsetY)
     {
-        List<string> result = new List<string>();
+        PreviewBorderLayers result = new PreviewBorderLayers();
 
         foreach (BorderInfo border in borders.OrderBy(border => border.Id, StringComparer.Ordinal))
         {
@@ -2786,11 +2997,14 @@ public static class MapExtractor
                 continue;
             }
 
+            List<string> target = IsRegionBorder(border, territories)
+                ? result.RegionPaths
+                : result.TerritoryPaths;
             foreach (List<PointD> path in SplitVisibleBorderPaths(border.Paths, hiddenMask, width, height, mapScale))
             {
                 if (path.Count >= 2)
                 {
-                    result.Add(SvgPath(OffsetPath(path, offsetX, offsetY), false));
+                    target.Add(SvgPath(OffsetPath(path, offsetX, offsetY), false));
                 }
             }
         }
@@ -2818,7 +3032,7 @@ public static class MapExtractor
         return builder.ToString();
     }
 
-    static void WriteTerritoriesSvg(string outputSvg, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks, PreviewTheme theme, Dictionary<string, double> shadeValues)
+    static void WriteTerritoriesSvg(string outputSvg, string previewBackgroundColor, int width, int height, int mapScale, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, LandmarkLayer landmarks, ShipRouteLayer shipRoutes, PreviewTheme theme, Dictionary<string, double> shadeValues)
     {
         double mapWidth = (width * mapScale) + (AppDisplayMargin * 2);
         double mapHeight = (height * mapScale) + (AppDisplayMargin * 2);
@@ -2843,7 +3057,10 @@ public static class MapExtractor
             }
         }
 
-        WritePreviewBorderStrokes(builder, territories, borders, landmarks.Mask, width, height, mapScale, AppDisplayMargin, AppDisplayMargin);
+        PreviewBorderLayers borderLayers = BuildPreviewBorderLayers(territories, borders, landmarks.Mask, width, height, mapScale, AppDisplayMargin, AppDisplayMargin);
+        WritePreviewBorderStrokes(builder, borderLayers.TerritoryPaths, TerritoryBorderStrokeWidth);
+        WritePreviewBorderStrokes(builder, borderLayers.RegionPaths, RegionBorderStrokeWidth);
+        WriteShipRouteStrokes(builder, OffsetSvgPaths(shipRoutes.Paths, AppDisplayMargin, AppDisplayMargin), shipRoutes);
         builder.AppendLine("  <path d=\"" + SvgCompoundPath(OffsetPaths(landmarks.Paths, AppDisplayMargin, AppDisplayMargin)) + "\" fill=\"" + landmarks.Fill + "\" fill-opacity=\"0.82\" fill-rule=\"evenodd\"/>");
         builder.AppendLine("</svg>");
         File.WriteAllText(outputSvg, builder.ToString(), new UTF8Encoding(false));
@@ -2971,23 +3188,27 @@ public static class MapExtractor
         }
     }
 
-    static void WritePreviewBorderStrokes(StringBuilder builder, Dictionary<string, TerritoryInfo> territories, List<BorderInfo> borders, bool[] hiddenMask, int width, int height, int mapScale, double offsetX, double offsetY)
+    static void WritePreviewBorderStrokes(StringBuilder builder, List<string> paths, double strokeWidth)
     {
-        foreach (BorderInfo border in borders.OrderBy(border => border.Id, StringComparer.Ordinal))
+        foreach (string path in paths)
         {
-            if (!ShouldDrawPreviewBorder(border, territories))
-            {
-                continue;
-            }
-
-            foreach (List<PointD> path in SplitVisibleBorderPaths(border.Paths, hiddenMask, width, height, mapScale))
-            {
-                if (path.Count >= 2)
-                {
-                    builder.AppendLine("  <path d=\"" + SvgPath(OffsetPath(path, offsetX, offsetY), false) + "\" fill=\"none\" stroke=\"#111111\" stroke-opacity=\"0.72\" stroke-width=\"10\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
-                }
-            }
+            builder.AppendLine("  <path d=\"" + path + "\" fill=\"none\" stroke=\"" + BorderStroke + "\" stroke-opacity=\"" + PointNumber(BorderOpacity) + "\" stroke-width=\"" + PointNumber(strokeWidth) + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
         }
+    }
+
+    static void WriteShipRouteStrokes(StringBuilder builder, List<string> paths, ShipRouteLayer shipRoutes)
+    {
+        foreach (string path in paths)
+        {
+            builder.AppendLine("  <path class=\"ship-route-ink\" d=\"" + path + "\" fill=\"none\" stroke=\"" + shipRoutes.Stroke + "\" stroke-opacity=\"" + PointNumber(shipRoutes.Opacity) + "\" stroke-width=\"" + PointNumber(shipRoutes.StrokeWidth) + "\" stroke-dasharray=\"" + shipRoutes.DashArray + "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>");
+        }
+    }
+
+    static bool IsRegionBorder(BorderInfo border, Dictionary<string, TerritoryInfo> territories)
+    {
+        TerritoryInfo first = territories[border.TerritoryIds[0]];
+        TerritoryInfo second = territories[border.TerritoryIds[1]];
+        return first.RegionId != second.RegionId;
     }
 
     static bool ShouldDrawPreviewBorder(BorderInfo border, Dictionary<string, TerritoryInfo> territories)
@@ -3243,6 +3464,25 @@ public static class MapExtractor
         return result;
     }
 
+    static List<string> OffsetSvgPaths(List<string> paths, double offsetX, double offsetY)
+    {
+        return paths
+            .Select(path => OffsetSvgPath(path, offsetX, offsetY))
+            .ToList();
+    }
+
+    static string OffsetSvgPath(string path, double offsetX, double offsetY)
+    {
+        int index = 0;
+        return Regex.Replace(path, @"-?\d+(?:\.\d+)?", match =>
+        {
+            double value = Double.Parse(match.Value, CultureInfo.InvariantCulture);
+            double offset = index % 2 == 0 ? offsetX : offsetY;
+            index++;
+            return PointNumber(value + offset);
+        });
+    }
+
     static string SvgPath(List<PointD> points, bool close)
     {
         StringBuilder builder = new StringBuilder();
@@ -3260,6 +3500,77 @@ public static class MapExtractor
         }
 
         return builder.ToString();
+    }
+
+    static string SvgSimpleShipRoutePath(List<PointD> points)
+    {
+        if (points.Count < 2)
+        {
+            throw new InvalidOperationException("A ship route path needs at least two points.");
+        }
+
+        PointD start = points[0];
+        PointD end = points[points.Count - 1];
+        PointD peak = points.Count == 2 ? Midpoint(start, end) : FarthestPointFromLine(points, start, end);
+        double dx = end.X - start.X;
+        double dy = end.Y - start.Y;
+        double lengthSquared = (dx * dx) + (dy * dy);
+        double t = lengthSquared <= 0.000001
+            ? 0.5
+            : (((peak.X - start.X) * dx) + ((peak.Y - start.Y) * dy)) / lengthSquared;
+        t = ClampRange(t, 0.15, 0.85);
+
+        // Solve the quadratic control point so the route passes through the guide peak.
+        double oneMinusT = 1.0 - t;
+        double scale = 2.0 * oneMinusT * t;
+        PointD control = scale <= 0.000001
+            ? Midpoint(start, end)
+            : new PointD(
+                (peak.X - (oneMinusT * oneMinusT * start.X) - (t * t * end.X)) / scale,
+                (peak.Y - (oneMinusT * oneMinusT * start.Y) - (t * t * end.Y)) / scale);
+
+        return "M " + PointNumber(start.X) + " " + PointNumber(start.Y) +
+            " Q " + PointNumber(control.X) + " " + PointNumber(control.Y) +
+            " " + PointNumber(end.X) + " " + PointNumber(end.Y);
+    }
+
+    static PointD FarthestPointFromLine(List<PointD> points, PointD start, PointD end)
+    {
+        PointD result = points[0];
+        double bestDistance = -1;
+
+        for (int i = 0; i < points.Count; i++)
+        {
+            double distance = PerpendicularDistanceSquared(points[i], start, end);
+            if (distance > bestDistance)
+            {
+                bestDistance = distance;
+                result = points[i];
+            }
+        }
+
+        return result;
+    }
+
+    static double PerpendicularDistanceSquared(PointD point, PointD start, PointD end)
+    {
+        double dx = end.X - start.X;
+        double dy = end.Y - start.Y;
+        double lengthSquared = (dx * dx) + (dy * dy);
+        if (lengthSquared <= 0.000001)
+        {
+            return DistanceSquared(point.X, point.Y, start.X, start.Y);
+        }
+
+        double t = (((point.X - start.X) * dx) + ((point.Y - start.Y) * dy)) / lengthSquared;
+        double closestX = start.X + (dx * t);
+        double closestY = start.Y + (dy * t);
+        return DistanceSquared(point.X, point.Y, closestX, closestY);
+    }
+
+    static PointD Midpoint(PointD a, PointD b)
+    {
+        return new PointD((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0);
     }
 
     static string ColorForTheme(PreviewTheme theme, double shadeValue)

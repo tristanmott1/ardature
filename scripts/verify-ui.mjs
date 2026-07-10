@@ -99,12 +99,16 @@ async function runSourceChecks() {
   const mapConnectionsSource = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
   const hitTargetSource = await readFile(new URL("../src/map/components/HitTargetLayer.tsx", import.meta.url), "utf8");
   const mapViewSource = await readFile(new URL("../src/map/components/MapView.tsx", import.meta.url), "utf8");
+  const staticMapInkSource = await readFile(new URL("../src/map/components/StaticMapInk.tsx", import.meta.url), "utf8");
   const territoryFillSource = await readFile(new URL("../src/map/components/TerritoryFillLayer.tsx", import.meta.url), "utf8");
   const mapPreferencesSource = await readFile(new URL("../src/map/mapPreferences.ts", import.meta.url), "utf8");
   const indexSource = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const manifestSource = await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8");
   const serviceWorkerSource = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
+  const mapExtractorSource = await readFile(new URL("../scripts/extract-map.ps1", import.meta.url), "utf8");
   const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+  const territoryPreviewSource = await readFile(new URL("../maps/previews/territories-background.svg", import.meta.url), "utf8");
+  const blueTerritoryPreviewSource = await readFile(new URL("../maps/previews/territories-blue.svg", import.meta.url), "utf8");
   const syncMessagesSource = await readFile(new URL("../src/sync/syncMessages.ts", import.meta.url), "utf8");
   const syncTransportSource = await readFile(new URL("../src/sync/syncTransport.ts", import.meta.url), "utf8");
   const mapWidth = generatedNumber(mapDataSource, "width");
@@ -114,8 +118,24 @@ async function runSourceChecks() {
   const homeViewport = generatedViewport(mapDataSource, "homeViewport");
 
   assert(mapDataSource.includes("satisfies GeneratedMapData"), "Generated map data is typed.");
+  assert(mapDataSource.includes("territoryBorderPaths") && mapDataSource.includes("regionBorderPaths"), "Generated static ink separates territory and regional borders.");
+  assert(mapDataSource.includes("territoryBorderStrokeWidth: 10") && mapDataSource.includes("regionBorderStrokeWidth: 20"), "Generated border layers use distinct stroke widths.");
+  assert(mapDataSource.includes("shipRoutePaths") && mapDataSource.includes('shipRouteDashArray: "42 40"'), "Generated static ink includes dotted ship routes.");
+  assert(mapExtractorSource.includes("return first.RegionId != second.RegionId;"), "Border classification treats background as a region.");
+  assert(mapExtractorSource.includes("ExpectedShipRouteCount = 4") && mapExtractorSource.includes("SvgSimpleShipRoutePath"), "Map extractor derives four simple ship route curves from red guide strokes.");
+  assert(!mapExtractorSource.includes("RegionShadeValues"), "Map themes do not use fixed region shade buckets.");
+  assert(mapExtractorSource.includes("ShadeJitterAmount") && mapExtractorSource.includes("ApplyShadeContrast") && mapExtractorSource.includes("EnforceUniqueShadeValues"), "Territory shades use deterministic variation and adjacency contrast.");
+  assert(staticMapInkSource.indexOf("territoryBorderPaths.map") < staticMapInkSource.indexOf("regionBorderPaths.map"), "Static ink draws regional borders over ordinary territory borders.");
+  assert(staticMapInkSource.indexOf("regionBorderPaths.map") < staticMapInkSource.indexOf("shipRoutePaths.map") && staticMapInkSource.indexOf("shipRoutePaths.map") < staticMapInkSource.indexOf("landmarkPath"), "Static ink draws ship routes between regional borders and landmark ink.");
+  assert(territoryPreviewSource.includes('stroke-width="10"') && territoryPreviewSource.includes('stroke-width="20"'), "Generated previews include both border widths.");
+  assert((territoryPreviewSource.match(/class="ship-route-ink"/g) ?? []).length === 4 && territoryPreviewSource.includes('stroke-dasharray="42 40"'), "Generated previews include four dotted ship route strokes.");
+  const bluePreviewFillColors = new Set([...blueTerritoryPreviewSource.matchAll(/fill="(#[0-9A-Fa-f]{6})" stroke="\1" stroke-width="12"/g)].map((match) => match[1]));
+  const backgroundPreviewFillColors = new Set([...territoryPreviewSource.matchAll(/fill="(#[0-9A-Fa-f]{6})" stroke="\1" stroke-width="12"/g)].map((match) => match[1]));
+  assert(bluePreviewFillColors.size > 6, "Colored previews contain varied territory fill shades.");
+  assert(backgroundPreviewFillColors.size === 1, "Background preview keeps one uniform tan fill.");
   assert(mapConnectionsSource.includes("generatedMapConnections"), "Generated map connections exist.");
   assert((mapConnectionsSource.match(/": \[/g) ?? []).length === 42, "Generated map connections include 42 playable territories.");
+  assert(!mapConnectionsSource.includes("shipRoute") && !gameStateSource.includes("shipRoute") && !syncMessagesSource.includes("shipRoute"), "Visual ship routes are not consumed by gameplay or sync code.");
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
   assert(!mapDataSource.includes("Infinity"), "Generated map data has no Infinity values.");
   assert((mapDataSource.match(/id: "/g) ?? []).length === 42, "Generated app data has 42 playable territories.");
@@ -638,6 +658,31 @@ async function runArmyRuleChecks(page) {
   assert(JSON.stringify(result.eliteThreePlayer) === JSON.stringify({ heavy: 0, cavalry: 0, elite: 28, leader: 1 }), "Three-player elite corner remains pure when its remainder cannot buy another troop.");
 }
 
+async function runMapThemeChecks(page) {
+  console.log("Checking varied map shades");
+  await page.goto(baseUrl);
+  const result = await page.evaluate(async () => {
+    const { generatedMapData } = await import("/src/map/generated/mapData.ts");
+    const coloredSkins = ["blue", "green", "red", "yellow", "black", "purple"];
+    const violations = [];
+
+    for (const skin of coloredSkins) {
+      const colors = new Set(generatedMapData.territories.map((territory) => territory.skins[skin]));
+      if (colors.size <= 6) {
+        violations.push({ skin, colorCount: colors.size });
+      }
+    }
+
+    return {
+      backgroundColors: [...new Set(generatedMapData.territories.map((territory) => territory.skins.background))],
+      violations,
+    };
+  });
+
+  assert(result.violations.length === 0, "Every colored skin has varied territory shades.");
+  assert(result.backgroundColors.length === 1 && result.backgroundColors[0] === "#EFE9D9", "Background skin remains uniformly tan.");
+}
+
 async function runLocalDraftChecks(page) {
   console.log("Checking local draft");
   await page.goto(baseUrl);
@@ -671,6 +716,10 @@ async function runLocalDraftChecks(page) {
     await page.locator(".static-map-ink").evaluate((node) => getComputedStyle(node).pointerEvents === "none"),
     "Static ink layer is pointer inert.",
   );
+  assert((await page.locator(".territory-border-ink").count()) > 0, "Map renders ordinary territory border ink.");
+  assert((await page.locator(".region-border-ink").count()) > 0, "Map renders thicker regional and coastline border ink.");
+  assert((await page.locator('.territory-border-ink[stroke-width="10"]').count()) === (await page.locator(".territory-border-ink").count()), "Territory borders use the thin stroke.");
+  assert((await page.locator('.region-border-ink[stroke-width="20"]').count()) === (await page.locator(".region-border-ink").count()), "Regional borders use the thick stroke.");
 
   const beforeDefaultSelection = await viewBox(page);
   await clickTerritory(page, "shire");
@@ -1175,6 +1224,7 @@ async function main() {
     const browser = await launchBrowser();
     const mobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
     mobile.setDefaultTimeout(10000);
+    await runMapThemeChecks(mobile);
     await runArmyRuleChecks(mobile);
     await runSetupPreferenceChecks(mobile);
     await runLocalDraftChecks(mobile);

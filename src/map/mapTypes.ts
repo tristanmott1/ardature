@@ -45,10 +45,17 @@ export type GeneratedTerritoryData = {
 };
 
 export type GeneratedStaticInkData = {
-  borderPaths: readonly string[];
+  territoryBorderPaths: readonly string[];
+  regionBorderPaths: readonly string[];
   borderStroke: string;
   borderOpacity: number;
-  borderStrokeWidth: number;
+  territoryBorderStrokeWidth: number;
+  regionBorderStrokeWidth: number;
+  shipRoutePaths: readonly string[];
+  shipRouteStroke: string;
+  shipRouteOpacity: number;
+  shipRouteStrokeWidth: number;
+  shipRouteDashArray: string;
   landmarkPath: string;
   landmarkFill: string;
   landmarkOpacity: number;
