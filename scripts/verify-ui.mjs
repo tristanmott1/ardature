@@ -1295,6 +1295,11 @@ async function runSyncEntryChecks(page) {
   assert((await page.getByRole("button", { name: "Remove Galadriel" }).count()) === 0, "Host cannot remove themselves in the lobby.");
   assert(await page.getByRole("button", { name: "Start game" }).isDisabled(), "Sync host cannot start with one player.");
   assert((await page.locator("[data-sync-role='host']").count()) === 1, "App records host sync role.");
+  await page.getByRole("button", { name: "Scan" }).click();
+  await page.getByRole("dialog", { name: "Scan answer" }).waitFor();
+  await capture(page, "14b-sync-scan-answer-mobile.png");
+  assert((await page.locator(".scanner-modal .scanner-frame video").count()) === 1, "Sync scan answer modal shows a camera frame.");
+  await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("button", { name: "Close" }).click();
   await page.getByRole("dialog", { name: "End this game and return home?" }).waitFor();
   await capture(page, "15-sync-exit-confirm-mobile.png");
@@ -1453,6 +1458,9 @@ async function runSyncRecoveryChecks(browser) {
   await capture(recoveryJoiner, "23-sync-recovery-answer-qr-mobile.png");
 
   await host.getByRole("button", { name: "Scan" }).click();
+  await host.getByRole("dialog", { name: "Scan answer" }).waitFor();
+  await capture(host, "23b-sync-recovery-scan-answer-mobile.png");
+  assert((await host.locator(".scanner-modal .scanner-frame video").count()) === 1, "Recovery scan answer modal shows a camera frame.");
   await pasteScannerText(host, await qrText(recoveryJoiner));
   await host.locator('.pause-modal [data-player-status="connected"]').filter({ hasText: "Boromir" }).waitFor({ timeout: 15000 });
   await capture(host, "24-sync-pause-recovered-mobile.png");
