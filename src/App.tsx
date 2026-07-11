@@ -55,6 +55,7 @@ import {
   createOwnershipMap,
   createPlayer,
   createTerritoryStates,
+  dismissNotification,
   dismissSpyIntel,
   draftProgressForPlayer,
   emptyOwnedTerritoryCount,
@@ -101,6 +102,7 @@ import type {
   ArmyMarker,
   DraftStyle,
   GameConfig,
+  GameNotification,
   GamePlayer,
   GameState,
   PickTimeLimit,
@@ -142,12 +144,6 @@ type SyncSessionState = "idle" | "connecting" | "connected" | "reconnecting" | "
 type SyncCameraMode = "hostOffer" | "joinAnswer" | null;
 
 type SyncDraftNotice = {
-  key: string;
-  playerId: string;
-  territoryId: string;
-};
-
-type SpyCaptureNotice = {
   key: string;
   playerId: string;
   territoryId: string;
@@ -221,7 +217,6 @@ function App() {
   const [gameMapSelectedTerritoryId, setGameMapSelectedTerritoryId] = useState<string | null>(null);
   const [turnSelectedTerritoryId, setTurnSelectedTerritoryId] = useState<string | null>(null);
   const [pendingSpyTerritoryId, setPendingSpyTerritoryId] = useState<string | null>(null);
-  const [spyCaptureNotice, setSpyCaptureNotice] = useState<SpyCaptureNotice | null>(null);
   const hostTransportRef = useRef<SyncHostTransport | null>(null);
   const joinTransportRef = useRef<SyncJoinTransport | null>(null);
   const previousPhaseRef = useRef(game.phase);
@@ -310,12 +305,8 @@ function App() {
     ? generatedMapData.territories.find((territory) => territory.id === pendingSpyTerritoryId) ?? null
     : null;
   const spyCapturePercent = pendingSpyTerritoryId && turnPlayerId ? spyCaptureProbability(game, turnPlayerId, pendingSpyTerritoryId) : null;
-  const spyNoticeTerritory = spyCaptureNotice
-    ? generatedMapData.territories.find((territory) => territory.id === spyCaptureNotice.territoryId) ?? null
-    : null;
-  const spyNoticePlayer = spyCaptureNotice
-    ? game.players.find((player) => player.id === spyCaptureNotice.playerId) ?? null
-    : null;
+  const currentNotificationPlayerId = notificationPlayerId(game, syncRole, localPlayerId, turnViewerId);
+  const currentNotification = visibleNotification(game, currentNotificationPlayerId, syncJoinerBlocked);
   const turnMapSelectedTerritory = spyIntelTerritory ?? gameMapSelectedTerritory;
   const turnMapTroopBreakdown = spyIntelTerritory
     ? territoryTroops(game.allocation, spyIntelTerritory.id)
@@ -406,7 +397,7 @@ function App() {
     game.phase === "turnHandoff" ||
     canShowConfirm ||
     Boolean(spyTargetTerritory) ||
-    Boolean(spyNoticeTerritory && spyNoticePlayer) ||
+    Boolean(currentNotification) ||
     Boolean(blockingResultTerritory && blockingResultPlayer) ||
     Boolean(noticeTerritory && noticePlayer)
   );
@@ -420,16 +411,8 @@ function App() {
       });
     }
 
-    const spyNotice = spyCaptureNoticeFromTurnChange(latestGameRef.current, game, localPlayerId);
-    if (spyNotice) {
-      setSpyCaptureNotice({
-        ...spyNotice,
-        key: `${spyNotice.playerId}:${spyNotice.territoryId}:${Date.now()}`,
-      });
-    }
-
     latestGameRef.current = game;
-  }, [game, localPlayerId]);
+  }, [game]);
 
   useEffect(() => {
     latestSyncRoleRef.current = syncRole;
@@ -1168,6 +1151,10 @@ function App() {
       return dismissSpyIntel(current, playerId);
     }
 
+    if (command.type === "dismissNotification") {
+      return dismissNotification(current, playerId, command.notificationId);
+    }
+
     if (command.type === "commitReinforcements") {
       return commitReinforcements(current, playerId, command.reinforcement);
     }
@@ -1588,6 +1575,18 @@ function App() {
     }
 
     setGame((current) => dismissSpyIntel(current, turnPlayerId));
+  }
+
+  function dismissCurrentNotification() {
+    if (!currentNotificationPlayerId || !currentNotification || syncJoinerBlocked) {
+      return;
+    }
+
+    if (game.mode === "sync" && syncRole === "joiner") {
+      joinTransportRef.current?.send({ type: "turnCommand", command: { type: "dismissNotification", notificationId: currentNotification.id } });
+    }
+
+    setGame((current) => dismissNotification(current, currentNotificationPlayerId, currentNotification.id));
   }
 
   function endTurnWithFortify() {
@@ -2069,11 +2068,11 @@ function App() {
         />
       ) : null}
 
-      {spyNoticeTerritory && spyNoticePlayer ? (
-        <SpyCaptureDialog
-          onClose={() => setSpyCaptureNotice(null)}
-          player={spyNoticePlayer}
-          territory={spyNoticeTerritory}
+      {currentNotification ? (
+        <GameNotificationDialog
+          notification={currentNotification}
+          onClose={dismissCurrentNotification}
+          players={game.players}
         />
       ) : null}
 
@@ -2529,21 +2528,21 @@ function ReinforcementPanel({
   const remaining = remainingReinforcementTroops(reinforcement);
   const canAddType = (troopType: TroopType) => selectedTroops !== null && remaining[troopType] > 0;
   const canRemoveType = (troopType: TroopType) => Boolean(selectedReinforcementTroops && selectedReinforcementTroops[troopType] > 0);
-  const canAddAny = MIXTURE_TROOP_TYPES.some(canAddType);
-  const canRemoveAny = MIXTURE_TROOP_TYPES.some(canRemoveType);
+  const canAddAny = TROOP_TYPES.some(canAddType);
+  const canRemoveAny = TROOP_TYPES.some(canRemoveType);
 
   return (
     <section className="game-controls-panel allocation-panel reinforcement-panel">
       <div className="allocation-controls">
         {selectedTerritory && selectedTroops ? (
           <>
-            <div className="troop-action-row three-troops">
+            <div className="troop-action-row">
               <span className="troop-row-spacer" aria-hidden="true" />
               <span className="troop-row-affordance" data-muted={canAddAny ? undefined : "true"} aria-hidden="true">
                 <Plus size={17} />
               </span>
-              <div className="troop-action-icons three-troops">
-                {MIXTURE_TROOP_TYPES.map((troopType) => (
+              <div className="troop-action-icons">
+                {TROOP_TYPES.map((troopType) => (
                   <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, 1)} disabled={!canAddType(troopType)} aria-label={`Add ${troopType}`}>
                     <TroopIconCount
                       count={remaining[troopType]}
@@ -2559,13 +2558,13 @@ function ReinforcementPanel({
             <div className="allocation-target">
               <strong>{selectedTerritory.name}</strong>
             </div>
-            <div className="troop-action-row three-troops">
+            <div className="troop-action-row">
               <span className="troop-row-spacer" aria-hidden="true" />
               <span className="troop-row-affordance" data-muted={canRemoveAny ? undefined : "true"} aria-hidden="true">
                 <Minus size={17} />
               </span>
-              <div className="troop-action-icons three-troops">
-                {MIXTURE_TROOP_TYPES.map((troopType) => (
+              <div className="troop-action-icons">
+                {TROOP_TYPES.map((troopType) => (
                   <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, -1)} disabled={!canRemoveType(troopType)} aria-label={`Remove ${troopType}`}>
                     <TroopIconCount
                       count={selectedTroops[troopType]}
@@ -3117,43 +3116,26 @@ function SpyConfirmDialog({
   );
 }
 
-function SpyCaptureDialog({
+function GameNotificationDialog({
+  notification,
   onClose,
-  player,
-  territory,
+  players,
 }: {
+  notification: GameNotification;
   onClose: () => void;
-  player: GamePlayer;
-  territory: GeneratedTerritoryData;
+  players: GamePlayer[];
 }) {
-  const closedRef = useRef(false);
-  const onCloseRef = useRef(onClose);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  const closeOnce = useCallback(() => {
-    if (closedRef.current) {
-      return;
-    }
-
-    closedRef.current = true;
-    onCloseRef.current();
-  }, []);
-
-  useEffect(() => {
-    closedRef.current = false;
-    const timeout = window.setTimeout(closeOnce, 1600);
-    return () => window.clearTimeout(timeout);
-  }, [closeOnce, player.id, territory.id]);
+  const message = notificationMessage(notification, players);
 
   return (
-    <div className="draft-sheet-scrim turn-sheet-scrim pick-result-scrim" onClick={closeOnce}>
-      <section className="modal-panel draft-sheet spy-sheet" role="status" aria-live="polite">
-        <p className="muted">{player.name}'s spy was captured in</p>
-        <h2>{territory.name}</h2>
-        <div className="draft-sheet-action-spacer" aria-hidden="true" />
+    <div className="modal-scrim notification-backdrop">
+      <section className="modal-panel notification-modal" role="alertdialog" aria-label="Game notification">
+        <h2>{message}</h2>
+        <div className="modal-actions">
+          <button className="icon-button primary large" type="button" onClick={onClose} aria-label="Dismiss notification">
+            <Check size={24} />
+          </button>
+        </div>
       </section>
     </div>
   );
@@ -3722,6 +3704,62 @@ function troopName(color: PlayerColor | null, troopType: TroopType) {
   return TROOP_NAME_BY_SIDE[troopSide(color)][troopType];
 }
 
+const REGION_NAMES: Record<string, string> = {
+  eriador: "Eriador",
+  gondor: "Gondor",
+  mordor: "Mordor",
+  rhovanion: "Rhovanion",
+  rhun: "Rhun",
+  rohan: "Rohan",
+};
+
+function notificationMessage(notification: GameNotification, players: GamePlayer[]) {
+  if (notification.type === "spyLost") {
+    return `Your spy was captured in ${territoryName(notification.territoryId)}`;
+  }
+
+  if (notification.type === "spyCaptured") {
+    const spyOwner = players.find((player) => player.id === notification.spyOwnerId);
+    return `You captured ${spyOwner?.name ?? "someone"}'s spy in ${territoryName(notification.territoryId)}`;
+  }
+
+  const regionName = REGION_NAMES[notification.regionId] ?? notification.regionId;
+  return notification.type === "regionGained"
+    ? `You control ${regionName}`
+    : `You lost ${regionName}`;
+}
+
+function territoryName(territoryId: string) {
+  return generatedMapData.territories.find((territory) => territory.id === territoryId)?.name ?? territoryId;
+}
+
+function notificationPlayerId(game: GameState, syncRole: SyncRole, localPlayerId: string | null, turnViewerId: string | null) {
+  if (game.mode === "sync") {
+    return syncRole === "joiner" || syncRole === "host" ? localPlayerId : null;
+  }
+
+  if (game.phase === "turn" || game.phase === "turnHandoff" || (game.phase === "paused" && game.turn)) {
+    return turnViewerId;
+  }
+
+  return null;
+}
+
+function visibleNotification(game: GameState, playerId: string | null, syncJoinerBlocked: boolean) {
+  if (!playerId || syncJoinerBlocked) {
+    return null;
+  }
+
+  return (game.notifications[playerId] ?? []).find((notification) => {
+    if (notification.type !== "regionGained" && notification.type !== "regionLost") {
+      return true;
+    }
+
+    return notification.delivery === "immediate" ||
+      ((game.phase === "turn" || game.phase === "turnHandoff") && game.turn?.currentPlayerId === playerId);
+  }) ?? null;
+}
+
 function syncDraftNoticeFromOwnershipChange(previous: GameState, next: GameState): Omit<SyncDraftNotice, "key"> | null {
   if (previous.mode !== "sync" || next.mode !== "sync" || !previous.draft || !next.draft || next.phase !== "draft") {
     return null;
@@ -3743,42 +3781,23 @@ function syncDraftNoticeFromOwnershipChange(previous: GameState, next: GameState
   return null;
 }
 
-function spyCaptureNoticeFromTurnChange(previous: GameState, next: GameState, localPlayerId: string | null): Omit<SpyCaptureNotice, "key"> | null {
-  if (!next.turn || !next.draft) {
-    return null;
-  }
-
-  for (const [playerId, spy] of Object.entries(next.turn.spies)) {
-    const previousSpy = previous.turn?.spies[playerId];
-    const defenderId = spy.capturedTerritoryId ? next.draft.ownership[spy.capturedTerritoryId] : null;
-    const shouldShow = next.mode === "local" || playerId === localPlayerId || defenderId === localPlayerId;
-
-    if (
-      previousSpy?.available !== false &&
-      spy.available === false &&
-      spy.capturedTerritoryId &&
-      shouldShow
-    ) {
-      return {
-        playerId,
-        territoryId: spy.capturedTerritoryId,
-      };
-    }
-  }
-
-  return null;
-}
-
 function syncSnapshotForViewer(game: GameState, viewerId: string): GameState {
-  if (game.phase !== "turn" || !game.turn || game.turn.currentPlayerId === viewerId) {
-    return game;
+  const viewerGame = {
+    ...game,
+    notifications: {
+      [viewerId]: game.notifications[viewerId] ?? [],
+    },
+  };
+
+  if (viewerGame.phase !== "turn" || !viewerGame.turn || viewerGame.turn.currentPlayerId === viewerId) {
+    return viewerGame;
   }
 
   return {
-    ...game,
+    ...viewerGame,
     turn: {
-      ...game.turn,
-      stage: publicTurnStage(game.turn.stage, game.turn.spyReturnStage),
+      ...viewerGame.turn,
+      stage: publicTurnStage(viewerGame.turn.stage, viewerGame.turn.spyReturnStage),
       spyReturnStage: null,
       spyIntel: null,
       reinforcement: null,

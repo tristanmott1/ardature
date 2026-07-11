@@ -89,6 +89,28 @@ export type ReinforcementState = {
   territories: Record<string, TroopCounts>;
 };
 
+export type GameNotification =
+  | {
+      id: string;
+      type: "spyLost";
+      playerId: string;
+      territoryId: string;
+    }
+  | {
+      id: string;
+      type: "spyCaptured";
+      playerId: string;
+      spyOwnerId: string;
+      territoryId: string;
+    }
+  | {
+      id: string;
+      type: "regionGained" | "regionLost";
+      playerId: string;
+      regionId: string;
+      delivery: "turnStart" | "immediate";
+    };
+
 export type TurnState = {
   originalTurnOrder: string[];
   currentPlayerId: string;
@@ -107,4 +129,6 @@ export type GameState = {
   draft: DraftState | null;
   allocation: AllocationState | null;
   turn: TurnState | null;
+  notifications: Record<string, GameNotification[]>;
+  regionControl: Record<string, string | null>;
 };

@@ -45,6 +45,10 @@ export type TurnCommand =
       type: "dismissSpy";
     }
   | {
+      type: "dismissNotification";
+      notificationId: string;
+    }
+  | {
       type: "commitReinforcements";
       reinforcement: ReinforcementState;
     }
@@ -118,6 +122,10 @@ function isTurnCommand(value: unknown): value is TurnCommand {
 
   if (command.type === "commitReinforcements") {
     return isReinforcement(command.reinforcement);
+  }
+
+  if (command.type === "dismissNotification") {
+    return typeof command.notificationId === "string";
   }
 
   return command.type === "dismissSpy" || command.type === "fortify";

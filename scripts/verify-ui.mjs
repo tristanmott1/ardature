@@ -164,6 +164,13 @@ async function runSourceChecks() {
   assert(appSource.includes("onCloseRef") && appSource.includes("resultKey"), "Draft result auto-dismiss is stable across parent re-renders.");
   assert(appSource.includes('className="troop-icon-button turn-spy-button"') && !appSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling.");
   assert(appSource.includes("syncSnapshotForViewer") && appSource.includes("hostTransportRef.current?.sendToPeer(player.id") && appSource.includes("spyIntel: null") && appSource.includes("reinforcement: null"), "Sync snapshots hide private turn sub-state from passive viewers.");
+  assert(gameTypesSource.includes("GameNotification") && gameTypesSource.includes("notifications: Record<string, GameNotification[]>") && gameTypesSource.includes("regionControl: Record<string, string | null>"), "Game state stores authoritative per-player notification queues and region control.");
+  assert(gameStateSource.includes("applyRegionControlChanges") && gameStateSource.includes('type: "regionGained"') && gameStateSource.includes('type: "regionLost"'), "Region notifications come from authoritative control transitions.");
+  assert(gameStateSource.includes('type: "spyLost"') && gameStateSource.includes('type: "spyCaptured"') && appSource.includes("GameNotificationDialog"), "Spy capture notifications use the queued blocking notification flow.");
+  assert(syncMessagesSource.includes('type: "dismissNotification"') && syncMessagesSource.includes("notificationId: string") && appSource.includes('command: { type: "dismissNotification", notificationId: currentNotification.id }'), "Sync joiners dismiss queued notifications through the host by notification id.");
+  assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && appSource.includes("visibleNotification") && gameStateSource.includes('applyRegionControlChanges({'), "Region notifications distinguish turn-start delivery from immediate delivery.");
+  assert(appSource.includes("[viewerId]: game.notifications[viewerId] ?? []"), "Sync snapshots include only the viewer's notification queue.");
+  assert(!appSource.includes("spyCaptureNoticeFromTurnChange") && !appSource.includes("SpyCaptureNotice"), "Old effect-based spy capture notices are removed.");
   assert(appSource.includes("pendingDraftTerritoryId") && appSource.includes("allocationSelectedTerritoryId") && appSource.includes("gameMapSelectedTerritoryId"), "App keeps map selections in local UI state.");
   assert(!gameTypesSource.includes("pendingTerritoryId") && !gameStateSource.includes("pendingTerritoryId"), "Shared draft state does not store pending visual selection.");
   assert(!gameTypesSource.includes("selectedTerritoryId") && !gameStateSource.includes("selectedTerritoryId: null") && !gameStateSource.includes("allocation.selectedTerritoryId"), "Shared allocation state does not store selected visual territory.");
@@ -1177,7 +1184,6 @@ async function runRandomAllocationChecks(page) {
   const spyActionBox = await page.locator(".turn-action-panel").boundingBox();
   assert(spyDialogBox && spyActionBox && spyDialogBox.y + spyDialogBox.height <= spyActionBox.y + 1, "Spy confirmation does not overlap the turn action bar.");
   assert((await page.getByRole("dialog", { name: "Confirm spy" }).getByText("% captured").count()) === 1, "Spy confirmation shows capture probability.");
-  assert((await page.getByRole("dialog", { name: "Confirm spy" }).getByText("20% captured").count()) === 1, "Adjacent spy target has the updated 20% capture probability.");
   await page.getByRole("button", { name: "Cancel spy" }).click();
   await page.getByRole("button", { name: "Reinforcements" }).click();
   await page.waitForSelector(".army-build-modal .army-triangle");
@@ -1191,7 +1197,8 @@ async function runRandomAllocationChecks(page) {
   await page.waitForSelector(".reinforcement-panel .allocation-target");
   await capture(page, "17-reinforcement-placement-mobile.png");
   assert((await page.locator(".reinforcement-panel .troop-action-row").count()) === 2, "Reinforcement placement has add and remove rows.");
-  assert((await page.locator(".reinforcement-panel .troop-action-row").nth(0).locator(".troop-icon-button").count()) === 3, "Reinforcement add row has no leader.");
+  assert((await page.locator(".reinforcement-panel .troop-action-row").nth(0).locator(".troop-icon-button").count()) === 4, "Reinforcement add row keeps all four troop icon slots.");
+  assert(await page.locator(".reinforcement-panel .troop-action-row").nth(0).getByRole("button", { name: "Add leader" }).isDisabled(), "Reinforcement leader add slot is shown as zero and disabled.");
   const reinforcementBottomCounts = (await page.locator(".reinforcement-panel .troop-action-row").nth(1).locator(".troop-count-bubble").allTextContents()).map(Number);
   assert(reinforcementBottomCounts.reduce((sum, count) => sum + count, 0) > 0, "Reinforcement remove row shows existing territory troops.");
   assert((await page.locator(".reinforcement-panel .troop-action-row").nth(1).locator(".troop-icon-button:not(:disabled)").count()) === 0, "Existing troops shown during reinforcement cannot be removed.");
@@ -1253,6 +1260,7 @@ async function runTurnSpyOutcomeChecks(browser) {
   assert((await success.locator(".game-map-panel .troop-icon-count").count()) === 4, "Normal inspection still shows own troop breakdown after spy is toggled off.");
   await success.getByRole("button", { name: "Spy" }).click();
   await clickTerritory(success, "bree");
+  await success.getByRole("dialog", { name: "Confirm spy" }).getByText("20% captured").waitFor();
   await success.getByRole("button", { name: "Send spy" }).click();
   await success.getByRole("button", { name: "Dismiss" }).waitFor();
   await capture(success, "13c-spy-success-mobile.png");
@@ -1273,9 +1281,12 @@ async function runTurnSpyOutcomeChecks(browser) {
   await failure.getByRole("button", { name: "Spy" }).click();
   await clickTerritory(failure, "bree");
   await failure.getByRole("button", { name: "Send spy" }).click();
-  await failure.getByText("Frodo's spy was captured in").waitFor();
+  await failure.getByRole("alertdialog", { name: "Game notification" }).waitFor();
+  await failure.getByText("Your spy was captured in Bree").waitFor();
   await capture(failure, "13d-spy-failure-mobile.png");
-  await failure.getByText("Frodo's spy was captured in").click();
+  await failure.waitForTimeout(1200);
+  assert((await failure.getByText("Your spy was captured in Bree").count()) === 1, "Spy capture notification waits for explicit dismissal.");
+  await failure.getByRole("button", { name: "Dismiss notification" }).click();
   assert(await failure.getByRole("button", { name: "Spy" }).isDisabled(), "Spy is disabled after capture.");
 
   await success.close();

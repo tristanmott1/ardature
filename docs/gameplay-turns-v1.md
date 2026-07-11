@@ -108,11 +108,15 @@ The capture probability is based on the shortest gameplay-connection distance fr
 If the random sample captures the spy:
 
 - no troop information is revealed
-- show a brief notification that the spy was captured
+- queue a blocking notification for the spy owner: `Your spy was captured in {territory}`
 - the spy button becomes disabled
 - the captured spy remains unavailable until the player gains control of the territory where the spy was captured
 
-In sync mode, the defender whose territory captured the spy also receives a local notification: `{spy owner name}'s spy was captured in {territory name}`. Successful spy attempts are silent to the defender; the defender must not be told they were spied on.
+The defender whose territory captured the spy receives a separate blocking notification: `You captured {spy owner}'s spy in {territory}`. Successful spy attempts are silent to the defender; the defender must not be told they were spied on.
+
+Spy notifications are queued per affected player, persist through pause/refresh/reconnect, and are dismissed one at a time with a check button. They do not auto-dismiss. While one is open, the rest of the app is blocked.
+
+In local mode, queued spy-captured notifications for other players appear only at the beginning of that affected player's turn, in the order received. In sync mode, the host queues the notification authoritatively and delivers it to the affected player even if that player was disconnected when it was created.
 
 If the player later captures or receives that territory, the spy becomes available immediately, including during the same turn.
 
@@ -193,6 +197,19 @@ The army-build modal shows total reinforcement troops above the triangle, includ
 
 Region bonus troops should use the same fixed/additive troop-pool mechanics already used for troops inherited from removed players.
 
+### Region Control Notifications
+
+Region control notifications are affected-player-only and use exact plain wording:
+
+- `You control Eriador`
+- `You lost Eriador`
+
+The same wording applies to all six regions. Region notifications are queued per affected player, persist through pause/refresh/reconnect, block the app until dismissed, and are shown one at a time in received order.
+
+At the start of the turn loop, region control is computed from the drafted map. If a player drafted an entire region and still controls it at the beginning of their first turn, that player receives the corresponding `You control {region}` notification.
+
+During future combat, gaining a region on your own turn should notify immediately. Losing a region, or gaining/losing a region because another player was removed or because an opponent action changed ownership, should be queued until the affected player's next turn in local mode. In sync mode, the host may deliver the affected player's notification immediately after the committed ownership change, except for first-turn drafted-region notifications which are still shown at that player's first turn.
+
 ### Reinforcement Placement
 
 Reinforcement placement uses the same compact two-row allocation controls as initial allocation, with one important difference:
@@ -200,7 +217,7 @@ Reinforcement placement uses the same compact two-row allocation controls as ini
 - troops that existed before the reinforcement action started cannot be removed
 - only troops added during the current reinforcement action can be removed while reinforcing
 
-The selected-territory row still shows the territory's total troops, including troops that existed before reinforcements. Minus buttons are enabled only for troop types that include troops added during the current reinforcement action.
+The placement controls still show all four troop slots, including the leader slot. The add-row leader count is always `0` and disabled because reinforcements never create a new leader. The selected-territory row still shows the territory's total troops, including troops that existed before reinforcements. Minus buttons are enabled only for troop types that include troops added during the current reinforcement action.
 
 The player may place reinforcement troops on any territories they own. There is no one-new-troop-per-territory requirement during reinforcements. The action is complete only when all new reinforcement troops have been placed.
 
@@ -333,6 +350,7 @@ Committed gameplay facts should be sent promptly enough that the host can resume
 
 - turn start
 - spy result, spy capture territory, and failed-spy defender notification
+- queued spy and region notifications
 - reinforcement army submission
 - finalized reinforcement troop placements
 - fortify/end-turn result
@@ -347,3 +365,5 @@ Transient presentation state remains local:
 - open confirmation sheet
 - spy target hover/preview before confirm
 - dismissed or visible intel panel state after the host-authoritative spy result is known
+
+Notification queues are not transient presentation state. They are authoritative per-player game facts. The host stores all queues; viewer-specific sync snapshots include only the receiving player's queue.

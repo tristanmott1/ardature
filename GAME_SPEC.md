@@ -306,11 +306,13 @@ The active player may inspect the successful spy intel as long as they want. Pre
 If the spy fails:
 
 - reveal no troop information
-- show a notification that the spy was captured
+- queue a blocking notification for the spy owner: `Your spy was captured in {territory}`
 - store the territory where the spy was captured
 - disable that player's spy
 
-In sync mode, the defender whose territory captured the spy also receives a local notification: `{spy owner name}'s spy was captured in {territory name}`. Successful spy attempts are silent to the defender.
+The defender whose territory captured the spy receives a separate blocking notification: `You captured {spy owner}'s spy in {territory}`. Successful spy attempts are silent to the defender.
+
+Spy notifications are affected-player-only, queued in order, persistent through pause/refresh/reconnect, and dismissed one at a time with a check button. They do not auto-dismiss. In local mode, notifications for another player wait until that player's next turn. In sync mode, the host queues notifications authoritatively and delivers them to the affected player after reconnect if necessary.
 
 The spy becomes available again immediately if that player later gains control of the capture territory, including during the same turn.
 
@@ -372,6 +374,19 @@ The active player receives fixed bonus troops for each full region they own at t
 | Mordor | 3 heavy |
 
 The player does not choose the breakdown of region bonus troops. Region bonus troops are additive fixed troops, using the same fixed-troop pool mechanics as troops inherited from removed players.
+
+### Region Control Notifications
+
+Region control notifications are affected-player-only and use exact plain wording:
+
+- `You control {region}`
+- `You lost {region}`
+
+They are queued in order, persist through pause/refresh/reconnect, block the app until dismissed, and are dismissed one at a time.
+
+At the start of the turn loop, region control is computed from the drafted map. If a player drafted an entire region and still controls it at the beginning of that player's first turn, that player receives `You control {region}`.
+
+During future combat, gaining a region on your own turn should notify immediately. Losing a region, or gaining/losing a region through opponent action or player removal, should be queued until the affected player's next turn in local mode. In sync mode, the host may deliver the affected player's notification immediately after the committed ownership change, except for first-turn drafted-region notifications which are shown at that player's first turn.
 
 ### Placement
 
@@ -1101,7 +1116,7 @@ Sync frequency should follow a resume-safety rule:
 - Avoid syncing noisy transient UI.
 - Draft confirmations, army-build submission, ready, timeout completion, pause, resume, removal, and phase advance are immediate committed facts.
 - Allocation troop placement is committed game data. It may be batched or lightly throttled, but must be flushed on ready, pause, visibility change, or page unload where practical.
-- Turn-loop facts follow the same pattern: turn start, spy result, spy capture territory, failed-spy defender notification, finalized reinforcement placements, fortify/end-turn, elimination, and game-over are committed facts.
+- Turn-loop facts follow the same pattern: turn start, spy result, spy capture territory, queued spy/region notifications, finalized reinforcement placements, fortify/end-turn, elimination, and game-over are committed facts.
 - Future attack and battle events should also follow this pattern: host must receive enough committed data to resume; local previews and controls remain local.
 - Never sync map camera, focus animation, selected inspection territory, open modal state, hover/press state, local pending draft preview, provisional reinforcement edits, successful spy intel view state, or other purely visual state.
 

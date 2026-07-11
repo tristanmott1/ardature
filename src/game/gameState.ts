@@ -8,6 +8,7 @@ import type {
   AppPhase,
   DraftState,
   DraftStyle,
+  GameNotification,
   GameConfig,
   GamePlayer,
   GameState,
@@ -48,6 +49,7 @@ const REGION_REINFORCEMENTS = {
   rhun: createTroopCounts({ heavy: 4 }),
   mordor: createTroopCounts({ heavy: 3 }),
 } as const;
+const REGION_IDS = Object.keys(REGION_REINFORCEMENTS);
 
 export function createInitialGameState(): GameState {
   return {
@@ -58,6 +60,8 @@ export function createInitialGameState(): GameState {
     draft: null,
     allocation: null,
     turn: null,
+    notifications: {},
+    regionControl: createRegionControl(),
   };
 }
 
@@ -95,6 +99,10 @@ export function colorForPlayer(player: GamePlayer | undefined): MapSkin {
 
 export function createOwnershipMap(): TerritoryOwnerMap {
   return Object.fromEntries(TERRITORY_IDS.map((territoryId) => [territoryId, null]));
+}
+
+export function createRegionControl(): Record<string, string | null> {
+  return Object.fromEntries(REGION_IDS.map((regionId) => [regionId, null]));
 }
 
 export function createTerritoryStates(players: GamePlayer[], ownership: TerritoryOwnerMap | null, selectedTerritoryId: string | null): Record<string, TerritoryState> {
@@ -211,6 +219,21 @@ export function remainingTerritoryIds(ownership: TerritoryOwnerMap) {
 
 export function ownedTerritoryIds(ownership: TerritoryOwnerMap, playerId: string) {
   return TERRITORY_IDS.filter((territoryId) => ownership[territoryId] === playerId);
+}
+
+export function dismissNotification(state: GameState, playerId: string, notificationId: string): GameState {
+  const queue = state.notifications[playerId] ?? [];
+  if (!queue.some((notification) => notification.id === notificationId)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    notifications: {
+      ...state.notifications,
+      [playerId]: queue.filter((notification) => notification.id !== notificationId),
+    },
+  };
 }
 
 export function draftProgressForPlayer(state: GameState, playerId: string) {
@@ -556,7 +579,8 @@ export function confirmSpyAttempt(state: GameState, playerId: string, territoryI
   }
 
   if (randomValue < probability / 100) {
-    return {
+    const defenderId = ownership[territoryId];
+    return queueNotifications({
       ...state,
       turn: {
         ...turn,
@@ -571,7 +595,12 @@ export function confirmSpyAttempt(state: GameState, playerId: string, territoryI
           },
         },
       },
-    };
+    }, [
+      { id: createNotificationId(), type: "spyLost", playerId, territoryId },
+      defenderId
+        ? { id: createNotificationId(), type: "spyCaptured", playerId: defenderId, spyOwnerId: playerId, territoryId }
+        : null,
+    ]);
   }
 
   const targetOwnerId = ownership[territoryId];
@@ -1175,7 +1204,7 @@ function removePlayerFromGameplay(state: GameState, playerId: string): GameState
     };
   }
 
-  const next = restoreCapturedSpies({
+  const next = applyRegionControlChanges(restoreCapturedSpies({
     ...state,
     phase: "paused",
     players,
@@ -1200,7 +1229,7 @@ function removePlayerFromGameplay(state: GameState, playerId: string): GameState
       reinforcement: null,
       spies: Object.fromEntries(Object.entries(state.turn.spies).filter(([spyPlayerId]) => spyPlayerId !== playerId)),
     },
-  });
+  }), "immediate");
 
   return next;
 }
@@ -1270,11 +1299,11 @@ function startTurnLoop(state: GameState, useHandoff: boolean): GameState {
     return createInitialGameState();
   }
 
-  return {
+  return applyRegionControlChanges({
     ...state,
     phase: useHandoff && state.mode === "local" ? "turnHandoff" : "turn",
     turn: createTurnState(state.players, state.draft?.originalTurnOrder ?? [], currentPlayerId),
-  };
+  }, "turnStart");
 }
 
 function createTurnState(players: GamePlayer[], originalTurnOrder: string[], currentPlayerId: string): TurnState {
@@ -1309,14 +1338,14 @@ function advanceTurn(state: GameState): GameState {
     reinforcement: null,
   };
 
-  return {
+  return applyRegionControlChanges({
     ...state,
     phase: state.mode === "local" ? "turnHandoff" : "turn",
     turn: restoreCapturedSpies({
       ...state,
       turn: nextTurn,
     }).turn,
-  };
+  }, "turnStart");
 }
 
 function nextTurnPlayerId(players: GamePlayer[], originalTurnOrder: string[], currentPlayerId?: string) {
@@ -1368,6 +1397,105 @@ function nearestOwnedDistance(ownership: TerritoryOwnerMap | null, playerId: str
   }
 
   return null;
+}
+
+function applyRegionControlChanges(state: GameState, delivery: "turnStart" | "immediate"): GameState {
+  const ownership = state.draft?.ownership;
+  if (!ownership) {
+    return state;
+  }
+
+  const nextControl = regionControlForOwnership(ownership);
+  const notifications: Array<GameNotification | null> = [];
+
+  // Compare region control as game facts, independent of how ownership changed.
+  for (const regionId of REGION_IDS) {
+    const previousOwner = state.regionControl[regionId] ?? null;
+    const nextOwner = nextControl[regionId] ?? null;
+
+    if (previousOwner === nextOwner) {
+      continue;
+    }
+
+    if (previousOwner) {
+      notifications.push({
+        id: createNotificationId(),
+        type: "regionLost",
+        playerId: previousOwner,
+        regionId,
+        delivery,
+      });
+    }
+
+    if (nextOwner) {
+      notifications.push({
+        id: createNotificationId(),
+        type: "regionGained",
+        playerId: nextOwner,
+        regionId,
+        delivery,
+      });
+    }
+  }
+
+  return queueNotifications({
+    ...state,
+    regionControl: nextControl,
+  }, notifications);
+}
+
+function regionControlForOwnership(ownership: TerritoryOwnerMap): Record<string, string | null> {
+  const control = createRegionControl();
+
+  for (const regionId of REGION_IDS) {
+    control[regionId] = regionOwner(ownership, regionId);
+  }
+
+  return control;
+}
+
+function regionOwner(ownership: TerritoryOwnerMap, regionId: string) {
+  const regionTerritories = generatedMapData.territories.filter((territory) => territory.regionId === regionId);
+  if (regionTerritories.length === 0) {
+    return null;
+  }
+
+  const firstOwner = ownership[regionTerritories[0].id];
+  if (!firstOwner) {
+    return null;
+  }
+
+  return regionTerritories.every((territory) => ownership[territory.id] === firstOwner) ? firstOwner : null;
+}
+
+function queueNotifications(state: GameState, notifications: Array<GameNotification | null>): GameState {
+  const playerIds = new Set(state.players.map((player) => player.id));
+  let nextQueues = state.notifications;
+
+  for (const notification of notifications) {
+    if (!notification || !playerIds.has(notification.playerId)) {
+      continue;
+    }
+
+    nextQueues = {
+      ...nextQueues,
+      [notification.playerId]: [
+        ...(nextQueues[notification.playerId] ?? []),
+        notification,
+      ],
+    };
+  }
+
+  return nextQueues === state.notifications
+    ? state
+    : {
+        ...state,
+        notifications: nextQueues,
+      };
+}
+
+function createNotificationId() {
+  return crypto.randomUUID();
 }
 
 function reinforcementBudget(ownership: TerritoryOwnerMap, playerId: string) {
@@ -1591,6 +1719,8 @@ function simulateRandomDraft(players: GamePlayer[], config: GameConfig, draft: D
     draft,
     allocation: null,
     turn: null,
+    notifications: {},
+    regionControl: createRegionControl(),
   };
 
   while (state.draft && remainingTerritoryIds(state.draft.ownership).length > 0) {
@@ -1950,6 +2080,8 @@ function normalizeGameState(value: unknown): GameState | null {
     draft: normalizeDraft(state.draft),
     allocation: normalizeAllocation(state.allocation),
     turn: normalizeTurn(state.turn),
+    notifications: normalizeNotifications(state.notifications),
+    regionControl: normalizeRegionControl(state.regionControl),
   };
 }
 
@@ -1965,6 +2097,70 @@ function normalizeConfig(value: unknown): GameConfig {
       ? config.troopAllocationTimeLimit as TroopAllocationTimeLimit
       : 0,
   };
+}
+
+function normalizeNotifications(value: unknown): Record<string, GameNotification[]> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const notifications: Record<string, GameNotification[]> = {};
+  for (const [playerId, queue] of Object.entries(value)) {
+    if (!Array.isArray(queue)) {
+      continue;
+    }
+
+    notifications[playerId] = queue
+      .map(normalizeNotification)
+      .filter((notification): notification is GameNotification => Boolean(notification));
+  }
+
+  return notifications;
+}
+
+function normalizeNotification(value: unknown): GameNotification | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const notification = value as Partial<GameNotification>;
+  if (typeof notification.id !== "string" || typeof notification.playerId !== "string") {
+    return null;
+  }
+
+  if ((notification.type === "spyLost" || notification.type === "spyCaptured") && typeof notification.territoryId === "string") {
+    if (notification.type === "spyCaptured" && typeof notification.spyOwnerId !== "string") {
+      return null;
+    }
+
+    return notification as GameNotification;
+  }
+
+  if ((notification.type === "regionGained" || notification.type === "regionLost") && typeof notification.regionId === "string" && REGION_IDS.includes(notification.regionId)) {
+    return {
+      id: notification.id,
+      type: notification.type,
+      playerId: notification.playerId,
+      regionId: notification.regionId,
+      delivery: notification.delivery === "immediate" ? "immediate" : "turnStart",
+    };
+  }
+
+  return null;
+}
+
+function normalizeRegionControl(value: unknown): Record<string, string | null> {
+  const control = createRegionControl();
+  if (!value || typeof value !== "object") {
+    return control;
+  }
+
+  const rawControl = value as Record<string, unknown>;
+  for (const regionId of REGION_IDS) {
+    control[regionId] = typeof rawControl[regionId] === "string" ? rawControl[regionId] : null;
+  }
+
+  return control;
 }
 
 function normalizeDraft(value: unknown): DraftState | null {
