@@ -170,7 +170,7 @@ async function runSourceChecks() {
   assert(gameStateSource.includes('type: "spyLost"') && gameStateSource.includes('type: "spyCaptured"') && appSource.includes("GameNotificationDialog"), "Spy capture notifications use the queued blocking notification flow.");
   assert(gameTypesSource.includes('status: "available" | "captured" | "dead"') && gameTypesSource.includes("custodianPlayerId: string | null") && !gameTypesSource.includes("capturedTerritoryId: string | null"), "Spy state stores explicit status, territory, and custodian.");
   assert(gameStateSource.includes("capturedSpiesOnTerritory") && gameStateSource.includes("restoreCapturedSpies") && gameStateSource.includes("custodianPlayerId: territoryOwnerId"), "Captured spies are selected by territory and custody follows ownership changes.");
-  assert(appSource.includes("CapturedSpyRow") && appSource.includes("captured-spy-bars") && appSource.includes("ownerColor={player.color}"), "Captured spies and troop icons use owner-colored circular icon rendering.");
+  assert(appSource.includes("CapturedSpyRow") && appSource.includes("captured-spy-prison") && appSource.includes("ownerColor={player.color}"), "Captured spies and troop icons use owner-colored circular icon rendering.");
   assert(syncMessagesSource.includes('type: "dismissNotification"') && syncMessagesSource.includes("notificationId: string") && appSource.includes('command: { type: "dismissNotification", notificationId: currentNotification.id }'), "Sync joiners dismiss queued notifications through the host by notification id.");
   assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && gameTypesSource.includes("minTurnNumber: number") && appSource.includes("visibleNotification") && appSource.includes('game.phase === "turn"') && appSource.includes("game.turn.turnNumber >= notification.minTurnNumber"), "Region notifications distinguish turn-start delivery from immediate delivery after handoff.");
   assert(appSource.includes("[viewerId]: game.notifications[viewerId] ?? []"), "Sync snapshots include only the viewer's notification queue.");
@@ -1279,7 +1279,7 @@ async function runTurnSpyOutcomeChecks(browser) {
   assert((await success.locator(".game-map-panel .selected-territory-name").getByText("Bree").count()) === 1, "Successful spy shows the target territory name.");
   assert((await success.locator(".game-map-panel .troop-icon-count").count()) === 4, "Successful spy shows the target troop breakdown.");
   assert((await success.locator(".game-map-panel .captured-spy-icon").count()) === 1, "Successful spy shows captured spies imprisoned on the target.");
-  assert((await success.locator(".game-map-panel .captured-spy-bars").count()) === 1, "Captured spy icon uses prison bars.");
+  assert((await success.locator(".game-map-panel .captured-spy-prison").count()) === 1, "Captured spy icon uses prison bars.");
   const spyIconSources = await success.locator(".game-map-panel .troop-icon-count img").evaluateAll((images) =>
     images.map((image) => image.getAttribute("src") ?? ""),
   );

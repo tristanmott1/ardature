@@ -2989,14 +2989,24 @@ function TroopIconCount({
 function TroopIconImage({ captured = false, ownerColor, src }: { captured?: boolean; ownerColor: PlayerColor | null; src: string }) {
   return (
     <span className="troop-icon-frame" data-captured={captured ? "true" : undefined} style={{ "--owner-color": colorCss(ownerColor) } as CSSProperties}>
-      <img alt="" draggable={false} src={src} />
       {captured ? (
-        <span className="captured-spy-bars" aria-hidden="true">
-          <span />
-          <span />
-          <span />
+        <span className="captured-spy-prison" aria-hidden="true">
+          <span style={{ "--clip-left": "0%", "--clip-right": "76%" } as CSSProperties}>
+            <img alt="" draggable={false} src={src} />
+          </span>
+          <span style={{ "--clip-left": "26%", "--clip-right": "50%" } as CSSProperties}>
+            <img alt="" draggable={false} src={src} />
+          </span>
+          <span style={{ "--clip-left": "52%", "--clip-right": "24%" } as CSSProperties}>
+            <img alt="" draggable={false} src={src} />
+          </span>
+          <span style={{ "--clip-left": "78%", "--clip-right": "0%" } as CSSProperties}>
+            <img alt="" draggable={false} src={src} />
+          </span>
         </span>
-      ) : null}
+      ) : (
+        <img alt="" draggable={false} src={src} />
+      )}
     </span>
   );
 }

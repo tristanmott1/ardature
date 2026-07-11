@@ -798,26 +798,43 @@ select {
   pointer-events: none;
 }
 
-.captured-spy-bars {
+.captured-spy-prison {
   position: absolute;
-  inset: 4px;
-  display: flex;
-  justify-content: space-evenly;
-  pointer-events: none;
+  inset: 2px;
+  border-radius: 50%;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 15%,
+      #3a3a3a 15%,
+      #3a3a3a 22%,
+      transparent 22%,
+      transparent 38%
+    );
+  overflow: hidden;
 }
 
-.captured-spy-bars span {
-  width: 4px;
+.captured-spy-prison span {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 var(--clip-right) 0 var(--clip-left));
+}
+
+.captured-spy-prison img {
+  display: block;
+  width: 100%;
   height: 100%;
-  border-radius: 999px;
-  background: #111111;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.32);
+  border-radius: 50%;
+  user-select: none;
+  pointer-events: none;
 }
 
 .captured-spy-row {
   display: flex;
   justify-content: center;
   gap: 9px;
+  margin-top: 18px;
 }
 
 .captured-spy-icon {
@@ -989,6 +1006,7 @@ select {
 .game-map-panel {
   display: grid;
   justify-items: stretch;
+  row-gap: 16px;
   padding-bottom: 12px;
 }
 
@@ -999,7 +1017,8 @@ select {
   text-align: center;
 }
 
-.game-map-panel > .troop-count-row {
+.game-map-panel > .troop-count-row,
+.game-map-panel > .captured-spy-row {
   justify-self: center;
 }
 
