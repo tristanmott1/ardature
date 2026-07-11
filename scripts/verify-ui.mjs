@@ -1282,6 +1282,121 @@ async function runTurnSpyOutcomeChecks(browser) {
   await failure.close();
 }
 
+async function runGameplayRemovalChecks(page) {
+  console.log("Checking gameplay player removal");
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
+  const savedState = gameplayRemovalGameState(territoryIds);
+  const removedTerritories = ["bree", "rivendell"];
+
+  await page.addInitScript((state) => {
+    localStorage.clear();
+    Math.random = () => 0;
+    localStorage.setItem("ardature.localGame.v1", JSON.stringify(state));
+  }, savedState);
+  await page.goto(baseUrl);
+  await page.waitForSelector('.app-shell[data-app-phase="turn"]');
+  await page.getByRole("button", { name: "Pause map" }).click();
+  await page.getByRole("dialog", { name: "Paused" }).waitFor();
+  await page.getByRole("button", { name: "Remove Sauron" }).click();
+  await page.getByRole("dialog", { name: "Paused" }).waitFor();
+  await capture(page, "13g-gameplay-removal-paused-mobile.png");
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("ardature.localGame.v1") ?? "null"));
+  const game = saved;
+  assert(game.phase === "paused", "Gameplay removal leaves the game paused.");
+  assert(game.players.length === 2 && game.players.every((player) => player.id !== "opponent"), "Removed gameplay player is gone from the roster.");
+  assert(!game.allocation.playerAllocations.opponent, "Removed gameplay player allocation is gone.");
+  assert(!game.turn.spies.opponent, "Removed gameplay player spy state is gone.");
+  assert(game.turn.stage === "reinforcementReady" && game.turn.reinforcement === null, "Active reinforcement action is canceled on gameplay removal.");
+  for (const territoryId of removedTerritories) {
+    assert(game.draft.ownership[territoryId] !== "opponent", `Removed territory ${territoryId} is reassigned.`);
+    const ownerId = game.draft.ownership[territoryId];
+    const troops = game.allocation.playerAllocations[ownerId].territories[territoryId];
+    assert(troops && troops.leader === 0 && troopObjectTotal(troops) > 0, `Removed territory ${territoryId} keeps redistributed non-leader troops.`);
+  }
+}
+
+function gameplayRemovalGameState(territoryIds) {
+  const state = turnSpyGameState(territoryIds);
+  const ownership = Object.fromEntries(territoryIds.map((territoryId) => [
+    territoryId,
+    territoryId === "shire" ? "viewer" : "ally",
+  ]));
+
+  return {
+    ...state,
+    players: [
+      ...state.players,
+      {
+        id: "ally",
+        name: "Aragorn",
+        color: "green",
+        nameLocked: false,
+        colorLocked: false,
+        connectionStatus: "connected",
+      },
+    ],
+    draft: {
+      ...state.draft,
+      originalTurnOrder: ["viewer", "opponent", "ally"],
+      ownership: {
+        ...ownership,
+        bree: "opponent",
+        rivendell: "opponent",
+      },
+    },
+    allocation: {
+      ...state.allocation,
+      order: ["viewer", "opponent", "ally"],
+      playerAllocations: {
+        ...state.allocation.playerAllocations,
+        opponent: {
+          ...state.allocation.playerAllocations.opponent,
+          territories: {
+            bree: { heavy: 1, cavalry: 0, elite: 0, leader: 1 },
+            rivendell: { heavy: 0, cavalry: 1, elite: 0, leader: 0 },
+          },
+        },
+        ally: {
+          marker: { heavy: 1 / 3, cavalry: 1 / 3, elite: 1 / 3 },
+          buildSubmitted: true,
+          baseTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 1 },
+          inheritedTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
+          ready: true,
+          randomCompleted: false,
+          territories: {
+            lamedon: { heavy: 1, cavalry: 0, elite: 0, leader: 1 },
+          },
+        },
+      },
+    },
+    turn: {
+      ...state.turn,
+      originalTurnOrder: ["viewer", "opponent", "ally"],
+      currentPlayerId: "viewer",
+      stage: "reinforcementPlace",
+      reinforcement: {
+        marker: { heavy: 1 / 3, cavalry: 1 / 3, elite: 1 / 3 },
+        buildSubmitted: true,
+        baseTroops: { heavy: 1, cavalry: 1, elite: 1, leader: 0 },
+        bonusTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
+        territories: {
+          shire: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+        },
+      },
+      spies: {
+        ...state.turn.spies,
+        ally: { available: true, capturedTerritoryId: null },
+      },
+    },
+  };
+}
+
+function troopObjectTotal(troops) {
+  return troops.heavy + troops.cavalry + troops.elite + troops.leader;
+}
+
 async function loadTurnSpyFixture(page, randomValue) {
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
@@ -1838,6 +1953,10 @@ async function main() {
     await runReadOnlyVisibilityChecks(readOnlyMobile);
     await readOnlyMobile.close();
     await runTurnSpyOutcomeChecks(browser);
+    const removalMobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+    removalMobile.setDefaultTimeout(10000);
+    await runGameplayRemovalChecks(removalMobile);
+    await removalMobile.close();
     await runSyncEntryChecks(mobile);
     await runSyncReadyPageChecks(browser);
     await runSyncRecoveryChecks(browser);

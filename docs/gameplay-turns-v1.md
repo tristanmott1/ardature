@@ -274,6 +274,8 @@ In sync mode:
 
 After any gameplay removal, the game is paused immediately. If fewer than 2 players remain, the game ends instead.
 
+Verification should include a paused gameplay removal case that proves removed territories are reassigned, removed-player leaders are converted to regular troops, active reinforcement state is canceled, and the game remains paused for resume.
+
 ### Removed Player Pool
 
 Collect all removed-player territories and all removed-player troops:
