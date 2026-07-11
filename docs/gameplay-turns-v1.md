@@ -204,6 +204,8 @@ Reinforcement placement uses the same compact two-row allocation controls as ini
 - troops that existed before the reinforcement action started cannot be removed
 - only troops added during the current reinforcement action can be removed while reinforcing
 
+The selected-territory row still shows the territory's total troops, including troops that existed before reinforcements. Minus buttons are enabled only for troop types that include troops added during the current reinforcement action.
+
 The player may place reinforcement troops on any territories they own. There is no one-new-troop-per-territory requirement during reinforcements. The action is complete only when all new reinforcement troops have been placed.
 
 During sync reinforcements, the active player sees local reinforcement edits immediately. Other devices do not see those provisional troop changes. The host and other players receive the updated troop state only after reinforcements are finalized and committed.
@@ -250,7 +252,7 @@ During another player's turn, inactive sync devices show only the map using the 
 - no turn action controls are shown
 - no pending selection, focus, confirmation, or provisional reinforcement placement from the active player is shown
 
-Sync devices update from committed host facts only:
+Sync devices update from committed host facts only. Host snapshots are viewer-specific during turns: the active player may receive their private spy intel or active action sub-state, while passive viewers receive the same committed map facts with private turn sub-state removed.
 
 - after reinforcements are finalized
 - after future attacks resolve or otherwise commit

@@ -163,6 +163,7 @@ async function runSourceChecks() {
   assert(appSource.includes("syncDraftNoticeFromOwnershipChange"), "App creates local sync draft notices from ownership changes.");
   assert(appSource.includes("onCloseRef") && appSource.includes("resultKey"), "Draft result auto-dismiss is stable across parent re-renders.");
   assert(appSource.includes('className="troop-icon-button turn-spy-button"') && !appSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling.");
+  assert(appSource.includes("syncSnapshotForViewer") && appSource.includes("hostTransportRef.current?.sendToPeer(player.id") && appSource.includes("spyIntel: null") && appSource.includes("reinforcement: null"), "Sync snapshots hide private turn sub-state from passive viewers.");
   assert(appSource.includes("pendingDraftTerritoryId") && appSource.includes("allocationSelectedTerritoryId") && appSource.includes("gameMapSelectedTerritoryId"), "App keeps map selections in local UI state.");
   assert(!gameTypesSource.includes("pendingTerritoryId") && !gameStateSource.includes("pendingTerritoryId"), "Shared draft state does not store pending visual selection.");
   assert(!gameTypesSource.includes("selectedTerritoryId") && !gameStateSource.includes("selectedTerritoryId: null") && !gameStateSource.includes("allocation.selectedTerritoryId"), "Shared allocation state does not store selected visual territory.");
@@ -1190,6 +1191,9 @@ async function runRandomAllocationChecks(page) {
   await capture(page, "17-reinforcement-placement-mobile.png");
   assert((await page.locator(".reinforcement-panel .troop-action-row").count()) === 2, "Reinforcement placement has add and remove rows.");
   assert((await page.locator(".reinforcement-panel .troop-action-row").nth(0).locator(".troop-icon-button").count()) === 3, "Reinforcement add row has no leader.");
+  const reinforcementBottomCounts = (await page.locator(".reinforcement-panel .troop-action-row").nth(1).locator(".troop-count-bubble").allTextContents()).map(Number);
+  assert(reinforcementBottomCounts.reduce((sum, count) => sum + count, 0) > 0, "Reinforcement remove row shows existing territory troops.");
+  assert((await page.locator(".reinforcement-panel .troop-action-row").nth(1).locator(".troop-icon-button:not(:disabled)").count()) === 0, "Existing troops shown during reinforcement cannot be removed.");
   await finishReinforcementPlacement(page);
   await page.waitForSelector(".turn-action-panel");
   await capture(page, "18-turn-actions-mobile.png");
@@ -1230,6 +1234,101 @@ async function runReadOnlyVisibilityChecks(page) {
   assert((await page.locator('[data-troop-marker="nurn"]').count()) === 1, "Cycling local viewer shows that player's own distant territory total.");
   await clickTerritory(page, "nurn");
   assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Cycling local viewer reveals that player's own distant breakdown.");
+}
+
+async function runTurnSpyOutcomeChecks(browser) {
+  console.log("Checking spy outcomes");
+  const success = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const failure = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  success.setDefaultTimeout(10000);
+  failure.setDefaultTimeout(10000);
+
+  await loadTurnSpyFixture(success, 0.99);
+  assert((await success.locator('[data-troop-marker="rivendell"]').count()) === 0, "Spy fixture starts with non-adjacent same-owner total hidden.");
+  await success.getByRole("button", { name: "Spy" }).click();
+  await success.getByRole("button", { name: "Spy" }).click();
+  await clickTerritory(success, "shire");
+  assert((await success.locator(".game-map-panel .selected-territory-name").getByText("Shire").count()) === 1, "Toggling spy off returns territory taps to normal inspection.");
+  assert((await success.locator(".game-map-panel .troop-icon-count").count()) === 4, "Normal inspection still shows own troop breakdown after spy is toggled off.");
+  await success.getByRole("button", { name: "Spy" }).click();
+  await clickTerritory(success, "bree");
+  await success.getByRole("button", { name: "Send spy" }).click();
+  await success.getByRole("button", { name: "Dismiss" }).waitFor();
+  await capture(success, "13c-spy-success-mobile.png");
+  assert((await success.locator(".game-map-panel .selected-territory-name").getByText("Bree").count()) === 1, "Successful spy shows the target territory name.");
+  assert((await success.locator(".game-map-panel .troop-icon-count").count()) === 4, "Successful spy shows the target troop breakdown.");
+  const spyIconSources = await success.locator(".game-map-panel .troop-icon-count img").evaluateAll((images) =>
+    images.map((image) => image.getAttribute("src") ?? ""),
+  );
+  assert(
+    ["orc", "warg", "uruk-hai", "witch-king"].every((name) => spyIconSources.some((source) => source.includes(name))),
+    "Successful spy uses the target owner's troop icons.",
+  );
+  assert((await success.locator('[data-troop-marker="rivendell"]').count()) === 1, "Successful spy reveals same-opponent adjacent troop totals.");
+  await success.getByRole("button", { name: "Dismiss" }).click();
+  assert(!(await success.getByRole("button", { name: "Spy" }).isDisabled()), "Spy remains available after a successful spy is dismissed.");
+
+  await loadTurnSpyFixture(failure, 0);
+  await failure.getByRole("button", { name: "Spy" }).click();
+  await clickTerritory(failure, "bree");
+  await failure.getByRole("button", { name: "Send spy" }).click();
+  await failure.getByText("Frodo's spy was captured in").waitFor();
+  await capture(failure, "13d-spy-failure-mobile.png");
+  await failure.getByText("Frodo's spy was captured in").click();
+  assert(await failure.getByRole("button", { name: "Spy" }).isDisabled(), "Spy is disabled after capture.");
+
+  await success.close();
+  await failure.close();
+}
+
+async function loadTurnSpyFixture(page, randomValue) {
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
+  const state = turnSpyGameState(territoryIds);
+
+  await page.addInitScript(({ savedState, nextRandom }) => {
+    localStorage.clear();
+    Math.random = () => nextRandom;
+    localStorage.setItem("ardature.localGame.v1", JSON.stringify(savedState));
+  }, { savedState: state, nextRandom: randomValue });
+  await page.goto(baseUrl);
+  await page.waitForSelector('.app-shell[data-app-phase="turn"]');
+  await page.waitForSelector(".turn-action-panel");
+}
+
+function turnSpyGameState(territoryIds) {
+  const state = readOnlyVisibilityGameState(territoryIds);
+  const opponentAllocation = state.allocation.playerAllocations.opponent;
+
+  return {
+    ...state,
+    phase: "turn",
+    allocation: {
+      ...state.allocation,
+      playerAllocations: {
+        ...state.allocation.playerAllocations,
+        opponent: {
+          ...opponentAllocation,
+          territories: {
+            ...opponentAllocation.territories,
+            rivendell: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
+          },
+        },
+      },
+    },
+    turn: {
+      originalTurnOrder: ["viewer", "opponent"],
+      currentPlayerId: "viewer",
+      stage: "reinforcementReady",
+      spyReturnStage: null,
+      spies: {
+        viewer: { available: true, capturedTerritoryId: null },
+        opponent: { available: true, capturedTerritoryId: null },
+      },
+      spyIntel: null,
+      reinforcement: null,
+    },
+  };
 }
 
 function readOnlyVisibilityGameState(territoryIds) {
@@ -1725,6 +1824,7 @@ async function main() {
     readOnlyMobile.setDefaultTimeout(10000);
     await runReadOnlyVisibilityChecks(readOnlyMobile);
     await readOnlyMobile.close();
+    await runTurnSpyOutcomeChecks(browser);
     await runSyncEntryChecks(mobile);
     await runSyncReadyPageChecks(browser);
     await runSyncRecoveryChecks(browser);

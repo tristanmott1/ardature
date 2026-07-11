@@ -29,6 +29,7 @@ import {
   adjustReinforcementTroop,
   adjustTerritoryTroop,
   activePlayer,
+  addTroops,
   allocationComplete,
   applySyncAllocationUpdate,
   applySyncPlayerConnectionStatus,
@@ -302,7 +303,7 @@ function App() {
   const turnSelectedTerritory = turnSelectedTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === turnSelectedTerritoryId) ?? null
     : null;
-  const spyIntelTerritory = game.turn?.spyIntel?.targetTerritoryId
+  const spyIntelTerritory = canControlTurnPlayer && game.turn?.spyIntel?.targetTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === game.turn?.spyIntel?.targetTerritoryId) ?? null
     : null;
   const spyTargetTerritory = pendingSpyTerritoryId
@@ -321,6 +322,9 @@ function App() {
     : gameMapSelectedTerritoryId && gameMapSelectedOwnTerritory
       ? territoryTroops(game.allocation, gameMapSelectedTerritoryId)
       : null;
+  const turnMapTroopPlayerId = spyIntelTerritory
+    ? ownership[spyIntelTerritory.id]
+    : turnViewerId;
   const viewerPendingTerritory = pendingDraftTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === pendingDraftTerritoryId) ?? null
     : null;
@@ -354,7 +358,14 @@ function App() {
   const showTurnControls = game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer) && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const showReinforcementControls = game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
   const showReinforcementBuildModal = game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementBuild" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
-  const showTurnMapControls = game.phase === "turn" && (!canControlTurnPlayer || game.turn?.stage === "spyIntel") && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
+  const showTurnMapControls = game.phase === "turn" &&
+    game.turn?.stage !== "reinforcementBuild" &&
+    game.turn?.stage !== "reinforcementPlace" &&
+    game.turn?.stage !== "spyTarget" &&
+    (Boolean(gameMapSelectedTerritoryId) || !canControlTurnPlayer || game.turn?.stage === "spyIntel") &&
+    !isEndGamePromptOpen &&
+    !isRestartGamePromptOpen &&
+    !syncCameraMode;
   const pausedDraftPlayer = game.phase === "paused" && game.draft && !game.allocation
     ? activePlayer({ ...game, phase: "draft" })
     : null;
@@ -550,10 +561,6 @@ function App() {
 
   useEffect(() => {
     if (game.mode === "sync" && syncRole === "host") {
-      if (game.phase === "turn" && game.turn?.reinforcement) {
-        return;
-      }
-
       broadcastSnapshot(game);
     }
   }, [game, localPlayerId, syncRole]);
@@ -1536,7 +1543,12 @@ function App() {
     setGame((current) => finishReinforcements(current, turnPlayerId));
   }
 
-  function beginTurnSpy() {
+  function toggleTurnSpy() {
+    if (game.turn?.stage === "spyTarget") {
+      cancelTurnSpy();
+      return;
+    }
+
     if (!turnPlayerId || !canUseSpy(game, turnPlayerId) || syncJoinerBlocked) {
       return;
     }
@@ -1836,11 +1848,18 @@ function App() {
     const revision = syncRevisionRef.current + 1;
     syncRevisionRef.current = revision;
     saveSyncHostGame(nextGame, localPlayerId, revision);
-    hostTransportRef.current?.broadcast({
-      type: "snapshot",
-      revision,
-      game: nextGame,
-    });
+
+    for (const player of nextGame.players) {
+      if (player.id === localPlayerId || player.connectionStatus !== "connected") {
+        continue;
+      }
+
+      hostTransportRef.current?.sendToPeer(player.id, {
+        type: "snapshot",
+        revision,
+        game: syncSnapshotForViewer(nextGame, player.id),
+      });
+    }
   }
 
   return (
@@ -1895,6 +1914,7 @@ function App() {
 
       {showReinforcementControls && turnActionPlayer && turnReinforcement ? (
         <ReinforcementPanel
+          allocation={game.allocation}
           canFinish={Boolean(turnPlayerId && reinforcementComplete(game, turnPlayerId))}
           onAdjustTroop={adjustSelectedReinforcementTroop}
           onFinish={finishCurrentReinforcements}
@@ -1909,6 +1929,7 @@ function App() {
           players={game.players}
           selectedTerritory={turnMapSelectedTerritory}
           troopBreakdown={turnMapTroopBreakdown}
+          troopPlayerId={turnMapTroopPlayerId}
           viewerId={turnViewerId}
         />
       ) : null}
@@ -1928,11 +1949,11 @@ function App() {
 
       {showTurnControls && turnActionPlayer ? (
         <TurnActionPanel
-          canSpy={Boolean(turnPlayerId && canUseSpy(game, turnPlayerId))}
+          canSpy={Boolean(turnPlayerId && (canUseSpy(game, turnPlayerId) || game.turn?.stage === "spyTarget"))}
           onDismissSpy={dismissTurnSpy}
           onFortify={endTurnWithFortify}
           onReinforce={beginTurnReinforcements}
-          onSpy={beginTurnSpy}
+          onSpy={toggleTurnSpy}
           player={turnActionPlayer}
           stage={game.turn?.stage ?? "reinforcementReady"}
           spyReturnStage={game.turn?.spyReturnStage ?? null}
@@ -2485,6 +2506,7 @@ function TurnActionPanel({
 }
 
 function ReinforcementPanel({
+  allocation,
   canFinish,
   onAdjustTroop,
   onFinish,
@@ -2492,6 +2514,7 @@ function ReinforcementPanel({
   reinforcement,
   selectedTerritory,
 }: {
+  allocation: GameState["allocation"];
   canFinish: boolean;
   onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
   onFinish: () => void;
@@ -2499,10 +2522,13 @@ function ReinforcementPanel({
   reinforcement: ReinforcementState;
   selectedTerritory: GeneratedTerritoryData | null;
 }) {
-  const selectedTroops = selectedTerritory ? reinforcement.territories[selectedTerritory.id] ?? EMPTY_TROOPS : null;
+  const selectedReinforcementTroops = selectedTerritory ? reinforcement.territories[selectedTerritory.id] ?? EMPTY_TROOPS : null;
+  const selectedTroops = selectedTerritory
+    ? addTroops(territoryTroops(allocation, selectedTerritory.id), selectedReinforcementTroops ?? EMPTY_TROOPS)
+    : null;
   const remaining = remainingReinforcementTroops(reinforcement);
   const canAddType = (troopType: TroopType) => selectedTroops !== null && remaining[troopType] > 0;
-  const canRemoveType = (troopType: TroopType) => Boolean(selectedTroops && selectedTroops[troopType] > 0);
+  const canRemoveType = (troopType: TroopType) => Boolean(selectedReinforcementTroops && selectedReinforcementTroops[troopType] > 0);
   const canAddAny = MIXTURE_TROOP_TYPES.some(canAddType);
   const canRemoveAny = MIXTURE_TROOP_TYPES.some(canRemoveType);
 
@@ -2854,19 +2880,21 @@ function GameMapPanel({
   players,
   selectedTerritory,
   troopBreakdown,
+  troopPlayerId,
   viewerId,
 }: {
   players: GamePlayer[];
   selectedTerritory: GeneratedTerritoryData | null;
   troopBreakdown: TroopCounts | null;
+  troopPlayerId?: string | null;
   viewerId: string | null;
 }) {
-  const viewer = players.find((player) => player.id === viewerId) ?? players[0] ?? null;
+  const troopPlayer = players.find((player) => player.id === (troopPlayerId ?? viewerId)) ?? players[0] ?? null;
 
   return (
     <section className="game-controls-panel game-map-panel">
       {selectedTerritory ? <strong className="selected-territory-name">{selectedTerritory.name}</strong> : null}
-      {selectedTerritory && troopBreakdown && viewer ? <TroopCountRow counts={troopBreakdown} player={viewer} /> : null}
+      {selectedTerritory && troopBreakdown && troopPlayer ? <TroopCountRow counts={troopBreakdown} player={troopPlayer} /> : null}
     </section>
   );
 }
@@ -3739,6 +3767,35 @@ function spyCaptureNoticeFromTurnChange(previous: GameState, next: GameState, lo
   }
 
   return null;
+}
+
+function syncSnapshotForViewer(game: GameState, viewerId: string): GameState {
+  if (game.phase !== "turn" || !game.turn || game.turn.currentPlayerId === viewerId) {
+    return game;
+  }
+
+  return {
+    ...game,
+    turn: {
+      ...game.turn,
+      stage: publicTurnStage(game.turn.stage, game.turn.spyReturnStage),
+      spyReturnStage: null,
+      spyIntel: null,
+      reinforcement: null,
+    },
+  };
+}
+
+function publicTurnStage(stage: NonNullable<GameState["turn"]>["stage"], spyReturnStage: NonNullable<GameState["turn"]>["spyReturnStage"]) {
+  if (stage === "spyTarget" || stage === "spyIntel") {
+    return spyReturnStage ?? "reinforcementReady";
+  }
+
+  if (stage === "reinforcementBuild" || stage === "reinforcementPlace") {
+    return "reinforcementReady";
+  }
+
+  return stage;
 }
 
 function formatQrHandshakeError(error: unknown) {
