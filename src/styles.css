@@ -790,38 +790,8 @@ select {
 }
 
 .troop-icon-frame img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  user-select: none;
-  pointer-events: none;
-}
-
-.captured-spy-prison {
-  position: absolute;
-  inset: 2px;
-  border-radius: 50%;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      transparent 0,
-      transparent 15%,
-      #3a3a3a 15%,
-      #3a3a3a 22%,
-      transparent 22%,
-      transparent 38%
-    );
-  overflow: hidden;
-}
-
-.captured-spy-prison span {
-  position: absolute;
-  inset: 0;
-  clip-path: inset(0 var(--clip-right) 0 var(--clip-left));
-}
-
-.captured-spy-prison img {
+  position: relative;
+  z-index: 0;
   display: block;
   width: 100%;
   height: 100%;

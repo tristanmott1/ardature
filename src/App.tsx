@@ -2955,7 +2955,7 @@ function CapturedSpyRow({ players, spies }: { players: GamePlayer[]; spies: Capt
 
         return (
           <span className="captured-spy-icon" key={spy.ownerPlayerId} aria-label={`${owner.name}'s captured spy`}>
-            <TroopIconImage captured ownerColor={owner.color} src={spyIconSrc(owner.color)} />
+            <TroopIconImage ownerColor={owner.color} src={spyIconSrc(owner.color, true)} />
           </span>
         );
       })}
@@ -2986,27 +2986,10 @@ function TroopIconCount({
   );
 }
 
-function TroopIconImage({ captured = false, ownerColor, src }: { captured?: boolean; ownerColor: PlayerColor | null; src: string }) {
+function TroopIconImage({ ownerColor, src }: { ownerColor: PlayerColor | null; src: string }) {
   return (
-    <span className="troop-icon-frame" data-captured={captured ? "true" : undefined} style={{ "--owner-color": colorCss(ownerColor) } as CSSProperties}>
-      {captured ? (
-        <span className="captured-spy-prison" aria-hidden="true">
-          <span style={{ "--clip-left": "0%", "--clip-right": "76%" } as CSSProperties}>
-            <img alt="" draggable={false} src={src} />
-          </span>
-          <span style={{ "--clip-left": "26%", "--clip-right": "50%" } as CSSProperties}>
-            <img alt="" draggable={false} src={src} />
-          </span>
-          <span style={{ "--clip-left": "52%", "--clip-right": "24%" } as CSSProperties}>
-            <img alt="" draggable={false} src={src} />
-          </span>
-          <span style={{ "--clip-left": "78%", "--clip-right": "0%" } as CSSProperties}>
-            <img alt="" draggable={false} src={src} />
-          </span>
-        </span>
-      ) : (
-        <img alt="" draggable={false} src={src} />
-      )}
+    <span className="troop-icon-frame" style={{ "--owner-color": colorCss(ownerColor) } as CSSProperties}>
+      <img alt="" draggable={false} src={src} />
     </span>
   );
 }
@@ -3772,8 +3755,9 @@ function troopIconSrc(color: PlayerColor | null, troopType: TroopType) {
   return `./troops/icons/${TROOP_ICON_BY_SIDE[troopSide(color)][troopType]}.png`;
 }
 
-function spyIconSrc(color: PlayerColor | null) {
-  return `./troops/icons/${isLightColor(color) ? "smeagul" : "crow"}.png`;
+function spyIconSrc(color: PlayerColor | null, captured = false) {
+  const name = isLightColor(color) ? "smeagul" : "crow";
+  return `./troops/icons/${name}${captured ? "-captured" : ""}.png`;
 }
 
 function troopName(color: PlayerColor | null, troopType: TroopType) {

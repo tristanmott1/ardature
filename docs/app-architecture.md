@@ -80,9 +80,11 @@ The troop icon crops are app-facing assets:
 - `witch-king.png`
 - `wizard.png`
 
+Additional spy and future-use portrait crops in the same directory include `crow.png`, `crow-captured.png`, `smeagul.png`, `smeagul-captured.png`, `ghost.png`.
+
 Army build, troop allocation controls, and future troop displays should use these circular icon crops instead of letter badges. When an icon has a count, render the count as a small white circle attached to the edge of the character circle.
 
-Troop and spy icon ownership should be communicated by a runtime outer ring colored with the owning player's color. The portrait communicates unit type; the ring communicates owner. Captured spies should use the same circular spy portrait with black prison bars drawn over it and the spy owner's color on the outer ring.
+Troop and spy icon ownership should be communicated by a runtime outer ring colored with the owning player's color. The portrait communicates unit type; the ring communicates owner. Captured spies should use the committed captured spy PNGs, currently `smeagul-captured.png` and `crow-captured.png`, with the spy owner's color on the runtime outer ring.
 
 ## Map Data Flow
 

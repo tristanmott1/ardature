@@ -108,7 +108,7 @@ When a spy is available, the owning player can use it for spy attempts. When a s
 - a custodian: the player currently holding the spy prisoner
 - a territory: the territory where the spy is imprisoned
 
-Captured spies are visible whenever a viewer is allowed to see the detailed unit contents of that territory. This includes the territory owner through normal inspection and any player who successfully spies on that territory. Captured spies are shown with special circular spy icons using black prison bars. The icon ring is colored by the spy owner's player color.
+Captured spies are visible whenever a viewer is allowed to see the detailed unit contents of that territory. This includes the territory owner through normal inspection and any player who successfully spies on that territory. Captured spies are shown with committed circular captured-spy PNG icons using black vertical prison bars. The icon ring is colored by the spy owner's player color.
 
 Captured spies do not count as troops, cannot attack, and cannot be used for spy attempts. In the later full fortify milestone, captured spies can be moved during fortify like pieces, but they still do not count as troops and still cannot attack.
 
@@ -1391,7 +1391,7 @@ The repository currently includes source character images under `public/troops/s
 
 The game should use these assets where appropriate, especially for troop icons, side identity, spy identity, and atmospheric UI accents.
 
-The circular troop icon crops under `public/troops/icons/` are raster PNGs, not SVGs. They should be used anywhere the UI needs troop type icons. Counts should be rendered as small white circular badges attached to the icon. Troop and spy icons should render with a runtime outer ring colored by the owning player's color. Captured spy icons should use the normal spy portrait plus black prison bars.
+The circular troop icon crops under `public/troops/icons/` are raster PNGs, not SVGs. They should be used anywhere the UI needs troop type icons. Counts should be rendered as small white circular badges attached to the icon. Troop and spy icons should render with a runtime outer ring colored by the owning player's color. Captured spy icons should use the committed `smeagul-captured.png` and `crow-captured.png` assets.
 
 ## Not Yet Fixed
 

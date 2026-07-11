@@ -84,7 +84,7 @@ The spy is not a troop and does not count toward troop totals. A spy can be avai
 
 Available spies can make spy attempts. Captured spies are board objects on a territory. Each captured spy stores the spy owner, current custodian, and current territory. Captured spies are visible whenever a viewer is allowed to inspect the detailed unit contents of that territory. This includes the territory owner through normal inspection and another player during a successful spy on that territory.
 
-Captured spies use special circular spy icons with black prison bars. The icon ring is colored by the spy owner's player color. Captured spies cannot be used for spy attempts, cannot attack, and do not count toward troop totals. In the later full fortify milestone, captured spies can be moved during fortify like pieces, but they still cannot attack and still do not count as troops.
+Captured spies use committed circular captured-spy PNG icons with black vertical prison bars. The icon ring is colored by the spy owner's player color. Captured spies cannot be used for spy attempts, cannot attack, and do not count toward troop totals. In the later full fortify milestone, captured spies can be moved during fortify like pieces, but they still cannot attack and still do not count as troops.
 
 ### Spy Targeting
 
