@@ -162,13 +162,14 @@ async function runSourceChecks() {
   assert(appSource.includes("pauseSyncGame"), "App has sync pause semantics.");
   assert(appSource.includes("syncDraftNoticeFromOwnershipChange"), "App creates local sync draft notices from ownership changes.");
   assert(appSource.includes("onCloseRef") && appSource.includes("resultKey"), "Draft result auto-dismiss is stable across parent re-renders.");
-  assert(appSource.includes('className="troop-icon-button turn-spy-button"') && !appSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling.");
+  assert(appSource.includes('className="troop-icon-button turn-spy-button"') && appSource.includes("turn-spy-spacer") && !appSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling and keeps a spacer when lost.");
+  assert(stylesSource.includes('.turn-spy-button[data-selected="true"]') && stylesSource.includes(".turn-spy-spacer"), "Turn spy selected and missing states have dedicated styling.");
   assert(appSource.includes("syncSnapshotForViewer") && appSource.includes("hostTransportRef.current?.sendToPeer(player.id") && appSource.includes("spyIntel: null") && appSource.includes("reinforcement: null"), "Sync snapshots hide private turn sub-state from passive viewers.");
   assert(gameTypesSource.includes("GameNotification") && gameTypesSource.includes("notifications: Record<string, GameNotification[]>") && gameTypesSource.includes("regionControl: Record<string, string | null>"), "Game state stores authoritative per-player notification queues and region control.");
   assert(gameStateSource.includes("applyRegionControlChanges") && gameStateSource.includes('type: "regionGained"') && gameStateSource.includes('type: "regionLost"'), "Region notifications come from authoritative control transitions.");
   assert(gameStateSource.includes('type: "spyLost"') && gameStateSource.includes('type: "spyCaptured"') && appSource.includes("GameNotificationDialog"), "Spy capture notifications use the queued blocking notification flow.");
   assert(syncMessagesSource.includes('type: "dismissNotification"') && syncMessagesSource.includes("notificationId: string") && appSource.includes('command: { type: "dismissNotification", notificationId: currentNotification.id }'), "Sync joiners dismiss queued notifications through the host by notification id.");
-  assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && appSource.includes("visibleNotification") && gameStateSource.includes('applyRegionControlChanges({'), "Region notifications distinguish turn-start delivery from immediate delivery.");
+  assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && gameTypesSource.includes("minTurnNumber: number") && appSource.includes("visibleNotification") && appSource.includes('game.phase === "turn"') && appSource.includes("game.turn.turnNumber >= notification.minTurnNumber"), "Region notifications distinguish turn-start delivery from immediate delivery after handoff.");
   assert(appSource.includes("[viewerId]: game.notifications[viewerId] ?? []"), "Sync snapshots include only the viewer's notification queue.");
   assert(!appSource.includes("spyCaptureNoticeFromTurnChange") && !appSource.includes("SpyCaptureNotice"), "Old effect-based spy capture notices are removed.");
   assert(appSource.includes("pendingDraftTerritoryId") && appSource.includes("allocationSelectedTerritoryId") && appSource.includes("gameMapSelectedTerritoryId"), "App keeps map selections in local UI state.");
@@ -1254,6 +1255,7 @@ async function runTurnSpyOutcomeChecks(browser) {
   await loadTurnSpyFixture(success, 0.99);
   assert((await success.locator('[data-troop-marker="rivendell"]').count()) === 0, "Spy fixture starts with non-adjacent same-owner total hidden.");
   await success.getByRole("button", { name: "Spy" }).click();
+  assert((await success.locator('.turn-spy-button[data-selected="true"]').count()) === 1, "Spy button shows selected state while choosing a spy target.");
   await success.getByRole("button", { name: "Spy" }).click();
   await clickTerritory(success, "shire");
   assert((await success.locator(".game-map-panel .selected-territory-name").getByText("Shire").count()) === 1, "Toggling spy off returns territory taps to normal inspection.");
@@ -1287,7 +1289,8 @@ async function runTurnSpyOutcomeChecks(browser) {
   await failure.waitForTimeout(1200);
   assert((await failure.getByText("Your spy was captured in Bree").count()) === 1, "Spy capture notification waits for explicit dismissal.");
   await failure.getByRole("button", { name: "Dismiss notification" }).click();
-  assert(await failure.getByRole("button", { name: "Spy" }).isDisabled(), "Spy is disabled after capture.");
+  assert((await failure.getByRole("button", { name: "Spy" }).count()) === 0, "Lost spy button is removed after capture.");
+  assert((await failure.locator(".turn-spy-spacer").count()) === 1, "Lost spy leaves spacing intact.");
 
   await success.close();
   await failure.close();
@@ -1326,6 +1329,75 @@ async function runGameplayRemovalChecks(page) {
     const troops = game.allocation.playerAllocations[ownerId].territories[territoryId];
     assert(troops && troops.leader === 0 && troopObjectTotal(troops) > 0, `Removed territory ${territoryId} keeps redistributed non-leader troops.`);
   }
+}
+
+async function runNotificationQueueChecks(browser) {
+  console.log("Checking queued notifications");
+  const pending = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const handoff = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const due = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  pending.setDefaultTimeout(10000);
+  handoff.setDefaultTimeout(10000);
+  due.setDefaultTimeout(10000);
+
+  await loadNotificationFixture(pending, { includeSpyNotice: false, minTurnNumber: 2, turnNumber: 1 });
+  assert((await pending.getByRole("alertdialog", { name: "Game notification" }).count()) === 0, "Turn-start region notification waits for the next turn number.");
+
+  await loadNotificationFixture(handoff, { includeSpyNotice: false, minTurnNumber: 2, phase: "turnHandoff", turnNumber: 2 });
+  assert((await handoff.getByRole("alertdialog", { name: "Game notification" }).count()) === 0, "Turn-start notification waits until after local handoff.");
+  await handoff.getByRole("button", { name: "Begin turn" }).click();
+  await handoff.getByText("You control Eriador").waitFor();
+  await handoff.getByRole("button", { name: "Dismiss notification" }).click();
+
+  await loadNotificationFixture(due, { includeSpyNotice: true, minTurnNumber: 2, turnNumber: 2 });
+  await due.getByRole("alertdialog", { name: "Game notification" }).waitFor();
+  await due.getByText("You control Eriador").waitFor();
+  await capture(due, "13h-region-notification-mobile.png");
+  await due.getByRole("button", { name: "Dismiss notification" }).click();
+  await due.getByText("You captured Sauron's spy in Bree").waitFor();
+  await capture(due, "13i-spy-captured-notification-mobile.png");
+  await due.getByRole("button", { name: "Dismiss notification" }).click();
+  assert((await due.getByRole("alertdialog", { name: "Game notification" }).count()) === 0, "Queued notifications dismiss one at a time.");
+
+  await pending.close();
+  await handoff.close();
+  await due.close();
+}
+
+async function loadNotificationFixture(page, { includeSpyNotice, minTurnNumber, phase = "turn", turnNumber }) {
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
+  const state = turnSpyGameState(territoryIds);
+  state.phase = phase;
+  state.turn.turnNumber = turnNumber;
+  state.notifications = {
+    viewer: [
+      {
+        delivery: "turnStart",
+        id: "region-gained",
+        minTurnNumber,
+        playerId: "viewer",
+        regionId: "eriador",
+        type: "regionGained",
+      },
+      ...(includeSpyNotice
+        ? [{
+            id: "spy-captured",
+            playerId: "viewer",
+            spyOwnerId: "opponent",
+            territoryId: "bree",
+            type: "spyCaptured",
+          }]
+        : []),
+    ],
+  };
+
+  await page.addInitScript((savedState) => {
+    localStorage.clear();
+    localStorage.setItem("ardature.localGame.v1", JSON.stringify(savedState));
+  }, state);
+  await page.goto(baseUrl);
+  await page.waitForSelector(`.app-shell[data-app-phase="${phase}"]`);
 }
 
 function gameplayRemovalGameState(territoryIds) {
@@ -1968,6 +2040,7 @@ async function main() {
     removalMobile.setDefaultTimeout(10000);
     await runGameplayRemovalChecks(removalMobile);
     await removalMobile.close();
+    await runNotificationQueueChecks(browser);
     await runSyncEntryChecks(mobile);
     await runSyncReadyPageChecks(browser);
     await runSyncRecoveryChecks(browser);

@@ -109,11 +109,13 @@ export type GameNotification =
       playerId: string;
       regionId: string;
       delivery: "turnStart" | "immediate";
+      minTurnNumber: number;
     };
 
 export type TurnState = {
   originalTurnOrder: string[];
   currentPlayerId: string;
+  turnNumber: number;
   stage: TurnStage;
   spyReturnStage: "reinforcementReady" | "actions" | null;
   spies: Record<string, SpyStatus>;

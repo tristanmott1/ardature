@@ -1229,7 +1229,7 @@ function removePlayerFromGameplay(state: GameState, playerId: string): GameState
       reinforcement: null,
       spies: Object.fromEntries(Object.entries(state.turn.spies).filter(([spyPlayerId]) => spyPlayerId !== playerId)),
     },
-  }), "immediate");
+  }), state.mode === "sync" ? "immediate" : "turnStart", state.mode === "sync" ? undefined : (state.turn.turnNumber + 1));
 
   return next;
 }
@@ -1310,6 +1310,7 @@ function createTurnState(players: GamePlayer[], originalTurnOrder: string[], cur
   return {
     originalTurnOrder: originalTurnOrder.length > 0 ? originalTurnOrder : players.map((player) => player.id),
     currentPlayerId,
+    turnNumber: 1,
     stage: "reinforcementReady",
     spyReturnStage: null,
     spies: Object.fromEntries(players.map((player) => [player.id, { available: true, capturedTerritoryId: null }])),
@@ -1332,6 +1333,7 @@ function advanceTurn(state: GameState): GameState {
   const nextTurn = {
     ...turn,
     currentPlayerId: nextPlayerId,
+    turnNumber: turn.turnNumber + 1,
     stage: "reinforcementReady" as TurnStage,
     spyReturnStage: null,
     spyIntel: null,
@@ -1399,7 +1401,7 @@ function nearestOwnedDistance(ownership: TerritoryOwnerMap | null, playerId: str
   return null;
 }
 
-function applyRegionControlChanges(state: GameState, delivery: "turnStart" | "immediate"): GameState {
+function applyRegionControlChanges(state: GameState, delivery: "turnStart" | "immediate", minTurnNumber = state.turn?.turnNumber ?? 0): GameState {
   const ownership = state.draft?.ownership;
   if (!ownership) {
     return state;
@@ -1424,6 +1426,7 @@ function applyRegionControlChanges(state: GameState, delivery: "turnStart" | "im
         playerId: previousOwner,
         regionId,
         delivery,
+        minTurnNumber,
       });
     }
 
@@ -1434,6 +1437,7 @@ function applyRegionControlChanges(state: GameState, delivery: "turnStart" | "im
         playerId: nextOwner,
         regionId,
         delivery,
+        minTurnNumber,
       });
     }
   }
@@ -2143,6 +2147,7 @@ function normalizeNotification(value: unknown): GameNotification | null {
       playerId: notification.playerId,
       regionId: notification.regionId,
       delivery: notification.delivery === "immediate" ? "immediate" : "turnStart",
+      minTurnNumber: Number.isInteger(notification.minTurnNumber) ? Math.max(0, notification.minTurnNumber ?? 0) : 0,
     };
   }
 
@@ -2285,6 +2290,7 @@ function normalizeTurn(value: unknown): TurnState | null {
   return {
     originalTurnOrder: turn.originalTurnOrder.filter((id): id is string => typeof id === "string"),
     currentPlayerId: turn.currentPlayerId,
+    turnNumber: Number.isInteger(turn.turnNumber) ? Math.max(1, turn.turnNumber ?? 1) : 1,
     stage: normalizeTurnStage(turn.stage),
     spyReturnStage: turn.spyReturnStage === "actions" || turn.spyReturnStage === "reinforcementReady" ? turn.spyReturnStage : null,
     spies,

@@ -329,6 +329,16 @@ button:focus-visible,
   justify-self: center;
 }
 
+.turn-spy-button[data-selected="true"] {
+  opacity: 0.52;
+  filter: grayscale(0.35);
+  transform: scale(0.94);
+}
+
+.turn-spy-spacer {
+  display: block;
+}
+
 .turn-spy-button img {
   width: 100%;
   height: 100%;

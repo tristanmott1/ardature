@@ -1955,6 +1955,7 @@ function App() {
           onSpy={toggleTurnSpy}
           player={turnActionPlayer}
           stage={game.turn?.stage ?? "reinforcementReady"}
+          spyMissing={Boolean(turnPlayerId && game.turn?.spies[turnPlayerId]?.available === false)}
           spyReturnStage={game.turn?.spyReturnStage ?? null}
         />
       ) : null}
@@ -2453,6 +2454,7 @@ function AllocationPanel({
 
 function TurnActionPanel({
   canSpy,
+  spyMissing,
   onDismissSpy,
   onFortify,
   onReinforce,
@@ -2462,6 +2464,7 @@ function TurnActionPanel({
   spyReturnStage,
 }: {
   canSpy: boolean;
+  spyMissing: boolean;
   onDismissSpy: () => void;
   onFortify: () => void;
   onReinforce: () => void;
@@ -2475,12 +2478,17 @@ function TurnActionPanel({
     : stage === "reinforcementBuild" || stage === "reinforcementPlace"
       ? "reinforcementReady"
       : stage;
+  const spySelected = stage === "spyTarget";
 
   return (
     <section className="game-controls-panel turn-action-panel">
-      <button className="troop-icon-button turn-spy-button" type="button" onClick={onSpy} disabled={!canSpy} aria-label="Spy">
-        <TroopIconImage src={spyIconSrc(player.color)} />
-      </button>
+      {spyMissing ? (
+        <span className="turn-spy-button turn-spy-spacer" aria-hidden="true" />
+      ) : (
+        <button className="troop-icon-button turn-spy-button" type="button" onClick={onSpy} disabled={!canSpy} data-selected={spySelected ? "true" : undefined} aria-label="Spy">
+          <TroopIconImage src={spyIconSrc(player.color)} />
+        </button>
+      )}
       {stage === "spyIntel" ? (
         <button className="primary icon-text-button turn-stage-button" type="button" onClick={onDismissSpy}>
           <Check size={18} />
@@ -3756,7 +3764,9 @@ function visibleNotification(game: GameState, playerId: string | null, syncJoine
     }
 
     return notification.delivery === "immediate" ||
-      ((game.phase === "turn" || game.phase === "turnHandoff") && game.turn?.currentPlayerId === playerId);
+      (game.phase === "turn" &&
+        game.turn?.currentPlayerId === playerId &&
+        game.turn.turnNumber >= notification.minTurnNumber);
   }) ?? null;
 }
 
