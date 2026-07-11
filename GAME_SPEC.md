@@ -100,7 +100,21 @@ Each player begins with one spy:
 - Light players have a Gollum/Smeagol spy.
 - Dark players have a crow spy.
 
-The spy is not a troop, has no map location, and cannot be moved or attacked. A spy can be lost permanently if a spy attempt fails.
+The spy is not a troop and does not count toward troop totals. A spy may be available, captured on a territory, or dead.
+
+When a spy is available, the owning player can use it for spy attempts. When a spy is captured, it becomes a board object on the territory where it was captured. The captured spy has:
+
+- an owner: the player whose spy it is
+- a custodian: the player currently holding the spy prisoner
+- a territory: the territory where the spy is imprisoned
+
+Captured spies are visible whenever a viewer is allowed to see the detailed unit contents of that territory. This includes the territory owner through normal inspection and any player who successfully spies on that territory. Captured spies are shown with special circular spy icons using black prison bars. The icon ring is colored by the spy owner's player color.
+
+Captured spies do not count as troops, cannot attack, and cannot be used for spy attempts. In the later full fortify milestone, captured spies can be moved during fortify like pieces, but they still do not count as troops and still cannot attack.
+
+If the spy owner captures or otherwise gains control of the territory where their captured spy currently is, that spy is released immediately and becomes available again. The recovery depends on the spy's current territory, not necessarily the territory where the spy was originally captured. If a different player captures that territory, that player gains custody of every captured spy on the territory and those spies remain imprisoned on that territory. Capturing a territory always transfers custody of all captured spies on it, and releases only the captured spies owned by the new territory owner.
+
+When a player is eliminated and owns no territories, that player's spy dies, whether it was available or captured.
 
 ## Game Setup
 
@@ -159,6 +173,7 @@ Rules:
 - Light-side colors (`green`, `blue`, `yellow`) use dwarf, rohirrim, and elf circular troop icons.
 - Dark-side colors (`red`, `purple`, `black`) use orc, warg, and uruk-hai circular troop icons.
 - Light-side colors also receive a wizard leader. Dark-side colors also receive a witch-king leader.
+- All troop and spy icons should use an outer ring colored by the owning player's color anywhere they appear.
 - The gameplay mixture troop classes are heavy, cavalry, and elite.
 - The leader troop is not part of the triangle mixture and allocates like any other troop.
 - Original player count determines budget: 2 players `40`, 3 players `35`, 4 players `30`, 5 players `25`, 6 players `20`.
@@ -223,6 +238,7 @@ For territories owned by the viewing player:
 - Territory owner color is visible.
 - Exact troop counts by class are visible.
 - Total troop count is visible.
+- Captured spies imprisoned on that territory are visible with owner-colored spy icons and black prison bars.
 
 For non-owned territories not adjacent to any territory owned by the viewing player:
 
@@ -242,6 +258,7 @@ Spy results are a temporary exception during the spy phase only.
 On a successful spy attempt:
 
 - The selected enemy territory reveals exact troop counts by class.
+- The selected enemy territory reveals captured spies imprisoned there.
 - Enemy territories adjacent to the selected territory and owned by the same opponent reveal total troop counts.
 - This is an intel snapshot.
 - The intel disappears once the current player advances past the spy phase.
@@ -273,7 +290,7 @@ Spy is optional and can be used at any point during the active player's turn whe
 
 Spy cannot be used during reinforcement placement, during an attack, during fortify, or after fortify ends the turn.
 
-If the active player has already lost their spy, the spy button is disabled until the player gains control of the territory where that spy was captured.
+If the active player's spy is captured, the spy button is unavailable until that spy is released. The button should be missing but reserve its spacing so the turn action bar does not jump.
 
 ### Spy Targeting
 
@@ -307,14 +324,15 @@ If the spy fails:
 
 - reveal no troop information
 - queue a blocking notification for the spy owner: `Your spy was captured in {territory}`
-- store the territory where the spy was captured
-- disable that player's spy
+- place the spy on the target territory as a captured spy
+- set the target territory owner as the spy custodian
+- make that player's spy unavailable for future spy attempts
 
 The defender whose territory captured the spy receives a separate blocking notification: `You captured {spy owner}'s spy in {territory}`. Successful spy attempts are silent to the defender.
 
 Spy notifications are affected-player-only, queued in order, persistent through pause/refresh/reconnect, and dismissed one at a time with a check button. They do not auto-dismiss. In local mode, notifications for another player wait until that player's next turn. In sync mode, the host queues notifications authoritatively and delivers them to the affected player after reconnect if necessary.
 
-The spy becomes available again immediately if that player later gains control of the capture territory, including during the same turn.
+The captured spy remains on its current territory until released or moved by later fortify rules. If the spy owner gains control of that current territory, the spy becomes available again immediately, including during the same turn. If another player gains control of that current territory, custody transfers to that player and the spy remains captured there.
 
 ## Reinforcements
 
@@ -730,7 +748,7 @@ Resume rules:
 - active fortify is canceled
 - active attacks are not canceled once attacks exist later
 
-If a captured spy's capture territory is assigned to that spy's owner through redistribution, the spy returns immediately.
+If a territory containing captured spies is assigned during redistribution, custody of those spies transfers to the new territory owner. Any captured spy owned by the new territory owner is released immediately.
 
 ## Elimination and Win Condition
 
@@ -740,7 +758,7 @@ When eliminated:
 
 - The player is fully out.
 - Their future turns are skipped.
-- Their spy, if still available, disappears with them.
+- Their spy dies whether it was available or captured.
 - They cannot receive reinforcements or take actions.
 
 The game ends when one player owns every territory or all other players are eliminated.
@@ -1116,7 +1134,7 @@ Sync frequency should follow a resume-safety rule:
 - Avoid syncing noisy transient UI.
 - Draft confirmations, army-build submission, ready, timeout completion, pause, resume, removal, and phase advance are immediate committed facts.
 - Allocation troop placement is committed game data. It may be batched or lightly throttled, but must be flushed on ready, pause, visibility change, or page unload where practical.
-- Turn-loop facts follow the same pattern: turn start, spy result, spy capture territory, queued spy/region notifications, finalized reinforcement placements, fortify/end-turn, elimination, and game-over are committed facts.
+- Turn-loop facts follow the same pattern: turn start, spy result, captured-spy state, queued spy/region notifications, finalized reinforcement placements, fortify/end-turn, elimination, and game-over are committed facts.
 - Future attack and battle events should also follow this pattern: host must receive enough committed data to resume; local previews and controls remain local.
 - Never sync map camera, focus animation, selected inspection territory, open modal state, hover/press state, local pending draft preview, provisional reinforcement edits, successful spy intel view state, or other purely visual state.
 
@@ -1223,6 +1241,7 @@ type GameState = {
   territories: Record<TerritoryId, TerritoryState>;
   regions: Record<RegionId, RegionState>;
   setup: SetupState;
+  spies: Record<PlayerId, SpyState>;
   spyIntel: SpyIntelState | null;
   pendingAttack: PendingAttackState | null;
   turnAttackPairs: SourceTargetPair[];
@@ -1240,7 +1259,17 @@ type PlayerState = {
   side: "light" | "dark";
   color: string;
   status: "active" | "eliminated" | "left";
-  spyAvailable: boolean;
+};
+```
+
+Suggested spy shape:
+
+```ts
+type SpyState = {
+  ownerPlayerId: string;
+  status: "available" | "captured" | "dead";
+  territoryId: string | null;
+  custodianPlayerId: string | null;
 };
 ```
 
@@ -1362,7 +1391,7 @@ The repository currently includes source character images under `public/troops/s
 
 The game should use these assets where appropriate, especially for troop icons, side identity, spy identity, and atmospheric UI accents.
 
-The circular troop icon crops under `public/troops/icons/` are raster PNGs, not SVGs. They should be used anywhere the UI needs troop type icons. Counts should be rendered as small white circular badges attached to the icon.
+The circular troop icon crops under `public/troops/icons/` are raster PNGs, not SVGs. They should be used anywhere the UI needs troop type icons. Counts should be rendered as small white circular badges attached to the icon. Troop and spy icons should render with a runtime outer ring colored by the owning player's color. Captured spy icons should use the normal spy portrait plus black prison bars.
 
 ## Not Yet Fixed
 

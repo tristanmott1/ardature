@@ -30,6 +30,8 @@ The leader troop is not part of the triangle mixture. Every player always has ex
 
 The UI should use circular character icons wherever practical. Allocation controls should not use troop names when an icon can clearly identify the troop class. The app-facing troop icons live in `public/troops/icons/` and are manually tuned PNG crops from the original art in `public/troops/source/`. The red outline files in `public/troops/source/crop-outlines/` are the source of truth for manual crop placement.
 
+Every troop icon should render with an outer ring colored by the owning player's color. The portrait identifies the troop type; the ring identifies the owner. This applies everywhere troop icons appear, including army build, allocation controls, territory breakdowns, read-only inspection, and future combat/fortify views.
+
 When a troop icon is displayed with a count, the count should appear in a small white circular badge on the edge of the character circle. The icon itself remains the main visual; no troop text should be shown in ordinary allocation UI.
 
 ## Army Build

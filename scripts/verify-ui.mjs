@@ -168,6 +168,9 @@ async function runSourceChecks() {
   assert(gameTypesSource.includes("GameNotification") && gameTypesSource.includes("notifications: Record<string, GameNotification[]>") && gameTypesSource.includes("regionControl: Record<string, string | null>"), "Game state stores authoritative per-player notification queues and region control.");
   assert(gameStateSource.includes("applyRegionControlChanges") && gameStateSource.includes('type: "regionGained"') && gameStateSource.includes('type: "regionLost"'), "Region notifications come from authoritative control transitions.");
   assert(gameStateSource.includes('type: "spyLost"') && gameStateSource.includes('type: "spyCaptured"') && appSource.includes("GameNotificationDialog"), "Spy capture notifications use the queued blocking notification flow.");
+  assert(gameTypesSource.includes('status: "available" | "captured" | "dead"') && gameTypesSource.includes("custodianPlayerId: string | null") && !gameTypesSource.includes("capturedTerritoryId: string | null"), "Spy state stores explicit status, territory, and custodian.");
+  assert(gameStateSource.includes("capturedSpiesOnTerritory") && gameStateSource.includes("restoreCapturedSpies") && gameStateSource.includes("custodianPlayerId: territoryOwnerId"), "Captured spies are selected by territory and custody follows ownership changes.");
+  assert(appSource.includes("CapturedSpyRow") && appSource.includes("captured-spy-bars") && appSource.includes("ownerColor={player.color}"), "Captured spies and troop icons use owner-colored circular icon rendering.");
   assert(syncMessagesSource.includes('type: "dismissNotification"') && syncMessagesSource.includes("notificationId: string") && appSource.includes('command: { type: "dismissNotification", notificationId: currentNotification.id }'), "Sync joiners dismiss queued notifications through the host by notification id.");
   assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && gameTypesSource.includes("minTurnNumber: number") && appSource.includes("visibleNotification") && appSource.includes('game.phase === "turn"') && appSource.includes("game.turn.turnNumber >= notification.minTurnNumber"), "Region notifications distinguish turn-start delivery from immediate delivery after handoff.");
   assert(appSource.includes("[viewerId]: game.notifications[viewerId] ?? []"), "Sync snapshots include only the viewer's notification queue.");
@@ -1167,6 +1170,7 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".game-top-bar").count()) === 1, "Turn handoff shows the next player's top bar.");
   assert((await page.getByRole("dialog", { name: "Turn handoff" }).getByRole("button", { name: "Begin turn" }).count()) === 1, "Turn handoff popup is only the continue arrow.");
   await page.getByRole("button", { name: "Begin turn" }).click();
+  await dismissQueuedNotifications(page);
   await page.waitForSelector(".turn-action-panel");
   await capture(page, "14-turn-ready-mobile.png");
   const turnMapBox = await page.locator(".map-shell").boundingBox();
@@ -1245,6 +1249,12 @@ async function runReadOnlyVisibilityChecks(page) {
   assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Cycling local viewer reveals that player's own distant breakdown.");
 }
 
+async function dismissQueuedNotifications(page) {
+  while ((await page.getByRole("alertdialog", { name: "Game notification" }).count()) > 0) {
+    await page.getByRole("button", { name: "Dismiss notification" }).click();
+  }
+}
+
 async function runTurnSpyOutcomeChecks(browser) {
   console.log("Checking spy outcomes");
   const success = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
@@ -1268,6 +1278,8 @@ async function runTurnSpyOutcomeChecks(browser) {
   await capture(success, "13c-spy-success-mobile.png");
   assert((await success.locator(".game-map-panel .selected-territory-name").getByText("Bree").count()) === 1, "Successful spy shows the target territory name.");
   assert((await success.locator(".game-map-panel .troop-icon-count").count()) === 4, "Successful spy shows the target troop breakdown.");
+  assert((await success.locator(".game-map-panel .captured-spy-icon").count()) === 1, "Successful spy shows captured spies imprisoned on the target.");
+  assert((await success.locator(".game-map-panel .captured-spy-bars").count()) === 1, "Captured spy icon uses prison bars.");
   const spyIconSources = await success.locator(".game-map-panel .troop-icon-count img").evaluateAll((images) =>
     images.map((image) => image.getAttribute("src") ?? ""),
   );
@@ -1289,6 +1301,8 @@ async function runTurnSpyOutcomeChecks(browser) {
   await failure.waitForTimeout(1200);
   assert((await failure.getByText("Your spy was captured in Bree").count()) === 1, "Spy capture notification waits for explicit dismissal.");
   await failure.getByRole("button", { name: "Dismiss notification" }).click();
+  const capturedSpyState = await failure.evaluate(() => JSON.parse(localStorage.getItem("ardature.localGame.v1") ?? "null").turn.spies.viewer);
+  assert(capturedSpyState.status === "captured" && capturedSpyState.territoryId === "bree" && capturedSpyState.custodianPlayerId === "opponent", "Failed spy stores captured territory and custodian.");
   assert((await failure.getByRole("button", { name: "Spy" }).count()) === 0, "Lost spy button is removed after capture.");
   assert((await failure.locator(".turn-spy-spacer").count()) === 1, "Lost spy leaves spacing intact.");
 
@@ -1470,7 +1484,7 @@ function gameplayRemovalGameState(territoryIds) {
       },
       spies: {
         ...state.turn.spies,
-        ally: { available: true, capturedTerritoryId: null },
+        ally: { status: "available", territoryId: null, custodianPlayerId: null },
       },
     },
   };
@@ -1484,6 +1498,15 @@ async function loadTurnSpyFixture(page, randomValue) {
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
   const state = turnSpyGameState(territoryIds);
+  state.players.push({
+    id: "spyOwner",
+    name: "Gandalf",
+    color: "blue",
+    nameLocked: false,
+    colorLocked: false,
+    connectionStatus: "connected",
+  });
+  state.turn.spies.spyOwner = { status: "captured", territoryId: "bree", custodianPlayerId: "opponent" };
 
   await page.addInitScript(({ savedState, nextRandom }) => {
     localStorage.clear();
@@ -1521,8 +1544,8 @@ function turnSpyGameState(territoryIds) {
       stage: "reinforcementReady",
       spyReturnStage: null,
       spies: {
-        viewer: { available: true, capturedTerritoryId: null },
-        opponent: { available: true, capturedTerritoryId: null },
+        viewer: { status: "available", territoryId: null, custodianPlayerId: null },
+        opponent: { status: "available", territoryId: null, custodianPlayerId: null },
       },
       spyIntel: null,
       reinforcement: null,

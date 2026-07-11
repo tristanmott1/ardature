@@ -72,8 +72,9 @@ export type AllocationState = {
 export type TurnStage = "reinforcementReady" | "reinforcementBuild" | "reinforcementPlace" | "actions" | "spyTarget" | "spyIntel";
 
 export type SpyStatus = {
-  available: boolean;
-  capturedTerritoryId: string | null;
+  status: "available" | "captured" | "dead";
+  territoryId: string | null;
+  custodianPlayerId: string | null;
 };
 
 export type SpyIntelState = {

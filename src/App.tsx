@@ -45,6 +45,7 @@ import {
   canPickTerritory,
   canUseSpy,
   cancelSpySelection,
+  capturedSpiesOnTerritory,
   clearLocalGame,
   clearSyncHostGame,
   commitReinforcements,
@@ -181,6 +182,7 @@ const EMPTY_TROOPS: TroopCounts = {
   elite: 0,
   leader: 0,
 };
+type CapturedSpyView = ReturnType<typeof capturedSpiesOnTerritory>[number];
 
 function App() {
   const initialSyncHostRef = useRef<ReturnType<typeof readSyncHostGame> | undefined>(undefined);
@@ -316,6 +318,15 @@ function App() {
   const turnMapTroopPlayerId = spyIntelTerritory
     ? ownership[spyIntelTerritory.id]
     : turnViewerId;
+  const gameMapCapturedSpies = gameMapSelectedTerritoryId && gameMapSelectedOwnTerritory
+    ? capturedSpiesOnTerritory(game, gameMapSelectedTerritoryId)
+    : [];
+  const turnMapCapturedSpies = spyIntelTerritory
+    ? capturedSpiesOnTerritory(game, spyIntelTerritory.id)
+    : gameMapSelectedTerritoryId && gameMapSelectedOwnTerritory
+      ? capturedSpiesOnTerritory(game, gameMapSelectedTerritoryId)
+      : [];
+  const reinforcementCapturedSpies = turnSelectedTerritory ? capturedSpiesOnTerritory(game, turnSelectedTerritory.id) : [];
   const viewerPendingTerritory = pendingDraftTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === pendingDraftTerritoryId) ?? null
     : null;
@@ -1895,6 +1906,7 @@ function App() {
 
       {showGameMapControls ? (
         <GameMapPanel
+          capturedSpies={gameMapCapturedSpies}
           players={game.players}
           selectedTerritory={gameMapSelectedTerritory}
           troopBreakdown={gameMapSelectedTerritoryId && gameMapSelectedOwnTerritory ? territoryTroops(game.allocation, gameMapSelectedTerritoryId) : null}
@@ -1918,13 +1930,16 @@ function App() {
           onAdjustTroop={adjustSelectedReinforcementTroop}
           onFinish={finishCurrentReinforcements}
           player={turnActionPlayer}
+          players={game.players}
           reinforcement={turnReinforcement}
+          capturedSpies={reinforcementCapturedSpies}
           selectedTerritory={turnSelectedTerritory}
         />
       ) : null}
 
       {showTurnMapControls ? (
         <GameMapPanel
+          capturedSpies={turnMapCapturedSpies}
           players={game.players}
           selectedTerritory={turnMapSelectedTerritory}
           troopBreakdown={turnMapTroopBreakdown}
@@ -1955,7 +1970,7 @@ function App() {
           onSpy={toggleTurnSpy}
           player={turnActionPlayer}
           stage={game.turn?.stage ?? "reinforcementReady"}
-          spyMissing={Boolean(turnPlayerId && game.turn?.spies[turnPlayerId]?.available === false)}
+          spyMissing={Boolean(turnPlayerId && game.turn?.spies[turnPlayerId]?.status !== "available")}
           spyReturnStage={game.turn?.spyReturnStage ?? null}
         />
       ) : null}
@@ -2486,7 +2501,7 @@ function TurnActionPanel({
         <span className="turn-spy-button turn-spy-spacer" aria-hidden="true" />
       ) : (
         <button className="troop-icon-button turn-spy-button" type="button" onClick={onSpy} disabled={!canSpy} data-selected={spySelected ? "true" : undefined} aria-label="Spy">
-          <TroopIconImage src={spyIconSrc(player.color)} />
+          <TroopIconImage ownerColor={player.color} src={spyIconSrc(player.color)} />
         </button>
       )}
       {stage === "spyIntel" ? (
@@ -2515,17 +2530,21 @@ function TurnActionPanel({
 function ReinforcementPanel({
   allocation,
   canFinish,
+  capturedSpies,
   onAdjustTroop,
   onFinish,
   player,
+  players,
   reinforcement,
   selectedTerritory,
 }: {
   allocation: GameState["allocation"];
   canFinish: boolean;
+  capturedSpies: CapturedSpyView[];
   onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
   onFinish: () => void;
   player: GamePlayer;
+  players: GamePlayer[];
   reinforcement: ReinforcementState;
   selectedTerritory: GeneratedTerritoryData | null;
 }) {
@@ -2585,6 +2604,7 @@ function ReinforcementPanel({
               </div>
               <span className="troop-row-spacer" aria-hidden="true" />
             </div>
+            <CapturedSpyRow players={players} spies={capturedSpies} />
           </>
         ) : (
           <div className="allocation-target">
@@ -2805,15 +2825,16 @@ function ArmyTriangle({ marker, onChange, player }: { marker: ArmyMarker; onChan
     >
       <path d={`M ${corners.heavy.x} ${corners.heavy.y} L ${corners.elite.x} ${corners.elite.y} L ${corners.cavalry.x} ${corners.cavalry.y} Z`} />
       {(["heavy", "cavalry", "elite"] as const).map((troopType) => (
-        <image
-          className="army-triangle-icon"
-          height={iconSize}
-          href={troopIconSrc(player.color, troopType)}
-          key={troopType}
-          width={iconSize}
-          x={corners[troopType].x - iconSize / 2}
-          y={corners[troopType].y - iconSize / 2}
-        />
+        <g className="army-triangle-icon" key={troopType}>
+          <circle cx={corners[troopType].x} cy={corners[troopType].y} r={iconSize / 2 + 2} style={{ fill: "#ffffff", stroke: colorCss(player.color), strokeWidth: 4 }} />
+          <image
+            height={iconSize}
+            href={troopIconSrc(player.color, troopType)}
+            width={iconSize}
+            x={corners[troopType].x - iconSize / 2}
+            y={corners[troopType].y - iconSize / 2}
+          />
+        </g>
       ))}
       <g className="army-triangle-marker">
         <circle className="army-triangle-marker-halo" cx={markerPoint.x} cy={markerPoint.y} r="16" />
@@ -2884,12 +2905,14 @@ function ReadyColumn({ players, title }: { players: GamePlayer[]; title: string 
 }
 
 function GameMapPanel({
+  capturedSpies,
   players,
   selectedTerritory,
   troopBreakdown,
   troopPlayerId,
   viewerId,
 }: {
+  capturedSpies: CapturedSpyView[];
   players: GamePlayer[];
   selectedTerritory: GeneratedTerritoryData | null;
   troopBreakdown: TroopCounts | null;
@@ -2902,6 +2925,7 @@ function GameMapPanel({
     <section className="game-controls-panel game-map-panel">
       {selectedTerritory ? <strong className="selected-territory-name">{selectedTerritory.name}</strong> : null}
       {selectedTerritory && troopBreakdown && troopPlayer ? <TroopCountRow counts={troopBreakdown} player={troopPlayer} /> : null}
+      {selectedTerritory ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
     </section>
   );
 }
@@ -2912,6 +2936,29 @@ function TroopCountRow({ counts, player, troopTypes = TROOP_TYPES, variant = "co
       {troopTypes.map((troopType) => (
         <TroopIconCount count={counts[troopType]} key={troopType} player={player} troopType={troopType} />
       ))}
+    </div>
+  );
+}
+
+function CapturedSpyRow({ players, spies }: { players: GamePlayer[]; spies: CapturedSpyView[] }) {
+  if (spies.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="captured-spy-row" aria-label="Captured spies">
+      {spies.map((spy) => {
+        const owner = players.find((player) => player.id === spy.ownerPlayerId);
+        if (!owner) {
+          return null;
+        }
+
+        return (
+          <span className="captured-spy-icon" key={spy.ownerPlayerId} aria-label={`${owner.name}'s captured spy`}>
+            <TroopIconImage captured ownerColor={owner.color} src={spyIconSrc(owner.color)} />
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -2933,14 +2980,25 @@ function TroopIconCount({
 
   return (
     <span className={`troop-icon-count${className ? ` ${className}` : ""}`} aria-label={label ?? `${name}: ${count}`}>
-      <TroopIconImage src={troopIconSrc(player.color, troopType)} />
+      <TroopIconImage ownerColor={player.color} src={troopIconSrc(player.color, troopType)} />
       <span className="troop-count-bubble">{count}</span>
     </span>
   );
 }
 
-function TroopIconImage({ src }: { src: string }) {
-  return <img alt="" draggable={false} src={src} />;
+function TroopIconImage({ captured = false, ownerColor, src }: { captured?: boolean; ownerColor: PlayerColor | null; src: string }) {
+  return (
+    <span className="troop-icon-frame" data-captured={captured ? "true" : undefined} style={{ "--owner-color": colorCss(ownerColor) } as CSSProperties}>
+      <img alt="" draggable={false} src={src} />
+      {captured ? (
+        <span className="captured-spy-bars" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 function PausePanel({

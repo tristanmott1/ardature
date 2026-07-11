@@ -80,7 +80,11 @@ Each player starts with one spy capability:
 - Light-side colors (`green`, `blue`, `yellow`) use the Gollum/Smeagol icon.
 - Dark-side colors (`red`, `purple`, `black`) use the crow icon.
 
-The spy is not a troop and has no map location.
+The spy is not a troop and does not count toward troop totals. A spy can be available, captured, or dead.
+
+Available spies can make spy attempts. Captured spies are board objects on a territory. Each captured spy stores the spy owner, current custodian, and current territory. Captured spies are visible whenever a viewer is allowed to inspect the detailed unit contents of that territory. This includes the territory owner through normal inspection and another player during a successful spy on that territory.
+
+Captured spies use special circular spy icons with black prison bars. The icon ring is colored by the spy owner's player color. Captured spies cannot be used for spy attempts, cannot attack, and do not count toward troop totals. In the later full fortify milestone, captured spies can be moved during fortify like pieces, but they still cannot attack and still do not count as troops.
 
 ### Spy Targeting
 
@@ -109,8 +113,10 @@ If the random sample captures the spy:
 
 - no troop information is revealed
 - queue a blocking notification for the spy owner: `Your spy was captured in {territory}`
-- the spy button becomes disabled
-- the captured spy remains unavailable until the player gains control of the territory where the spy was captured
+- place the spy on the target territory as a captured spy
+- set the target territory owner as the spy custodian
+- the spy button becomes unavailable and is missing while preserving its spacing
+- the captured spy remains unavailable until released
 
 The defender whose territory captured the spy receives a separate blocking notification: `You captured {spy owner}'s spy in {territory}`. Successful spy attempts are silent to the defender; the defender must not be told they were spied on.
 
@@ -118,13 +124,14 @@ Spy notifications are queued per affected player, persist through pause/refresh/
 
 In local mode, queued spy-captured notifications for other players appear only at the beginning of that affected player's turn, in the order received. In sync mode, the host queues the notification authoritatively and delivers it to the affected player even if that player was disconnected when it was created.
 
-If the player later captures or receives that territory, the spy becomes available immediately, including during the same turn.
+The captured spy remains on its current territory until released or moved by later fortify rules. If the spy owner captures or receives that current territory, the spy becomes available immediately, including during the same turn. If another player captures or receives that territory, that player gains custody of every captured spy on it, and those spies remain captured on that same territory.
 
 ### Spy Success
 
 If the spy is not captured:
 
 - reveal the exact heavy/cavalry/elite/leader breakdown of the selected opponent territory
+- reveal any captured spies imprisoned on the selected opponent territory
 - reveal total troop counts, but not breakdowns, for territories adjacent to the selected territory that are owned by that same opponent
 - show those adjacent totals through the normal white map troop counters
 - replace the bottom turn buttons with a dismiss button
@@ -340,7 +347,9 @@ Action cancellation rules:
 - active fortify is canceled
 - active attacks are not canceled when attacks exist later; they continue from their locked state
 
-If a captured spy's capture territory is assigned to that spy's owner through redistribution, the spy returns immediately.
+If a territory containing captured spies is assigned during redistribution, custody of those spies transfers to the new territory owner. Any captured spy owned by the new territory owner is released immediately.
+
+When a player is eliminated and owns no territories, that player's spy dies whether it was available or captured.
 
 ## Sync And Persistence Notes
 
@@ -349,7 +358,7 @@ The host remains authoritative for gameplay turns in sync mode.
 Committed gameplay facts should be sent promptly enough that the host can resume from its own model:
 
 - turn start
-- spy result, spy capture territory, and failed-spy defender notification
+- spy result, captured-spy state, and failed-spy defender notification
 - queued spy and region notifications
 - reinforcement army submission
 - finalized reinforcement troop placements

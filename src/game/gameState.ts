@@ -513,6 +513,16 @@ export function turnPlayer(state: GameState) {
   return state.turn ? state.players.find((player) => player.id === state.turn?.currentPlayerId) ?? null : null;
 }
 
+export function capturedSpiesOnTerritory(state: GameState, territoryId: string) {
+  return Object.entries(state.turn?.spies ?? {})
+    .filter(([, spy]) => spy.status === "captured" && spy.territoryId === territoryId)
+    .map(([playerId, spy]) => ({
+      custodianPlayerId: spy.custodianPlayerId,
+      ownerPlayerId: playerId,
+      territoryId,
+    }));
+}
+
 export function canUseSpy(state: GameState, playerId: string) {
   const turn = state.turn;
   return Boolean(
@@ -520,7 +530,7 @@ export function canUseSpy(state: GameState, playerId: string) {
     turn &&
     turn.currentPlayerId === playerId &&
     (turn.stage === "reinforcementReady" || turn.stage === "actions") &&
-    turn.spies[playerId]?.available,
+    turn.spies[playerId]?.status === "available",
   );
 }
 
@@ -590,8 +600,9 @@ export function confirmSpyAttempt(state: GameState, playerId: string, territoryI
         spies: {
           ...turn.spies,
           [playerId]: {
-            available: false,
-            capturedTerritoryId: territoryId,
+            status: "captured",
+            territoryId,
+            custodianPlayerId: defenderId,
           },
         },
       },
@@ -1313,7 +1324,7 @@ function createTurnState(players: GamePlayer[], originalTurnOrder: string[], cur
     turnNumber: 1,
     stage: "reinforcementReady",
     spyReturnStage: null,
-    spies: Object.fromEntries(players.map((player) => [player.id, { available: true, capturedTerritoryId: null }])),
+    spies: Object.fromEntries(players.map((player) => [player.id, createAvailableSpy()])),
     spyIntel: null,
     reinforcement: null,
   };
@@ -1528,12 +1539,22 @@ function restoreCapturedSpies(state: GameState): GameState {
 
   let spies = turn.spies;
   for (const [playerId, spy] of Object.entries(turn.spies)) {
-    if (spy.capturedTerritoryId && ownership[spy.capturedTerritoryId] === playerId) {
+    if (spy.status !== "captured" || !spy.territoryId) {
+      continue;
+    }
+
+    const territoryOwnerId = ownership[spy.territoryId];
+    if (territoryOwnerId === playerId) {
+      spies = {
+        ...spies,
+        [playerId]: createAvailableSpy(),
+      };
+    } else if (territoryOwnerId && territoryOwnerId !== spy.custodianPlayerId) {
       spies = {
         ...spies,
         [playerId]: {
-          available: true,
-          capturedTerritoryId: null,
+          ...spy,
+          custodianPlayerId: territoryOwnerId,
         },
       };
     }
@@ -1548,6 +1569,14 @@ function restoreCapturedSpies(state: GameState): GameState {
           spies,
         },
       };
+}
+
+function createAvailableSpy() {
+  return {
+    status: "available" as const,
+    territoryId: null,
+    custodianPlayerId: null,
+  };
 }
 
 function validCommittedReinforcement(state: GameState, playerId: string, reinforcement: ReinforcementState) {
@@ -2279,11 +2308,7 @@ function normalizeTurn(value: unknown): TurnState | null {
   const spies: TurnState["spies"] = {};
   if (turn.spies && typeof turn.spies === "object") {
     for (const [playerId, spy] of Object.entries(turn.spies)) {
-      const partial = spy as Partial<TurnState["spies"][string]>;
-      spies[playerId] = {
-        available: partial?.available !== false,
-        capturedTerritoryId: typeof partial?.capturedTerritoryId === "string" ? partial.capturedTerritoryId : null,
-      };
+      spies[playerId] = normalizeSpyStatus(spy);
     }
   }
 
@@ -2297,6 +2322,39 @@ function normalizeTurn(value: unknown): TurnState | null {
     spyIntel: normalizeSpyIntel(turn.spyIntel),
     reinforcement: normalizeReinforcement(turn.reinforcement),
   };
+}
+
+function normalizeSpyStatus(value: unknown): TurnState["spies"][string] {
+  const partial = value as Partial<TurnState["spies"][string]> & { available?: unknown; capturedTerritoryId?: unknown };
+  if (!partial || typeof partial !== "object") {
+    return createAvailableSpy();
+  }
+
+  if (partial.status === "dead") {
+    return {
+      status: "dead",
+      territoryId: null,
+      custodianPlayerId: null,
+    };
+  }
+
+  if (partial.status === "captured" && typeof partial.territoryId === "string") {
+    return {
+      status: "captured",
+      territoryId: partial.territoryId,
+      custodianPlayerId: typeof partial.custodianPlayerId === "string" ? partial.custodianPlayerId : null,
+    };
+  }
+
+  if (partial.available === false && typeof partial.capturedTerritoryId === "string") {
+    return {
+      status: "captured",
+      territoryId: partial.capturedTerritoryId,
+      custodianPlayerId: null,
+    };
+  }
+
+  return createAvailableSpy();
 }
 
 function normalizeTurnStage(value: unknown): TurnStage {
