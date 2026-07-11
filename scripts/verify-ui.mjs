@@ -255,6 +255,8 @@ async function runSourceChecks() {
   assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
   assert(appSource.includes("TroopIconCount") && appSource.includes("troopIconSrc"), "Allocation UI uses troop image icons.");
+  assert(stylesSource.includes("box-sizing: border-box") && stylesSource.includes("border: var(--icon-ring-width, 4px) solid var(--owner-color") && !stylesSource.includes("padding: 2px;"), "Troop icons use one border-box owner ring with no inner padding gap.");
+  assert(appSource.includes("const iconRingWidth = 4") && appSource.includes("r={iconOuterSize / 2}") && appSource.includes("fill: colorCss(player.color)"), "Army triangle icons match the shared owner-ring geometry.");
   assert(!appSource.includes("TroopBadge") && !appSource.includes("troopLabel"), "Old letter troop badge components are removed.");
   assert(!stylesSource.includes(".troop-badge") && !stylesSource.includes(".troop-chip") && !stylesSource.includes(".army-builder"), "Old troop badge styles are removed.");
   assert(!appSource.includes("troop-step-grid") && !appSource.includes("troop-stepper"), "Old troop stepper markup is removed.");

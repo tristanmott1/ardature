@@ -751,26 +751,28 @@ select {
 .troop-count-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 9px;
+  gap: 12px;
   justify-content: center;
 }
 
 .troop-count-row.large {
-  gap: 12px;
+  gap: 14px;
 }
 
 .troop-icon-count {
+  --icon-ring-width: 4px;
   position: relative;
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
   flex: none;
 }
 
 .troop-count-row.large .troop-icon-count {
-  width: 58px;
-  height: 58px;
+  --icon-ring-width: 5px;
+  width: 62px;
+  height: 62px;
 }
 
 .troop-icon-count.remaining {
@@ -782,10 +784,10 @@ select {
   display: block;
   width: 100%;
   height: 100%;
-  padding: 2px;
-  border: 3px solid var(--owner-color, #111111);
+  box-sizing: border-box;
+  border: var(--icon-ring-width, 4px) solid var(--owner-color, #111111);
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--owner-color, #111111);
   overflow: hidden;
 }
 
@@ -803,21 +805,21 @@ select {
 .captured-spy-row {
   display: flex;
   justify-content: center;
-  gap: 9px;
-  margin-top: 18px;
+  gap: 12px;
+  margin-top: 20px;
 }
 
 .captured-spy-icon {
   display: block;
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
   flex: none;
 }
 
 .troop-count-bubble {
   position: absolute;
-  right: -3px;
-  bottom: -3px;
+  right: -2px;
+  bottom: -2px;
   display: grid;
   place-items: center;
   min-width: 20px;
@@ -852,8 +854,8 @@ select {
 
 .troop-action-icons {
   display: grid;
-  grid-template-columns: repeat(4, 44px);
-  gap: 8px;
+  grid-template-columns: repeat(4, 48px);
+  gap: 9px;
 }
 
 .troop-row-affordance {
@@ -876,8 +878,8 @@ select {
 .troop-icon-button {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   border: 0;
   border-radius: 50%;

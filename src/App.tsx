@@ -2792,6 +2792,8 @@ function ArmyTriangle({ marker, onChange, player }: { marker: ArmyMarker; onChan
     elite: { x: 176, y: 158 },
   };
   const iconSize = 42;
+  const iconRingWidth = 4;
+  const iconOuterSize = iconSize + iconRingWidth * 2;
   const markerPoint = markerToTrianglePoint(marker);
 
   function updateFromPointer(clientX: number, clientY: number) {
@@ -2826,7 +2828,7 @@ function ArmyTriangle({ marker, onChange, player }: { marker: ArmyMarker; onChan
       <path d={`M ${corners.heavy.x} ${corners.heavy.y} L ${corners.elite.x} ${corners.elite.y} L ${corners.cavalry.x} ${corners.cavalry.y} Z`} />
       {(["heavy", "cavalry", "elite"] as const).map((troopType) => (
         <g className="army-triangle-icon" key={troopType}>
-          <circle cx={corners[troopType].x} cy={corners[troopType].y} r={iconSize / 2 + 2} style={{ fill: "#ffffff", stroke: colorCss(player.color), strokeWidth: 4 }} />
+          <circle cx={corners[troopType].x} cy={corners[troopType].y} r={iconOuterSize / 2} style={{ fill: colorCss(player.color) }} />
           <image
             height={iconSize}
             href={troopIconSrc(player.color, troopType)}
