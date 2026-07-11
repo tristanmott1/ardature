@@ -787,7 +787,7 @@ select {
   box-sizing: border-box;
   border: var(--icon-ring-width, 4px) solid var(--owner-color, #111111);
   border-radius: 50%;
-  background: var(--owner-color, #111111);
+  background: #ffffff;
   overflow: hidden;
 }
 

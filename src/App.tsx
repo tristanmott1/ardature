@@ -2828,7 +2828,7 @@ function ArmyTriangle({ marker, onChange, player }: { marker: ArmyMarker; onChan
       <path d={`M ${corners.heavy.x} ${corners.heavy.y} L ${corners.elite.x} ${corners.elite.y} L ${corners.cavalry.x} ${corners.cavalry.y} Z`} />
       {(["heavy", "cavalry", "elite"] as const).map((troopType) => (
         <g className="army-triangle-icon" key={troopType}>
-          <circle cx={corners[troopType].x} cy={corners[troopType].y} r={iconOuterSize / 2} style={{ fill: colorCss(player.color) }} />
+          <circle cx={corners[troopType].x} cy={corners[troopType].y} r={iconOuterSize / 2 - iconRingWidth / 2} style={{ fill: "#ffffff", stroke: colorCss(player.color), strokeWidth: iconRingWidth }} />
           <image
             height={iconSize}
             href={troopIconSrc(player.color, troopType)}
@@ -3809,6 +3809,10 @@ function notificationPlayerId(game: GameState, syncRole: SyncRole, localPlayerId
 
 function visibleNotification(game: GameState, playerId: string | null, syncJoinerBlocked: boolean) {
   if (!playerId || syncJoinerBlocked) {
+    return null;
+  }
+
+  if (game.mode === "local" && game.phase === "turnHandoff") {
     return null;
   }
 

@@ -172,7 +172,7 @@ async function runSourceChecks() {
   assert(gameStateSource.includes("capturedSpiesOnTerritory") && gameStateSource.includes("restoreCapturedSpies") && gameStateSource.includes("custodianPlayerId: territoryOwnerId"), "Captured spies are selected by territory and custody follows ownership changes.");
   assert(appSource.includes("CapturedSpyRow") && appSource.includes('captured ? "-captured" : ""') && appSource.includes("ownerColor={player.color}"), "Captured spies and troop icons use owner-colored circular icon rendering.");
   assert(syncMessagesSource.includes('type: "dismissNotification"') && syncMessagesSource.includes("notificationId: string") && appSource.includes('command: { type: "dismissNotification", notificationId: currentNotification.id }'), "Sync joiners dismiss queued notifications through the host by notification id.");
-  assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && gameTypesSource.includes("minTurnNumber: number") && appSource.includes("visibleNotification") && appSource.includes('game.phase === "turn"') && appSource.includes("game.turn.turnNumber >= notification.minTurnNumber"), "Region notifications distinguish turn-start delivery from immediate delivery after handoff.");
+  assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && gameTypesSource.includes("minTurnNumber: number") && appSource.includes("visibleNotification") && appSource.includes('game.mode === "local" && game.phase === "turnHandoff"') && appSource.includes("game.turn.turnNumber >= notification.minTurnNumber"), "Queued local notifications wait until after handoff.");
   assert(appSource.includes("[viewerId]: game.notifications[viewerId] ?? []"), "Sync snapshots include only the viewer's notification queue.");
   assert(!appSource.includes("spyCaptureNoticeFromTurnChange") && !appSource.includes("SpyCaptureNotice"), "Old effect-based spy capture notices are removed.");
   assert(appSource.includes("pendingDraftTerritoryId") && appSource.includes("allocationSelectedTerritoryId") && appSource.includes("gameMapSelectedTerritoryId"), "App keeps map selections in local UI state.");
@@ -255,8 +255,8 @@ async function runSourceChecks() {
   assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
   assert(appSource.includes("TroopIconCount") && appSource.includes("troopIconSrc"), "Allocation UI uses troop image icons.");
-  assert(stylesSource.includes("box-sizing: border-box") && stylesSource.includes("border: var(--icon-ring-width, 4px) solid var(--owner-color") && !stylesSource.includes("padding: 2px;"), "Troop icons use one border-box owner ring with no inner padding gap.");
-  assert(appSource.includes("const iconRingWidth = 4") && appSource.includes("r={iconOuterSize / 2}") && appSource.includes("fill: colorCss(player.color)"), "Army triangle icons match the shared owner-ring geometry.");
+  assert(stylesSource.includes("box-sizing: border-box") && stylesSource.includes("border: var(--icon-ring-width, 4px) solid var(--owner-color") && stylesSource.includes("background: #ffffff") && !stylesSource.includes("padding: 2px;"), "Troop icons use one border-box owner ring with a white interior and no padding gap.");
+  assert(appSource.includes("const iconRingWidth = 4") && appSource.includes("stroke: colorCss(player.color)") && appSource.includes('fill: "#ffffff"'), "Army triangle icons match the shared owner-ring geometry.");
   assert(!appSource.includes("TroopBadge") && !appSource.includes("troopLabel"), "Old letter troop badge components are removed.");
   assert(!stylesSource.includes(".troop-badge") && !stylesSource.includes(".troop-chip") && !stylesSource.includes(".army-builder"), "Old troop badge styles are removed.");
   assert(!appSource.includes("troop-step-grid") && !appSource.includes("troop-stepper"), "Old troop stepper markup is removed.");
@@ -1360,10 +1360,12 @@ async function runNotificationQueueChecks(browser) {
   await loadNotificationFixture(pending, { includeSpyNotice: false, minTurnNumber: 2, turnNumber: 1 });
   assert((await pending.getByRole("alertdialog", { name: "Game notification" }).count()) === 0, "Turn-start region notification waits for the next turn number.");
 
-  await loadNotificationFixture(handoff, { includeSpyNotice: false, minTurnNumber: 2, phase: "turnHandoff", turnNumber: 2 });
-  assert((await handoff.getByRole("alertdialog", { name: "Game notification" }).count()) === 0, "Turn-start notification waits until after local handoff.");
+  await loadNotificationFixture(handoff, { includeSpyNotice: true, minTurnNumber: 2, phase: "turnHandoff", turnNumber: 2 });
+  assert((await handoff.getByRole("alertdialog", { name: "Game notification" }).count()) === 0, "Queued notifications wait until after local handoff.");
   await handoff.getByRole("button", { name: "Begin turn" }).click();
   await handoff.getByText("You control Eriador").waitFor();
+  await handoff.getByRole("button", { name: "Dismiss notification" }).click();
+  await handoff.getByText("You captured Sauron's spy in Bree").waitFor();
   await handoff.getByRole("button", { name: "Dismiss notification" }).click();
 
   await loadNotificationFixture(due, { includeSpyNotice: true, minTurnNumber: 2, turnNumber: 2 });
