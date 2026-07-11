@@ -1,4 +1,4 @@
-import type { GameState, PlayerAllocation, PlayerColor, TroopCounts } from "../game/gameTypes";
+import type { GameState, PlayerAllocation, PlayerColor, ReinforcementState, TroopCounts } from "../game/gameTypes";
 
 export type ArdatureSyncMessage =
   | {
@@ -20,6 +20,10 @@ export type ArdatureSyncMessage =
       allocation: PlayerAllocation;
     }
   | {
+      type: "turnCommand";
+      command: TurnCommand;
+    }
+  | {
       type: "quit";
     }
   | {
@@ -31,6 +35,22 @@ export type ArdatureSyncMessage =
 
 const PLAYER_COLORS = ["green", "blue", "yellow", "red", "purple", "black"];
 const TROOP_TYPES = ["heavy", "cavalry", "elite", "leader"] as const;
+
+export type TurnCommand =
+  | {
+      type: "confirmSpy";
+      territoryId: string;
+    }
+  | {
+      type: "dismissSpy";
+    }
+  | {
+      type: "commitReinforcements";
+      reinforcement: ReinforcementState;
+    }
+  | {
+      type: "fortify";
+    };
 
 export function isArdatureSyncMessage(value: unknown): value is ArdatureSyncMessage {
   if (!value || typeof value !== "object") {
@@ -55,6 +75,10 @@ export function isArdatureSyncMessage(value: unknown): value is ArdatureSyncMess
     return isPlayerAllocation(message.allocation);
   }
 
+  if (message.type === "turnCommand") {
+    return isTurnCommand(message.command);
+  }
+
   return message.type === "quit" || message.type === "hostEnded" || message.type === "removed";
 }
 
@@ -63,7 +87,7 @@ function isGameState(value: unknown): value is GameState {
   return Boolean(state) &&
     typeof state === "object" &&
     (state.mode === "local" || state.mode === "sync") &&
-    (state.phase === "home" || state.phase === "setup" || state.phase === "draft" || state.phase === "allocation" || state.phase === "allocationHandoff" || state.phase === "paused" || state.phase === "gameMap") &&
+    (state.phase === "home" || state.phase === "setup" || state.phase === "draft" || state.phase === "allocation" || state.phase === "allocationHandoff" || state.phase === "paused" || state.phase === "gameMap" || state.phase === "turn" || state.phase === "turnHandoff") &&
     Array.isArray(state.players) &&
     Boolean(state.config);
 }
@@ -82,6 +106,35 @@ function isPlayerAllocation(value: unknown): value is PlayerAllocation {
     typeof allocation.randomCompleted === "boolean";
 }
 
+function isTurnCommand(value: unknown): value is TurnCommand {
+  const command = value as Partial<TurnCommand>;
+  if (!command || typeof command !== "object") {
+    return false;
+  }
+
+  if (command.type === "confirmSpy") {
+    return typeof command.territoryId === "string";
+  }
+
+  if (command.type === "commitReinforcements") {
+    return isReinforcement(command.reinforcement);
+  }
+
+  return command.type === "dismissSpy" || command.type === "fortify";
+}
+
+function isReinforcement(value: unknown): value is ReinforcementState {
+  const reinforcement = value as Partial<ReinforcementState>;
+  return Boolean(reinforcement) &&
+    typeof reinforcement === "object" &&
+    isMarker(reinforcement.marker) &&
+    typeof reinforcement.buildSubmitted === "boolean" &&
+    isTroopCounts(reinforcement.baseTroops) &&
+    isTroopCounts(reinforcement.bonusTroops) &&
+    Boolean(reinforcement.territories) &&
+    typeof reinforcement.territories === "object";
+}
+
 function isMarker(value: unknown) {
   const marker = value as { elite?: unknown; heavy?: unknown; cavalry?: unknown };
   return Boolean(marker) &&
@@ -95,7 +148,7 @@ function isTroopCounts(value: unknown): value is TroopCounts {
   const counts = value as Partial<TroopCounts>;
   return Boolean(counts) &&
     typeof counts === "object" &&
-    TROOP_TYPES.every((troopType) => Number.isInteger(counts[troopType]));
+    TROOP_TYPES.every((troopType) => Number.isInteger(counts[troopType]) && Number(counts[troopType]) >= 0);
 }
 
 function isPlayerColor(value: unknown): value is PlayerColor {

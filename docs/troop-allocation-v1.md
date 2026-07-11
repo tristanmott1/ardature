@@ -10,7 +10,7 @@ The app phase order for this milestone is:
 Home -> Setup and configuration -> Territory draft -> Troop allocation -> Read-only game map
 ```
 
-The old post-draft ownership-only review is no longer the final milestone state. After draft completion, the app enters troop allocation. After every remaining player has allocated troops, the app enters a read-only game map. Full turns, spy, reinforcements, attack, and fortify are still out of scope.
+The old post-draft ownership-only review is no longer the final milestone state. After draft completion, the app enters troop allocation. After every remaining player has allocated troops, this milestone enters a read-only game map. The next milestone replaces that endpoint with the turn loop documented in `gameplay-turns-v1.md`.
 
 ## Troop Classes
 

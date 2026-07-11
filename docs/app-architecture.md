@@ -134,10 +134,10 @@ Source drawings and extraction rules are the only places geometry should be fixe
 
 The app should be a map-first shell. The map is normally present, while setup, configuration, draft confirmation, pause state, reconnect state, allocation state, and read-only map state appear as panels or modals around the shared map. Once the draft starts, the colored player bar is a persistent game-stage section, distinct from the optional controls section. It stays visible during draft, allocation, allocation handoff, read-only map, pause, confirmation sheets, result notifications, and other game-stage modals. Stage controls may hide during pause or blocking modals, but the player bar does not. The map fills the remaining space below any visible player bar and controls instead of sliding underneath them.
 
-The setup/draft milestone is documented in `setup-draft-sync-v1.md`. The troop allocation milestone is documented in `troop-allocation-v1.md`. The app phase order through troop allocation is:
+The setup/draft milestone is documented in `setup-draft-sync-v1.md`. The troop allocation milestone is documented in `troop-allocation-v1.md`. The first turn-loop milestone is documented in `gameplay-turns-v1.md`. The app phase order through the next gameplay step is:
 
 ```text
-Home -> Setup and configuration -> Territory draft -> Troop allocation -> Read-only game map
+Home -> Setup and configuration -> Territory draft -> Troop allocation -> Turn loop -> Game over
 ```
 
 Both local and sync modes share the same setup and draft state model:
@@ -267,13 +267,13 @@ Territory troop data should track heavy, cavalry, elite, and leader counts. The 
 
 ## Persistence
 
-Active game recovery and setup preferences should stay separate. Active local games use the saved local game key and can restore in-progress setup, draft, allocation, or read-only map state. Active sync host games use a separate sync-host key. Setup preferences use their own key and only remember convenience defaults: local player names/colors/order, shared game configuration, and this device's sync name/color.
+Active game recovery and setup preferences should stay separate. Active local games use the saved local game key and can restore in-progress setup, draft, allocation, read-only map, or turn-loop state. Active sync host games use a separate sync-host key. Setup preferences use their own key and only remember convenience defaults: local player names/colors/order, shared game configuration, and this device's sync name/color.
 
 Starting a new local setup should restore local setup preferences with fresh player IDs. Starting sync should restore only this device's sync profile, and sync hosts should reuse the saved game configuration defaults. Remote sync players should never be written into local setup preferences.
 
 Active-game recovery is intentionally conservative:
 
-- Local refresh or close during an active game-stage restores into local pause. Draft/allocation timers are stopped and resume later from preserved remaining time.
+- Local refresh or close during an active game-stage restores into local pause. Draft/allocation/turn timers are stopped and resume later from preserved remaining time.
 - Local refresh has no reconnect concept because every player shares the same device.
 - Sync host refresh during active play restores the saved host game into paused sync recovery state. Timers are stopped, the host remains connected, and every non-host player is marked disconnected immediately.
 - Sync joiners do not own authoritative active-game recovery. If they lose the host and fail automatic reconnect, they return home and must rejoin through host recovery.
@@ -334,26 +334,32 @@ The host should always maintain enough authoritative state to resume the game af
 - Army build submitted: immediate.
 - Ready/unready-by-rule and phase advance: immediate.
 - Allocation add/remove changes: send as real allocation data, batched or lightly throttled as needed, and flushed on ready, pause, visibility change, or page unload where practical.
-- Local selected territory, map focus, camera position, open modal, draft pending preview, and read-only inspection: never synced.
+- Turn-loop committed facts: immediate. This includes turn start, spy result, captured-spy territory, reinforcement army submission, finalized reinforcement placements, fortify/end-turn result, player removal/redistribution, and future attack locks.
+- Local selected territory, map focus, camera position, open modal, draft pending preview, read-only inspection, spy target preview before confirmation, successful spy intel view state, and provisional reinforcement placement edits: never synced.
 
 This principle should continue through future phases: the host needs the latest committed model needed to resume, while temporary presentation state remains device-local.
+
+During sync gameplay turns, inactive devices render only a read-only/explore-style map from their own viewer perspective. They do not see another player's pending selections, automatic focus, confirmation sheets, provisional reinforcement edits, or successful spy intel. They receive visible updates only when the host broadcasts committed facts, such as finalized reinforcements, future resolved attacks, fortify/end-turn, or player removal. A failed spy is the one defender-facing spy event: the defender receives a local notification that they captured the active player's spy in the target territory.
 
 Local and sync modes use the same pause icon/button placement during draft. In local mode, the pause button is always visible because the device owns the whole game. In sync mode, only the host sees the pause button.
 
 Local pause preserves current state exactly: running timer time remaining, pending confirmation, result popup, army build/allocation progress, or read-only map view. Local restart from pause returns to local setup/config with the same players and settings. Local refresh/close during an active phase restores into pause and stops timers. Sync pause resets the active pick for consistency across devices: pending confirmations are discarded, the active pick timer restarts on unpause, and host-authored reconnect state is shown when needed. The sync host can confirm a restart from pause, returning everyone to setup without closing transports.
 
-Both modes allow player removal while paused. During draft, removed players' territories are cleared and returned to the draft pool. During allocation, removed players' territories and troops are redistributed to remaining players according to `troop-allocation-v1.md`. Local pause has no disconnected/reconnecting state or QR tools.
+Both modes allow player removal while paused. During draft, removed players' territories are cleared and returned to the draft pool. During allocation, removed players' territories and troops are redistributed to remaining players according to `troop-allocation-v1.md`. During gameplay turns, removed players' populated territories are redistributed according to `gameplay-turns-v1.md`. Local pause has no disconnected/reconnecting state or QR tools.
 
-## Future Game Fit
+## Gameplay Turn Fit
 
-This structure is meant to support the full game later:
+This structure now supports the next turn-loop milestone:
 
 - setup, territory claiming, and ownership colors
 - viewer-specific troop visibility rules
-- spy/reinforcement/attack/fortify phases
-- attack target/source selection
+- spy targeting and temporary intel
+- reinforcement army build and placement
+- attack button shown but disabled
+- fortify button ending the turn
+- gameplay player removal and redistribution
 - troop-count markers
 - local pass-and-play
 - WebRTC sync mode with pause/reconnect
 
-The setup/draft milestone solves player setup, sync connection, draft ownership, persistence, and map interaction. The troop allocation milestone adds army building, troop placement, viewer-specific read-only troop visibility, and troop-count markers without adding spy, reinforcement, attack, or fortify turns.
+The setup/draft milestone solves player setup, sync connection, draft ownership, persistence, and map interaction. The troop allocation milestone adds army building, troop placement, viewer-specific read-only troop visibility, and troop-count markers. The gameplay-turns milestone adds the first actual turn loop, spy, reinforcements, and turn advancement while leaving combat and real fortification for later milestones.

@@ -1,6 +1,6 @@
 export type PlayMode = "local" | "sync";
 
-export type AppPhase = "home" | "setup" | "draft" | "allocation" | "allocationHandoff" | "paused" | "gameMap";
+export type AppPhase = "home" | "setup" | "draft" | "allocation" | "allocationHandoff" | "paused" | "gameMap" | "turn" | "turnHandoff";
 
 export type PlayerColor = "green" | "blue" | "yellow" | "red" | "purple" | "black";
 
@@ -69,6 +69,36 @@ export type AllocationState = {
   playerAllocations: Record<string, PlayerAllocation>;
 };
 
+export type TurnStage = "reinforcementReady" | "reinforcementBuild" | "reinforcementPlace" | "actions" | "spyTarget" | "spyIntel";
+
+export type SpyStatus = {
+  available: boolean;
+  capturedTerritoryId: string | null;
+};
+
+export type SpyIntelState = {
+  targetTerritoryId: string;
+  totalTerritoryIds: string[];
+};
+
+export type ReinforcementState = {
+  marker: ArmyMarker;
+  buildSubmitted: boolean;
+  baseTroops: TroopCounts;
+  bonusTroops: TroopCounts;
+  territories: Record<string, TroopCounts>;
+};
+
+export type TurnState = {
+  originalTurnOrder: string[];
+  currentPlayerId: string;
+  stage: TurnStage;
+  spyReturnStage: "reinforcementReady" | "actions" | null;
+  spies: Record<string, SpyStatus>;
+  spyIntel: SpyIntelState | null;
+  reinforcement: ReinforcementState | null;
+};
+
 export type GameState = {
   phase: AppPhase;
   mode: PlayMode;
@@ -76,4 +106,5 @@ export type GameState = {
   config: GameConfig;
   draft: DraftState | null;
   allocation: AllocationState | null;
+  turn: TurnState | null;
 };

@@ -36,13 +36,31 @@ export function armyCountsForMarker(marker: ArmyMarker, playerColor: PlayerColor
   const mixture = normalizeMarker(marker);
   const startingBudget = ARMY_ECONOMY.startingBudgetByPlayerCount[playerCount] ?? DEFAULT_STARTING_BUDGET;
   const effectiveBudgetUnits = startingBudget * ARMY_ECONOMY.costScale - ARMY_ECONOMY.leaderCostUnits;
+  const selected = bestCandidateForMarker(mixture, effectiveBudgetUnits);
+
+  return {
+    ...selected.counts,
+    leader: playerColor ? 1 : 0,
+  };
+}
+
+export function reinforcementCountsForMarker(marker: ArmyMarker, budget: number): TroopCounts {
+  const selected = bestCandidateForMarker(normalizeMarker(marker), budget * ARMY_ECONOMY.costScale);
+
+  return {
+    ...selected.counts,
+    leader: 0,
+  };
+}
+
+function bestCandidateForMarker(marker: ArmyMarker, effectiveBudgetUnits: number) {
   const candidates = candidatesForBudget(effectiveBudgetUnits);
   let selected = candidates[0];
-  let selectedError = mixtureError(selected, mixture);
+  let selectedError = mixtureError(selected, marker);
 
   // Choose the budget-maximal army whose actual ratios best match the marker.
   for (const candidate of candidates.slice(1)) {
-    const error = mixtureError(candidate, mixture);
+    const error = mixtureError(candidate, marker);
 
     if (isBetterCandidate(candidate, error, selected, selectedError)) {
       selected = candidate;
@@ -50,10 +68,7 @@ export function armyCountsForMarker(marker: ArmyMarker, playerColor: PlayerColor
     }
   }
 
-  return {
-    ...selected.counts,
-    leader: playerColor ? 1 : 0,
-  };
+  return selected;
 }
 
 function candidatesForBudget(effectiveBudgetUnits: number) {

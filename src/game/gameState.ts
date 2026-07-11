@@ -1,6 +1,7 @@
 import { generatedMapData } from "../map/generated/mapData";
+import { generatedMapConnections } from "../map/generated/mapConnections";
 import type { MapSkin, TerritoryState } from "../map/mapTypes";
-import { MIXTURE_TROOP_TYPES, armyCountsForMarker } from "./armyBuild";
+import { MIXTURE_TROOP_TYPES, armyCountsForMarker, reinforcementCountsForMarker } from "./armyBuild";
 import type {
   AllocationState,
   ArmyMarker,
@@ -13,10 +14,13 @@ import type {
   PickTimeLimit,
   PlayerAllocation,
   PlayerColor,
+  ReinforcementState,
   TerritoryOwnerMap,
   TroopAllocationTimeLimit,
   TroopCounts,
   TroopType,
+  TurnStage,
+  TurnState,
 } from "./gameTypes";
 
 export const PLAYER_COLORS: PlayerColor[] = ["green", "blue", "yellow", "red", "purple", "black"];
@@ -36,6 +40,14 @@ const DEFAULT_CONFIG: GameConfig = {
 const TERRITORY_IDS = generatedMapData.territories.map((territory) => territory.id);
 const CENTER_MARKER: ArmyMarker = { heavy: 1 / 3, cavalry: 1 / 3, elite: 1 / 3 };
 const ZERO_TROOPS: TroopCounts = { heavy: 0, cavalry: 0, elite: 0, leader: 0 };
+const REGION_REINFORCEMENTS = {
+  eriador: createTroopCounts({ elite: 6 }),
+  rhovanion: createTroopCounts({ elite: 5 }),
+  gondor: createTroopCounts({ cavalry: 5 }),
+  rohan: createTroopCounts({ cavalry: 3 }),
+  rhun: createTroopCounts({ heavy: 4 }),
+  mordor: createTroopCounts({ heavy: 3 }),
+} as const;
 
 export function createInitialGameState(): GameState {
   return {
@@ -45,6 +57,7 @@ export function createInitialGameState(): GameState {
     config: { ...DEFAULT_CONFIG },
     draft: null,
     allocation: null,
+    turn: null,
   };
 }
 
@@ -407,7 +420,10 @@ export function finishAllocationForPlayer(state: GameState, playerId: string): G
   const nextAllocation = clearAllocationTimer(markAllocationReady(allocation, playerId), state.config);
   const nextIndex = nextLocalAllocationIndex(nextAllocation, state.players);
   if (nextIndex === null) {
-    return { ...state, phase: "gameMap", allocation: nextAllocation };
+    return startTurnLoop({
+      ...state,
+      allocation: nextAllocation,
+    }, true);
   }
 
   return {
@@ -425,10 +441,20 @@ export function startGameMapAfterAllocation(state: GameState): GameState {
     return state;
   }
 
+  return startTurnLoop({
+    ...state,
+    allocation: state.allocation,
+  }, false);
+}
+
+export function beginTurnAfterHandoff(state: GameState): GameState {
+  if (state.mode !== "local" || state.phase !== "turnHandoff" || !state.turn) {
+    return state;
+  }
+
   return {
     ...state,
-    phase: "gameMap",
-    allocation: state.allocation,
+    phase: "turn",
   };
 }
 
@@ -458,6 +484,339 @@ export function randomCompleteAllocationForPlayer(state: GameState, playerId: st
       },
     },
   };
+}
+
+export function turnPlayer(state: GameState) {
+  return state.turn ? state.players.find((player) => player.id === state.turn?.currentPlayerId) ?? null : null;
+}
+
+export function canUseSpy(state: GameState, playerId: string) {
+  const turn = state.turn;
+  return Boolean(
+    state.phase === "turn" &&
+    turn &&
+    turn.currentPlayerId === playerId &&
+    (turn.stage === "reinforcementReady" || turn.stage === "actions") &&
+    turn.spies[playerId]?.available,
+  );
+}
+
+export function startSpySelection(state: GameState, playerId: string): GameState {
+  if (!canUseSpy(state, playerId) || !state.turn) {
+    return state;
+  }
+
+  const spyReturnStage = state.turn.stage === "actions" ? "actions" : "reinforcementReady";
+
+  return {
+    ...state,
+    turn: {
+      ...state.turn,
+      stage: "spyTarget",
+      spyReturnStage,
+      spyIntel: null,
+    },
+  };
+}
+
+export function cancelSpySelection(state: GameState): GameState {
+  if (!state.turn || state.turn.stage !== "spyTarget") {
+    return state;
+  }
+
+  return {
+    ...state,
+    turn: {
+      ...state.turn,
+      stage: state.turn.spyReturnStage ?? "reinforcementReady",
+      spyReturnStage: null,
+    },
+  };
+}
+
+export function spyCaptureProbability(state: GameState, playerId: string, territoryId: string) {
+  const distance = nearestOwnedDistance(state.draft?.ownership ?? null, playerId, territoryId);
+  if (!distance) {
+    return null;
+  }
+
+  return Math.min(90, distance * 10);
+}
+
+export function confirmSpyAttempt(state: GameState, playerId: string, territoryId: string, randomValue = Math.random()): GameState {
+  const turn = state.turn;
+  const ownership = state.draft?.ownership;
+  if (state.phase !== "turn" || !turn || !ownership || turn.currentPlayerId !== playerId || turn.stage !== "spyTarget" || ownership[territoryId] === playerId || !ownership[territoryId]) {
+    return state;
+  }
+
+  const probability = spyCaptureProbability(state, playerId, territoryId);
+  if (probability === null) {
+    return state;
+  }
+
+  if (randomValue < probability / 100) {
+    return {
+      ...state,
+      turn: {
+        ...turn,
+        stage: turn.spyReturnStage ?? "reinforcementReady",
+        spyReturnStage: null,
+        spyIntel: null,
+        spies: {
+          ...turn.spies,
+          [playerId]: {
+            available: false,
+            capturedTerritoryId: territoryId,
+          },
+        },
+      },
+    };
+  }
+
+  const targetOwnerId = ownership[territoryId];
+  const totalTerritoryIds = targetOwnerId
+    ? sameOwnerConnectedTerritoryIds(ownership, territoryId, targetOwnerId)
+    : [];
+
+  return {
+    ...state,
+    turn: {
+      ...turn,
+      stage: "spyIntel",
+      spyIntel: {
+        targetTerritoryId: territoryId,
+        totalTerritoryIds,
+      },
+    },
+  };
+}
+
+export function dismissSpyIntel(state: GameState, playerId: string): GameState {
+  const turn = state.turn;
+  if (state.phase !== "turn" || !turn || turn.currentPlayerId !== playerId || turn.stage !== "spyIntel") {
+    return state;
+  }
+
+  return {
+    ...state,
+    turn: {
+      ...turn,
+      stage: turn.spyReturnStage ?? "reinforcementReady",
+      spyReturnStage: null,
+      spyIntel: null,
+    },
+  };
+}
+
+export function startReinforcements(state: GameState, playerId: string): GameState {
+  const turn = state.turn;
+  const ownership = state.draft?.ownership;
+  if (state.phase !== "turn" || !turn || !ownership || turn.currentPlayerId !== playerId || turn.stage !== "reinforcementReady") {
+    return state;
+  }
+
+  return {
+    ...state,
+    turn: {
+      ...turn,
+      stage: "reinforcementBuild",
+      reinforcement: {
+        marker: { ...CENTER_MARKER },
+        buildSubmitted: false,
+        baseTroops: createTroopCounts(),
+        bonusTroops: regionBonusTroops(ownership, playerId),
+        territories: {},
+      },
+    },
+  };
+}
+
+export function updateReinforcementMarker(state: GameState, playerId: string, marker: ArmyMarker): GameState {
+  const reinforcement = state.turn?.reinforcement;
+  if (state.phase !== "turn" || !state.turn || state.turn.currentPlayerId !== playerId || state.turn.stage !== "reinforcementBuild" || !reinforcement || reinforcement.buildSubmitted) {
+    return state;
+  }
+
+  return {
+    ...state,
+    turn: {
+      ...state.turn,
+      reinforcement: {
+        ...reinforcement,
+        marker,
+      },
+    },
+  };
+}
+
+export function submitReinforcementBuild(state: GameState, playerId: string): GameState {
+  const reinforcement = state.turn?.reinforcement;
+  const ownership = state.draft?.ownership;
+  if (state.phase !== "turn" || !state.turn || !ownership || state.turn.currentPlayerId !== playerId || state.turn.stage !== "reinforcementBuild" || !reinforcement) {
+    return state;
+  }
+
+  return {
+    ...state,
+    turn: {
+      ...state.turn,
+      stage: "reinforcementPlace",
+      reinforcement: {
+        ...reinforcement,
+        buildSubmitted: true,
+        baseTroops: reinforcementCountsForMarker(reinforcement.marker, reinforcementBudget(ownership, playerId)),
+      },
+    },
+  };
+}
+
+export function projectReinforcementTroops(state: GameState, playerId: string) {
+  const reinforcement = state.turn?.reinforcement;
+  const ownership = state.draft?.ownership;
+  if (!reinforcement || !ownership || state.turn?.currentPlayerId !== playerId) {
+    return createTroopCounts();
+  }
+
+  const baseTroops = reinforcement.buildSubmitted
+    ? reinforcement.baseTroops
+    : reinforcementCountsForMarker(reinforcement.marker, reinforcementBudget(ownership, playerId));
+
+  return addTroops(baseTroops, reinforcement.bonusTroops);
+}
+
+export function remainingReinforcementTroops(reinforcement: ReinforcementState | null) {
+  if (!reinforcement) {
+    return createTroopCounts();
+  }
+
+  let placed = createTroopCounts();
+  for (const troops of Object.values(reinforcement.territories)) {
+    placed = addTroops(placed, troops);
+  }
+
+  return subtractTroops(addTroops(reinforcement.baseTroops, reinforcement.bonusTroops), placed);
+}
+
+export function canAddReinforcementTroop(state: GameState, playerId: string, territoryId: string, troopType: TroopType) {
+  const reinforcement = state.turn?.reinforcement;
+  const ownership = state.draft?.ownership;
+  if (!reinforcement || !ownership || ownership[territoryId] !== playerId) {
+    return false;
+  }
+
+  return remainingReinforcementTroops(reinforcement)[troopType] > 0;
+}
+
+export function adjustReinforcementTroop(state: GameState, playerId: string, territoryId: string, troopType: TroopType, delta: 1 | -1): GameState {
+  const turn = state.turn;
+  const reinforcement = turn?.reinforcement;
+  const ownership = state.draft?.ownership;
+  if (state.phase !== "turn" || !turn || !reinforcement || !ownership || turn.currentPlayerId !== playerId || turn.stage !== "reinforcementPlace" || ownership[territoryId] !== playerId) {
+    return state;
+  }
+
+  const currentTroops = reinforcement.territories[territoryId] ?? createTroopCounts();
+  if (delta < 0 && currentTroops[troopType] <= 0) {
+    return state;
+  }
+
+  if (delta > 0 && !canAddReinforcementTroop(state, playerId, territoryId, troopType)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    turn: {
+      ...turn,
+      reinforcement: {
+        ...reinforcement,
+        territories: {
+          ...reinforcement.territories,
+          [territoryId]: {
+            ...currentTroops,
+            [troopType]: currentTroops[troopType] + delta,
+          },
+        },
+      },
+    },
+  };
+}
+
+export function reinforcementComplete(state: GameState, playerId: string) {
+  const turn = state.turn;
+  const reinforcement = turn?.reinforcement;
+  return Boolean(
+    state.phase === "turn" &&
+    turn?.currentPlayerId === playerId &&
+    turn.stage === "reinforcementPlace" &&
+    reinforcement?.buildSubmitted &&
+    troopTotal(remainingReinforcementTroops(reinforcement)) === 0,
+  );
+}
+
+export function finishReinforcements(state: GameState, playerId: string): GameState {
+  const turn = state.turn;
+  const reinforcement = turn?.reinforcement;
+  const allocation = state.allocation;
+  const playerAllocation = allocation?.playerAllocations[playerId];
+  if (!reinforcementComplete(state, playerId) || !turn || !reinforcement || !allocation || !playerAllocation) {
+    return state;
+  }
+
+  let territories = { ...playerAllocation.territories };
+  for (const [territoryId, troops] of Object.entries(reinforcement.territories)) {
+    territories = {
+      ...territories,
+      [territoryId]: addTroops(territories[territoryId] ?? createTroopCounts(), troops),
+    };
+  }
+
+  return {
+    ...state,
+    allocation: {
+      ...allocation,
+      playerAllocations: {
+        ...allocation.playerAllocations,
+        [playerId]: {
+          ...playerAllocation,
+          territories,
+        },
+      },
+    },
+    turn: {
+      ...turn,
+      stage: "actions",
+      reinforcement: null,
+      spyIntel: null,
+      spyReturnStage: null,
+    },
+  };
+}
+
+export function commitReinforcements(state: GameState, playerId: string, reinforcement: ReinforcementState): GameState {
+  const turn = state.turn;
+  if (state.phase !== "turn" || !turn || turn.currentPlayerId !== playerId || !validCommittedReinforcement(state, playerId, reinforcement)) {
+    return state;
+  }
+
+  return finishReinforcements({
+    ...state,
+    turn: {
+      ...turn,
+      stage: "reinforcementPlace",
+      reinforcement,
+    },
+  }, playerId);
+}
+
+export function finishTurnWithFortify(state: GameState, playerId: string): GameState {
+  const turn = state.turn;
+  if (state.phase !== "turn" || !turn || turn.currentPlayerId !== playerId || turn.stage !== "actions") {
+    return state;
+  }
+
+  return advanceTurn(state);
 }
 
 export function completeTimedOutSyncAllocations(state: GameState): GameState {
@@ -560,12 +919,12 @@ export function applySyncDraftConfirm(state: GameState, playerId: string, territ
 }
 
 export function applySyncPlayerQuit(state: GameState, playerId: string): GameState {
-  if (state.mode !== "sync" || (state.phase !== "setup" && state.phase !== "draft" && state.phase !== "allocation" && state.phase !== "paused")) {
+  if (state.mode !== "sync" || (state.phase !== "setup" && state.phase !== "draft" && state.phase !== "allocation" && state.phase !== "turn" && state.phase !== "paused")) {
     return state;
   }
 
   const next = removePlayerFromDraft(state, playerId);
-  return (state.phase === "draft" || state.phase === "allocation") && next.phase !== "home"
+  return (state.phase === "draft" || state.phase === "allocation" || state.phase === "turn") && next.phase !== "home"
     ? pauseSyncGame(next)
     : next;
 }
@@ -576,7 +935,7 @@ export function applySyncPlayerConnectionStatus(state: GameState, playerId: stri
   }
 
   const next = markSyncPlayerStatus(state, playerId, connectionStatus);
-  return connectionStatus !== "connected" && (state.phase === "draft" || state.phase === "allocation")
+  return connectionStatus !== "connected" && (state.phase === "draft" || state.phase === "allocation" || state.phase === "turn")
     ? pauseSyncGame(next)
     : next;
 }
@@ -598,6 +957,15 @@ export function pauseSyncGame(state: GameState): GameState {
           timerEndsAt: null,
         }
       : state.allocation,
+    turn: state.turn
+      ? {
+          ...state.turn,
+          stage: state.turn.stage === "spyIntel" ? state.turn.spyReturnStage ?? "reinforcementReady" : state.turn.stage,
+          spyReturnStage: null,
+          spyIntel: null,
+          reinforcement: null,
+        }
+      : state.turn,
   };
 }
 
@@ -729,6 +1097,10 @@ export function randomPickForActivePlayer(state: GameState, now: number): GameSt
 }
 
 export function removePlayerFromDraft(state: GameState, playerId: string): GameState {
+  if (state.turn && state.draft && state.allocation) {
+    return removePlayerFromGameplay(state, playerId);
+  }
+
   if (state.allocation && state.draft) {
     return removePlayerFromAllocation(state, playerId);
   }
@@ -757,6 +1129,80 @@ export function removePlayerFromDraft(state: GameState, playerId: string): GameS
     players,
     draft,
   };
+}
+
+function removePlayerFromGameplay(state: GameState, playerId: string): GameState {
+  if (!state.draft || !state.allocation || !state.turn) {
+    return state;
+  }
+
+  const players = state.players.filter((player) => player.id !== playerId);
+  const removedPlayer = state.players.find((player) => player.id === playerId);
+  if (!removedPlayer || players.length < 2) {
+    return createInitialGameState();
+  }
+
+  const removedTerritories = shuffle(ownedTerritoryIds(state.draft.ownership, playerId));
+  const removedTroops = shuffle(expandRemovedTroops(gameplayRemovedTroopPool(state, removedPlayer)));
+  const populatedTerritories = Object.fromEntries(removedTerritories.map((territoryId) => [territoryId, createTroopCounts()]));
+
+  // Spread the removed troop pool across the removed territories first.
+  if (removedTerritories.length > 0) {
+    for (let index = 0; index < removedTroops.length; index += 1) {
+      const territoryId = removedTerritories[index % removedTerritories.length];
+      populatedTerritories[territoryId] = addOneTroop(populatedTerritories[territoryId], removedTroops[index]);
+    }
+  }
+
+  const playerOrder = shuffle(players.map((player) => player.id));
+  const reassignedTerritories = shuffle(removedTerritories);
+  const ownership = { ...state.draft.ownership };
+  const playerAllocations = { ...state.allocation.playerAllocations };
+  delete playerAllocations[playerId];
+
+  for (let index = 0; index < reassignedTerritories.length; index += 1) {
+    const territoryId = reassignedTerritories[index];
+    const recipientId = playerOrder[index % playerOrder.length];
+    const recipient = ensureRecipientAllocation(playerAllocations[recipientId]);
+
+    ownership[territoryId] = recipientId;
+    playerAllocations[recipientId] = {
+      ...recipient,
+      territories: {
+        ...recipient.territories,
+        [territoryId]: populatedTerritories[territoryId],
+      },
+    };
+  }
+
+  const next = restoreCapturedSpies({
+    ...state,
+    phase: "paused",
+    players,
+    draft: {
+      ...state.draft,
+      ownership,
+      resultTerritoryId: null,
+      resultPlayerId: null,
+    },
+    allocation: {
+      ...state.allocation,
+      playerAllocations,
+    },
+    turn: {
+      ...state.turn,
+      currentPlayerId: state.turn.currentPlayerId === playerId
+        ? nextTurnPlayerId(players, state.turn.originalTurnOrder, playerId) ?? players[0].id
+        : state.turn.currentPlayerId,
+      stage: state.turn.stage === "actions" ? "actions" : "reinforcementReady",
+      spyReturnStage: null,
+      spyIntel: null,
+      reinforcement: null,
+      spies: Object.fromEntries(Object.entries(state.turn.spies).filter(([spyPlayerId]) => spyPlayerId !== playerId)),
+    },
+  });
+
+  return next;
 }
 
 export function nextStepAfterPick(draft: DraftState, players: GamePlayer[], draftStyle: DraftStyle) {
@@ -818,6 +1264,179 @@ export function draftStartIndex(playerCount: number, draftStyle: DraftStyle, ter
   return 0;
 }
 
+function startTurnLoop(state: GameState, useHandoff: boolean): GameState {
+  const currentPlayerId = nextTurnPlayerId(state.players, state.draft?.originalTurnOrder ?? []);
+  if (!currentPlayerId) {
+    return createInitialGameState();
+  }
+
+  return {
+    ...state,
+    phase: useHandoff && state.mode === "local" ? "turnHandoff" : "turn",
+    turn: createTurnState(state.players, state.draft?.originalTurnOrder ?? [], currentPlayerId),
+  };
+}
+
+function createTurnState(players: GamePlayer[], originalTurnOrder: string[], currentPlayerId: string): TurnState {
+  return {
+    originalTurnOrder: originalTurnOrder.length > 0 ? originalTurnOrder : players.map((player) => player.id),
+    currentPlayerId,
+    stage: "reinforcementReady",
+    spyReturnStage: null,
+    spies: Object.fromEntries(players.map((player) => [player.id, { available: true, capturedTerritoryId: null }])),
+    spyIntel: null,
+    reinforcement: null,
+  };
+}
+
+function advanceTurn(state: GameState): GameState {
+  const turn = state.turn;
+  if (!turn) {
+    return state;
+  }
+
+  const nextPlayerId = nextTurnPlayerId(state.players, turn.originalTurnOrder, turn.currentPlayerId);
+  if (!nextPlayerId) {
+    return createInitialGameState();
+  }
+
+  const nextTurn = {
+    ...turn,
+    currentPlayerId: nextPlayerId,
+    stage: "reinforcementReady" as TurnStage,
+    spyReturnStage: null,
+    spyIntel: null,
+    reinforcement: null,
+  };
+
+  return {
+    ...state,
+    phase: state.mode === "local" ? "turnHandoff" : "turn",
+    turn: restoreCapturedSpies({
+      ...state,
+      turn: nextTurn,
+    }).turn,
+  };
+}
+
+function nextTurnPlayerId(players: GamePlayer[], originalTurnOrder: string[], currentPlayerId?: string) {
+  const activeIds = new Set(players.map((player) => player.id));
+  const order = originalTurnOrder.filter((playerId) => activeIds.has(playerId));
+  if (order.length === 0) {
+    return null;
+  }
+
+  if (!currentPlayerId) {
+    return order[0];
+  }
+
+  const currentIndex = order.indexOf(currentPlayerId);
+  return order[(currentIndex + 1) % order.length] ?? order[0];
+}
+
+function sameOwnerConnectedTerritoryIds(ownership: TerritoryOwnerMap, territoryId: string, ownerId: string) {
+  const connections = generatedMapConnections[territoryId as keyof typeof generatedMapConnections] ?? [];
+  return connections.filter((connectedId) => ownership[connectedId] === ownerId);
+}
+
+function nearestOwnedDistance(ownership: TerritoryOwnerMap | null, playerId: string, targetTerritoryId: string) {
+  if (!ownership || ownership[targetTerritoryId] === playerId) {
+    return null;
+  }
+
+  const queue: Array<{ id: string; distance: number }> = [{ id: targetTerritoryId, distance: 0 }];
+  const visited = new Set([targetTerritoryId]);
+
+  // Walk outward until the nearest owned territory is found.
+  for (let index = 0; index < queue.length; index += 1) {
+    const current = queue[index];
+    const connections = generatedMapConnections[current.id as keyof typeof generatedMapConnections] ?? [];
+
+    for (const connectedId of connections) {
+      if (visited.has(connectedId)) {
+        continue;
+      }
+
+      const distance = current.distance + 1;
+      if (ownership[connectedId] === playerId) {
+        return distance;
+      }
+
+      visited.add(connectedId);
+      queue.push({ id: connectedId, distance });
+    }
+  }
+
+  return null;
+}
+
+function reinforcementBudget(ownership: TerritoryOwnerMap, playerId: string) {
+  return Math.max(3, Math.floor(ownedTerritoryIds(ownership, playerId).length / 3));
+}
+
+function regionBonusTroops(ownership: TerritoryOwnerMap, playerId: string) {
+  let bonus = createTroopCounts();
+
+  for (const [regionId, troops] of Object.entries(REGION_REINFORCEMENTS)) {
+    const regionTerritories = generatedMapData.territories.filter((territory) => territory.regionId === regionId);
+    if (regionTerritories.length > 0 && regionTerritories.every((territory) => ownership[territory.id] === playerId)) {
+      bonus = addTroops(bonus, troops);
+    }
+  }
+
+  return bonus;
+}
+
+function restoreCapturedSpies(state: GameState): GameState {
+  const turn = state.turn;
+  const ownership = state.draft?.ownership;
+  if (!turn || !ownership) {
+    return state;
+  }
+
+  let spies = turn.spies;
+  for (const [playerId, spy] of Object.entries(turn.spies)) {
+    if (spy.capturedTerritoryId && ownership[spy.capturedTerritoryId] === playerId) {
+      spies = {
+        ...spies,
+        [playerId]: {
+          available: true,
+          capturedTerritoryId: null,
+        },
+      };
+    }
+  }
+
+  return spies === turn.spies
+    ? state
+    : {
+        ...state,
+        turn: {
+          ...turn,
+          spies,
+        },
+      };
+}
+
+function validCommittedReinforcement(state: GameState, playerId: string, reinforcement: ReinforcementState) {
+  const ownership = state.draft?.ownership;
+  if (!ownership || !reinforcement.buildSubmitted || troopTotal(remainingReinforcementTroops(reinforcement)) !== 0) {
+    return false;
+  }
+
+  for (const troops of [reinforcement.baseTroops, reinforcement.bonusTroops, ...Object.values(reinforcement.territories)]) {
+    if (!validTroopCounts(troops)) {
+      return false;
+    }
+  }
+
+  return Object.entries(reinforcement.territories).every(([territoryId]) => ownership[territoryId] === playerId);
+}
+
+function validTroopCounts(counts: TroopCounts) {
+  return TROOP_TYPES.every((troopType) => Number.isInteger(counts[troopType]) && counts[troopType] >= 0);
+}
+
 export function timerMs(limit: PickTimeLimit) {
   return limit > 0 ? limit * 1000 : null;
 }
@@ -868,6 +1487,13 @@ export function pauseLocalGameForStorage(state: GameState, now: number): GameSta
       ...state,
       phase: "paused",
       allocation: pauseAllocationTimer(state.allocation, now),
+    };
+  }
+
+  if (state.phase === "turn" || state.phase === "turnHandoff") {
+    return {
+      ...state,
+      phase: "paused",
     };
   }
 
@@ -951,7 +1577,7 @@ function restoreSyncHostGame(game: GameState, localPlayerId: string): GameState 
       : game.allocation,
   };
 
-  return game.phase === "draft" || game.phase === "allocation"
+  return game.phase === "draft" || game.phase === "allocation" || game.phase === "turn" || game.phase === "turnHandoff"
     ? { ...restored, phase: "paused" }
     : restored;
 }
@@ -964,6 +1590,7 @@ function simulateRandomDraft(players: GamePlayer[], config: GameConfig, draft: D
     config,
     draft,
     allocation: null,
+    turn: null,
   };
 
   while (state.draft && remainingTerritoryIds(state.draft.ownership).length > 0) {
@@ -1121,6 +1748,56 @@ function removedTroopPool(allocation: AllocationState, player: GamePlayer): Troo
   return addTroops(baseTroops, playerAllocation.inheritedTroops);
 }
 
+function allPlacedTroops(allocation: AllocationState, playerId: string): TroopCounts {
+  const playerAllocation = allocation.playerAllocations[playerId];
+  if (!playerAllocation) {
+    return createTroopCounts();
+  }
+
+  let total = createTroopCounts();
+  for (const troops of Object.values(playerAllocation.territories)) {
+    total = addTroops(total, troops);
+  }
+
+  return total;
+}
+
+function gameplayRemovedTroopPool(state: GameState, player: GamePlayer): TroopCounts {
+  if (!state.allocation || !state.draft || !state.turn) {
+    return createTroopCounts();
+  }
+
+  let total = allPlacedTroops(state.allocation, player.id);
+  if (state.turn.currentPlayerId !== player.id || !turnHasPendingReinforcement(state.turn)) {
+    return total;
+  }
+
+  const reinforcement = state.turn.reinforcement;
+  if (reinforcement) {
+    return addTroops(total, projectReinforcementTroops(state, player.id));
+  }
+
+  return addTroops(
+    total,
+    addTroops(
+      reinforcementCountsForMarker(CENTER_MARKER, reinforcementBudget(state.draft.ownership, player.id)),
+      regionBonusTroops(state.draft.ownership, player.id),
+    ),
+  );
+}
+
+function turnHasPendingReinforcement(turn: TurnState) {
+  if (turn.stage === "actions") {
+    return false;
+  }
+
+  if ((turn.stage === "spyTarget" || turn.stage === "spyIntel") && turn.spyReturnStage === "actions") {
+    return false;
+  }
+
+  return true;
+}
+
 function ensureRecipientAllocation(allocation: AllocationState["playerAllocations"][string] | undefined): AllocationState["playerAllocations"][string] {
   return allocation ?? {
     marker: { ...CENTER_MARKER },
@@ -1272,6 +1949,7 @@ function normalizeGameState(value: unknown): GameState | null {
     config: normalizeConfig(state.config),
     draft: normalizeDraft(state.draft),
     allocation: normalizeAllocation(state.allocation),
+    turn: normalizeTurn(state.turn),
   };
 }
 
@@ -1329,7 +2007,9 @@ function normalizePhase(value: unknown): AppPhase {
     value === "allocation" ||
     value === "allocationHandoff" ||
     value === "paused" ||
-    value === "gameMap"
+    value === "gameMap" ||
+    value === "turn" ||
+    value === "turnHandoff"
   ) {
     return value;
   }
@@ -1382,6 +2062,85 @@ function normalizeAllocation(value: unknown): AllocationState | null {
     timerRemainingMs: typeof allocation.timerRemainingMs === "number" ? allocation.timerRemainingMs : null,
     timerEndsAt: null,
     playerAllocations,
+  };
+}
+
+function normalizeTurn(value: unknown): TurnState | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const turn = value as Partial<TurnState>;
+  if (!Array.isArray(turn.originalTurnOrder) || typeof turn.currentPlayerId !== "string") {
+    return null;
+  }
+
+  const spies: TurnState["spies"] = {};
+  if (turn.spies && typeof turn.spies === "object") {
+    for (const [playerId, spy] of Object.entries(turn.spies)) {
+      const partial = spy as Partial<TurnState["spies"][string]>;
+      spies[playerId] = {
+        available: partial?.available !== false,
+        capturedTerritoryId: typeof partial?.capturedTerritoryId === "string" ? partial.capturedTerritoryId : null,
+      };
+    }
+  }
+
+  return {
+    originalTurnOrder: turn.originalTurnOrder.filter((id): id is string => typeof id === "string"),
+    currentPlayerId: turn.currentPlayerId,
+    stage: normalizeTurnStage(turn.stage),
+    spyReturnStage: turn.spyReturnStage === "actions" || turn.spyReturnStage === "reinforcementReady" ? turn.spyReturnStage : null,
+    spies,
+    spyIntel: normalizeSpyIntel(turn.spyIntel),
+    reinforcement: normalizeReinforcement(turn.reinforcement),
+  };
+}
+
+function normalizeTurnStage(value: unknown): TurnStage {
+  return value === "reinforcementBuild" ||
+    value === "reinforcementPlace" ||
+    value === "actions" ||
+    value === "spyTarget" ||
+    value === "spyIntel"
+    ? value
+    : "reinforcementReady";
+}
+
+function normalizeSpyIntel(value: unknown) {
+  const intel = value as { targetTerritoryId?: unknown; totalTerritoryIds?: unknown };
+  if (!intel || typeof intel !== "object" || typeof intel.targetTerritoryId !== "string" || !Array.isArray(intel.totalTerritoryIds)) {
+    return null;
+  }
+
+  return {
+    targetTerritoryId: intel.targetTerritoryId,
+    totalTerritoryIds: intel.totalTerritoryIds.filter((id): id is string => typeof id === "string"),
+  };
+}
+
+function normalizeReinforcement(value: unknown): ReinforcementState | null {
+  const reinforcement = value as Partial<ReinforcementState>;
+  if (!reinforcement || typeof reinforcement !== "object") {
+    return null;
+  }
+
+  const territories: Record<string, TroopCounts> = {};
+  if (reinforcement.territories && typeof reinforcement.territories === "object") {
+    for (const territoryId of TERRITORY_IDS) {
+      const troops = reinforcement.territories[territoryId];
+      if (troops) {
+        territories[territoryId] = normalizeTroopCounts(troops);
+      }
+    }
+  }
+
+  return {
+    marker: normalizeMarker(reinforcement.marker),
+    buildSubmitted: reinforcement.buildSubmitted === true,
+    baseTroops: normalizeTroopCounts(reinforcement.baseTroops),
+    bonusTroops: normalizeTroopCounts(reinforcement.bonusTroops),
+    territories,
   };
 }
 

@@ -111,12 +111,13 @@ Setup has these stages:
 3. Choose host-controlled setup options.
 4. Draft or assign territories.
 5. Allocate starting troops.
-6. Enter the read-only game map.
-7. Begin the first turn.
+6. Begin the turn loop.
+
+The read-only map from the troop allocation milestone remains the viewer model for inactive sync players and post-allocation inspection, but it is not a separate required stop once the turn loop exists.
 
 The host determines setup options.
 
-The setup/draft milestone stopped after territory draft review. The current gameplay implementation milestone is troop allocation, documented in `docs/troop-allocation-v1.md`. Full turns are still out of scope for the troop allocation milestone.
+The setup/draft milestone stopped after territory draft review. The troop allocation milestone is documented in `docs/troop-allocation-v1.md`. The next gameplay implementation milestone is the first turn loop, documented in `docs/gameplay-turns-v1.md`.
 
 ### Setup Options
 
@@ -131,7 +132,7 @@ The setup state should allow:
 - Reinforcement formula constants.
 - Region bonus definitions.
 
-The setup/draft milestone exposes player colors, turn order, draft style, draft pick timer, and troop allocation timer. The troop allocation milestone uses the configured allocation timer and the starting troop budget rules documented below. Reinforcement constants and region bonuses may remain hard-coded until turn phases are built.
+The setup/draft milestone exposes player colors, turn order, draft style, draft pick timer, and troop allocation timer. The troop allocation milestone uses the configured allocation timer and the starting troop budget rules documented below. The turn-loop milestone uses the reinforcement constants and region bonus values documented in `docs/gameplay-turns-v1.md`.
 
 ### Territory Assignment
 
@@ -194,7 +195,7 @@ The map data should include:
 - Optional visual label position.
 - Optional artwork or icon hooks.
 
-There should be six regions. Exact territories and bonuses will be designed later.
+There are six playable regions. Their territory membership comes from `maps/territory-key.md` and generated map data.
 
 Each region has:
 
@@ -202,7 +203,16 @@ Each region has:
 - A bonus troop class.
 - A bonus troop amount.
 
-Owning every territory in a region grants that region's reinforcement bonus during the reinforcement phase.
+Owning every territory in a region grants that region's reinforcement bonus during the reinforcement phase:
+
+| Region | Bonus |
+| --- | --- |
+| Eriador | 6 elite |
+| Rhovanion | 5 elite |
+| Gondor | 5 cavalry |
+| Rohan | 3 cavalry |
+| Rhun | 4 heavy |
+| Mordor | 3 heavy |
 
 ## Information Visibility
 
@@ -239,108 +249,133 @@ On a successful spy attempt:
 
 ## Turn Structure
 
-The game proceeds in round-robin turns, one active player at a time.
+The game proceeds in round-robin turns, one active player at a time. Removed players are skipped. The first turn after initial allocation belongs to the first player in the configured setup turn order.
 
-Eliminated players are skipped.
+Each turn has three ordered stages:
 
-Each turn has four phases:
+1. Reinforcements.
+2. Attack.
+3. Fortify.
 
-1. Spy.
-2. Reinforcements.
-3. Attack.
-4. Fortify.
+Spy is an optional action that can be used during the turn only when the active player is not in the middle of another action. The winner is the first player to own all 42 playable territories, or equivalently the last remaining player with territories.
 
-The active player may not advance to the next phase if required choices in the current phase are incomplete.
+The first turn-loop implementation is documented in `docs/gameplay-turns-v1.md`. In that implementation, reinforcements and spy are active, attack is disabled, and fortify simply ends the turn.
 
-The winner is the last remaining player with territories, or equivalently the first player to own every territory.
+There is no normal turn timer in the first turn-loop implementation. Draft timers and allocation timers remain as documented, but spy, reinforcements, attack choice, and fortify/end-turn do not use a turn timer.
 
-## Phase 1: Spy
+## Spy
 
-The spy phase is optional.
+Spy is optional and can be used at any point during the active player's turn when no other action is in progress:
 
-If the active player still has a spy, they may either:
+- before starting reinforcements
+- after reinforcements and before attack or fortify
+- before or after completed attacks in the later combat milestone
 
-- Use the spy on one opponent-owned territory.
-- Skip the spy phase.
+Spy cannot be used during reinforcement placement, during an attack, during fortify, or after fortify ends the turn.
 
-If the active player has already lost their spy, the phase can only be skipped.
+If the active player has already lost their spy, the spy button is disabled until the player gains control of the territory where that spy was captured.
 
 ### Spy Targeting
 
-The selected spy target must be owned by an opponent.
+The selected spy target must be owned by an opponent. Any opponent territory may be selected because the gameplay graph is connected.
 
-The success probability is based on the graph distance from the target territory to the active player's nearest owned territory:
+The capture probability is based on the shortest gameplay-connection distance from the target territory to the active player's nearest owned territory:
 
-```text
-spy success chance = function(distance from target to nearest owned territory)
-```
+| Distance | Capture probability |
+| --- | --- |
+| 1 | 10% |
+| 2 | 20% |
+| 3 | 30% |
+| 4 | 40% |
+| 5 | 50% |
+| 6 | 60% |
+| 7 | 70% |
+| 8 | 80% |
+| 9 or more | 90% |
 
-Closer targets should be easier to spy on. Farther targets should be riskier.
-
-The exact probability curve is intentionally not fixed yet.
+All gameplay connections from `maps/territory-key.md` count, including ship connections. Physical generated borders are not used for gameplay distance.
 
 ### Spy Result
 
 If the spy succeeds:
 
-- Reveal the target territory's exact troop counts by class.
-- Reveal the total troop counts in adjacent territories owned by the same opponent.
-- Keep this intel visible only during the current spy phase.
-- Preserve the spy for future turns.
+- reveal the target territory's exact heavy/cavalry/elite/leader counts
+- reveal total troop counts in adjacent territories owned by the same opponent
+- show adjacent totals through normal white map troop counters
+- replace the turn controls with a dismiss button
+- preserve the spy for future use
+
+The active player may inspect the successful spy intel as long as they want. Pressing dismiss clears the intel and resumes the turn. Spy intel is a temporary UI snapshot and does not become permanent memory.
 
 If the spy fails:
 
-- Reveal no troop information.
-- The player loses their spy for the rest of the game.
+- reveal no troop information
+- show a notification that the spy was captured
+- store the territory where the spy was captured
+- disable that player's spy
 
-After the player advances out of the spy phase, all spy intel is cleared.
+In sync mode, the defender whose territory captured the spy also receives a local notification: `{spy owner name}'s spy was captured in {territory name}`. Successful spy attempts are silent to the defender.
 
-## Phase 2: Reinforcements
+The spy becomes available again immediately if that player later gains control of the capture territory, including during the same turn.
 
-The active player receives new troops and places them onto owned territories.
+## Reinforcements
+
+The active player receives new troops and places them onto owned territories before attack or fortify becomes available.
 
 Reinforcements have two sources:
 
-- Territory-count reinforcement.
-- Region-control bonuses.
+- territory-count reinforcement, whose heavy/cavalry/elite breakdown is chosen with the triangle
+- fixed region-control bonuses
 
 ### Territory-Count Reinforcement
 
-The active player chooses exactly one troop class for their territory-count reinforcement.
-
-The number of troops received depends on:
-
-- The number of territories the player owns.
-- The selected troop class.
-
-The exact formula and constants are intentionally not fixed yet.
-
-The intended relationship is:
+The controllable reinforcement budget is based on the number of territories owned at the beginning of the current player's turn:
 
 ```text
-heavy reinforcement count > cavalry reinforcement count > elite reinforcement count
+territoryBudget = max(3, floor(ownedTerritoryCount / 3))
 ```
 
-This means choosing dwarves/orcs gives the most troops, rohirrim/wargs gives fewer, and elves/uruk-hai gives the fewest.
+Examples:
+
+| Owned territories | Territory budget |
+| --- | --- |
+| 1-11 | 3 |
+| 12-14 | 4 |
+| 15-17 | 5 |
+| 18-20 | 6 |
+| 21-23 | 7 |
+| 24-26 | 8 |
+| 27-29 | 9 |
+| 30-32 | 10 |
+| 33-35 | 11 |
+| 36-38 | 12 |
+| 39-41 | 13 |
+| 42 | 14 |
+
+The reinforcement triangle uses the same fixed-point candidate-selection model as initial army build, but there is no leader:
+
+- budget scale: `5` cost units per budget point
+- heavy cost: `4`
+- cavalry cost: `5`
+- elite cost: `6`
+- effective budget units: `territoryBudget * 5`
+
+The player controls only the heavy/cavalry/elite breakdown of this territory-count budget. The UI shows the total reinforcement pool, including fixed region bonuses, above the triangle.
 
 ### Region Bonuses
 
-The active player receives bonus troops for each full region they own.
+The active player receives fixed bonus troops for each full region they own at the beginning of their turn:
 
-Each region grants:
+| Region | Bonus |
+| --- | --- |
+| Eriador | 6 elite |
+| Rhovanion | 5 elite |
+| Gondor | 5 cavalry |
+| Rohan | 3 cavalry |
+| Rhun | 4 heavy |
+| Mordor | 3 heavy |
 
-- A fixed number of troops.
-- A fixed troop class.
-
-Example shape:
-
-```text
-Moria: +3 heavy
-Rohan: +3 cavalry
-Lothlorien: +2 elite
-```
-
-Exact region definitions and bonus values are intentionally not fixed yet.
+The player does not choose the breakdown of region bonus troops. Region bonus troops are additive fixed troops, using the same fixed-troop pool mechanics as troops inherited from removed players.
 
 ### Placement
 
@@ -349,10 +384,18 @@ All reinforcement troops may be placed on any territories owned by the active pl
 Rules:
 
 - Reinforcement troops cannot be placed on opponent territories.
-- Territory-count reinforcements and region bonuses are combined into one placement pool.
-- The player must place every reinforcement troop before advancing to attack.
+- The player must place every reinforcement troop before advancing.
+- Existing troops that were present before the reinforcement action started cannot be removed during reinforcement placement.
+- Only troops added during the current reinforcement action can be removed while reinforcing.
+- There is no requirement to add at least one new troop to each owned territory.
+
+If player removal cancels an active reinforcement action, the reinforcement action is undone and can be restarted after resume with the updated game state.
+
+During sync reinforcements, the active player sees local reinforcement edits immediately. Other devices do not see those provisional troop changes. The host and other players receive the updated troop state only after reinforcements are finalized and committed.
 
 ## Phase 3: Attack
+
+Attack is disabled in the first turn-loop implementation. The full rules below remain the design target for the later combat milestone.
 
 The active player may make any number of attacks during the attack phase.
 
@@ -601,6 +644,8 @@ The UI should make these reveals available at the end of battle, then return to 
 
 ## Phase 4: Fortify
 
+In the first turn-loop implementation, pressing fortify simply ends the current player's turn. The full rules below remain the design target for the later fortify milestone.
+
 The fortify phase is optional.
 
 The active player may choose up to one target territory they own to fortify.
@@ -632,6 +677,49 @@ Rules:
 For light players, cavalry are rohirrim. For dark players, cavalry are wargs.
 
 After fortification is submitted or skipped, the turn ends and play advances to the next non-eliminated player.
+
+## Player Removal During Gameplay
+
+Player removal during gameplay is different from normal elimination by conquest.
+
+In local mode:
+
+- the regular X ends the whole local game after confirmation
+- individual player removal is available only from the pause modal
+
+In sync mode:
+
+- the host can remove players from pause
+- a graceful quit during gameplay pauses the game and removes that player
+- an ungraceful disconnect pauses the game but does not remove that player unless the host later removes them
+
+After any gameplay removal, the game pauses immediately. If fewer than 2 players remain, the game ends instead.
+
+Redistribution steps:
+
+1. Collect all territories currently owned by the removed player, including territories captured during the current turn.
+2. Collect all removed-player troops into one pool, including placed troops, unplaced troops, and reinforcement troops acquired during the current turn.
+3. If the removed player was due to receive reinforcements but had not built that reinforcement army yet, choose a uniform reinforcement mixture first.
+4. Replace every removed wizard or witch-king with one random heavy, cavalry, or elite troop.
+5. Shuffle the removed-player territories.
+6. Shuffle the removed-player troops as individual troop items.
+7. Place troops onto the removed-player territories one at a time in round-robin territory order.
+8. Shuffle the now-populated territory list again.
+9. Shuffle the remaining players.
+10. Distribute populated territories to remaining players in round-robin player order.
+11. Keep the game paused until resume.
+
+Resume rules:
+
+- removed players are skipped in turn order
+- if the current player was removed, the next remaining player after them in configured turn order starts
+- if the current player was not removed, that player resumes the same turn stage unless the active action is canceled
+- active spy intel is canceled and the spy survives
+- active reinforcements are canceled and undone
+- active fortify is canceled
+- active attacks are not canceled once attacks exist later
+
+If a captured spy's capture territory is assigned to that spy's owner through redistribution, the spy returns immediately.
 
 ## Elimination and Win Condition
 
@@ -786,7 +874,7 @@ After all territories are drafted, the app enters the troop allocation phase. It
 
 ### Initial Troop Allocation View
 
-Initial troop allocation is a required game phase after draft and before the read-only game map.
+Initial troop allocation is a required game phase after draft and before turn play begins.
 
 Army build:
 
@@ -830,7 +918,7 @@ Sync allocation:
 
 ### Read-Only Game Map
 
-After all remaining players have allocated troops, the app enters a read-only game map.
+After all remaining players have allocated troops, the app has enough information to render a viewer-specific read-only map. The next gameplay milestone uses that same visibility model inside the turn loop rather than stopping at the read-only map as the final state.
 
 Visibility rules:
 
@@ -845,6 +933,27 @@ Visibility rules:
 - Visibility connections are independent of physical shared borders in generated geometry.
 
 In local mode, pressing the player name in the top bar cycles the current viewer. Sync mode uses the device's local player as the viewer, including on the host device.
+
+### Sync Turn Viewer Rules
+
+During another player's turn, inactive sync devices show only a read-only/explore-style map using the same viewer-specific visibility rules:
+
+- ownership is visible
+- the viewer's own territory total markers are visible
+- opponent total markers are visible only where the viewer has gameplay adjacency
+- own territory breakdowns are visible only through local inspection
+- opponent breakdowns are not visible except during that viewer's own successful spy intel
+- no turn action controls are shown
+- no pending selection, focus, confirmation, or provisional reinforcement placement from the active player is shown
+
+Sync devices update from committed host facts only:
+
+- after reinforcements are finalized
+- after future attacks resolve or otherwise commit
+- after fortify/end-turn commits
+- after player removal and redistribution commits
+
+The active player's provisional reinforcement edits are local to that player until commit. Spy target selection, spy confirmation sheets, and successful spy intel are also local/private. The only defender-facing spy event is the failed-spy captured notification.
 
 ### Pause And Player Removal
 
@@ -996,8 +1105,9 @@ Sync frequency should follow a resume-safety rule:
 - Avoid syncing noisy transient UI.
 - Draft confirmations, army-build submission, ready, timeout completion, pause, resume, removal, and phase advance are immediate committed facts.
 - Allocation troop placement is committed game data. It may be batched or lightly throttled, but must be flushed on ready, pause, visibility change, or page unload where practical.
-- Future attack, battle, spy, reinforcement, fortify, elimination, and game-over events should follow the same pattern: host must receive enough committed data to resume; local previews and controls remain local.
-- Never sync map camera, focus animation, selected inspection territory, open modal state, hover/press state, local pending draft preview, or other purely visual state.
+- Turn-loop facts follow the same pattern: turn start, spy result, spy capture territory, failed-spy defender notification, finalized reinforcement placements, fortify/end-turn, elimination, and game-over are committed facts.
+- Future attack and battle events should also follow this pattern: host must receive enough committed data to resume; local previews and controls remain local.
+- Never sync map camera, focus animation, selected inspection territory, open modal state, hover/press state, local pending draft preview, provisional reinforcement edits, successful spy intel view state, or other purely visual state.
 
 Because this is for personal use, hidden state may exist client-side. However, the UI should still render strictly from the local player's viewer perspective. When practical, the host may send redacted player-specific views to make accidental spoilers less likely.
 
@@ -1248,19 +1358,13 @@ The circular troop icon crops under `public/troops/icons/` are raster PNGs, not 
 The following decisions are intentionally open:
 
 - Final app name and displayed title.
-- Minimum and maximum player count.
-- Territory count.
-- Exact map layout.
-- Region names and territory membership.
-- Region bonus values and troop classes.
 - Future tuning of starting troop budgets and troop costs.
-- Territory-count reinforcement formula.
+- Future tuning of reinforcement troop costs and region bonus values.
 - Preparedness floor value.
 - Prediction accuracy formula.
 - Arrow challenge mechanics and scoring.
 - Effectiveness formula.
 - Weighted die probability curve.
-- Spy success probability by distance.
 - Fortify cavalry radius final value.
 - Future combat-specific sync message names and payload schemas.
 
@@ -1292,13 +1396,14 @@ Suggested build order:
 20. Implement arrow challenge.
 21. Implement effectiveness and weighted dice.
 22. Implement casualty sampling and post-battle reveals.
+23. Implement full fortify.
+24. Implement elimination and game over.
 
 Current implementation status:
 
-- Steps 1 through 16 are implemented for the current setup, draft, troop allocation, and read-only map scope.
+- Steps 1 through 17 are implemented for the current setup, draft, troop allocation, read-only map, and first turn-loop scope.
 - Sync mode now uses the cleaned contract documented above: revisioned host snapshots, validated joiner commands, explicit `hostEnded` and `removed`, blocked joiner play during host reconnecting, QR disconnected-player recovery from host pause, and separate sync-host active game persistence.
-23. Implement fortify.
-24. Implement elimination and game over.
+- Step 17 is documented in `docs/gameplay-turns-v1.md`: turn order, spy, reinforcements, attack disabled, fortify ends turn, and gameplay player removal redistribution.
 
 ## Verification Checklist
 

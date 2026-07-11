@@ -1,4 +1,4 @@
-# Ardatúrë Docs
+# ArdatÃºrÃ« Docs
 
 This directory contains planning and implementation notes for the app. The existing `GAME_SPEC.md` remains the high-level game rules and product source of truth. The `maps/` directory keeps its own source-art and generation documentation.
 
@@ -9,6 +9,7 @@ This directory contains planning and implementation notes for the app. The exist
 - `app-architecture.md`: planned PWA directory structure, app data flow, and map rendering architecture.
 - `setup-draft-sync-v1.md`: setup, sync lobby, territory draft, draft pause/reconnect, and draft ownership mechanics.
 - `troop-allocation-v1.md`: current gameplay milestone for army building, troop allocation, allocation pause/removal, and viewer-specific read-only map visibility.
+- `gameplay-turns-v1.md`: first turn-loop milestone for turn order, spy, reinforcements, region bonuses, attack placeholder, fortify placeholder, and gameplay player removal.
 
 ## Documentation Rules
 
