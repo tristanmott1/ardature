@@ -97,15 +97,11 @@ The capture probability is based on the shortest gameplay-connection distance fr
 
 | Distance | Capture probability |
 | --- | --- |
-| 1 | 10% |
-| 2 | 20% |
-| 3 | 30% |
-| 4 | 40% |
-| 5 | 50% |
-| 6 | 60% |
-| 7 | 70% |
-| 8 | 80% |
-| 9 or more | 90% |
+| 1 | 20% |
+| 2 | 40% |
+| 3 | 60% |
+| 4 | 80% |
+| 5 or more | 90% |
 
 ### Spy Failure
 
@@ -252,7 +248,7 @@ During another player's turn, inactive sync devices show only the map using the 
 - no turn action controls are shown
 - no pending selection, focus, confirmation, or provisional reinforcement placement from the active player is shown
 
-Sync devices update from committed host facts only. Host snapshots are viewer-specific during turns: the active player may receive their private spy intel or active action sub-state, while passive viewers receive the same committed map facts with private turn sub-state removed.
+Sync devices update from committed host facts only. Host snapshots are viewer-specific during turns: the active player may receive their private spy intel or active action sub-state, while passive viewers receive the same committed map facts with private turn sub-state removed. Verification should include live connected active-turn and passive-turn sync screenshots so this privacy boundary remains visible.
 
 - after reinforcements are finalized
 - after future attacks resolve or otherwise commit

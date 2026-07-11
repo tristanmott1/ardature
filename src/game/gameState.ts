@@ -540,7 +540,7 @@ export function spyCaptureProbability(state: GameState, playerId: string, territ
     return null;
   }
 
-  return Math.min(90, distance * 10);
+  return Math.min(90, distance * 20);
 }
 
 export function confirmSpyAttempt(state: GameState, playerId: string, territoryId: string, randomValue = Math.random()): GameState {

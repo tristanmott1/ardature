@@ -283,15 +283,11 @@ The capture probability is based on the shortest gameplay-connection distance fr
 
 | Distance | Capture probability |
 | --- | --- |
-| 1 | 10% |
-| 2 | 20% |
-| 3 | 30% |
-| 4 | 40% |
-| 5 | 50% |
-| 6 | 60% |
-| 7 | 70% |
-| 8 | 80% |
-| 9 or more | 90% |
+| 1 | 20% |
+| 2 | 40% |
+| 3 | 60% |
+| 4 | 80% |
+| 5 or more | 90% |
 
 All gameplay connections from `maps/territory-key.md` count, including ship connections. Physical generated borders are not used for gameplay distance.
 

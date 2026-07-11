@@ -1177,6 +1177,7 @@ async function runRandomAllocationChecks(page) {
   const spyActionBox = await page.locator(".turn-action-panel").boundingBox();
   assert(spyDialogBox && spyActionBox && spyDialogBox.y + spyDialogBox.height <= spyActionBox.y + 1, "Spy confirmation does not overlap the turn action bar.");
   assert((await page.getByRole("dialog", { name: "Confirm spy" }).getByText("% captured").count()) === 1, "Spy confirmation shows capture probability.");
+  assert((await page.getByRole("dialog", { name: "Confirm spy" }).getByText("20% captured").count()) === 1, "Adjacent spy target has the updated 20% capture probability.");
   await page.getByRole("button", { name: "Cancel spy" }).click();
   await page.getByRole("button", { name: "Reinforcements" }).click();
   await page.waitForSelector(".army-build-modal .army-triangle");
@@ -1529,6 +1530,18 @@ async function runSyncReadyPageChecks(browser) {
   await joiner.waitForSelector(".army-build-modal .army-triangle", { timeout: 15000 });
   await capture(joiner, "17-sync-unready-allocation-mobile.png");
   assert((await joiner.locator(".allocation-waiting-panel").count()) === 0, "Unready sync player does not see ready page.");
+  await joiner.getByRole("button", { name: "Confirm army" }).click();
+  await joiner.waitForSelector(".allocation-controls");
+  await finishAllocationTurn(joiner, "red");
+  await host.getByRole("button", { name: "Start game" }).waitFor({ timeout: 15000 });
+  await host.getByRole("button", { name: "Start game" }).click();
+  await host.waitForSelector(".turn-action-panel", { timeout: 15000 });
+  await joiner.waitForSelector(".game-map-panel", { timeout: 15000 });
+  await capture(host, "17b-sync-active-turn-mobile.png");
+  await capture(joiner, "17c-sync-passive-turn-mobile.png");
+  assert((await host.getByRole("button", { name: "Spy" }).count()) === 1, "Active sync turn player sees turn controls.");
+  assert((await joiner.locator(".turn-action-panel").count()) === 0, "Passive sync turn player does not see turn controls.");
+  assert((await joiner.locator(".game-map-panel .troop-icon-count").count()) === 0, "Passive sync turn player does not see private action breakdowns.");
 
   await host.close();
   await joiner.close();
