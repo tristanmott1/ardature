@@ -221,6 +221,12 @@ async function runSourceChecks() {
   assert(armyBuildSource.includes("ARMY_ECONOMY") && armyBuildSource.includes("costScale: 5") && armyBuildSource.includes("heavy: 4") && armyBuildSource.includes("cavalry: 5") && armyBuildSource.includes("elite: 6"), "Army economy keeps tunable fixed-point costs together.");
   assert(armyBuildSource.includes("remainingCostUnits >= minimumCost") && armyBuildSource.includes("mixtureError"), "Army builds use budget-maximal closest-ratio candidates.");
   assert(!gameStateSource.includes("weightedCost") && !gameStateSource.includes("adjustedCount"), "Old average-cost army rounding is removed.");
+  assert(gameTypesSource.includes('export type AllocationStyle = "manual" | "random"') && gameTypesSource.includes("allocationStyle: AllocationStyle"), "Game config has explicit allocation style.");
+  assert(gameStateSource.includes("export const ALLOCATION_STYLES") && gameStateSource.includes("config.allocationStyle === \"random\"") && gameStateSource.includes("advanceAfterDraft"), "Game state routes post-draft flow through allocation style.");
+  assert(gameStateSource.includes("function randomCompleteAllAllocations") && gameStateSource.includes("function randomArmyMarker") && gameStateSource.includes("function bordersOpponentTerritory"), "Random allocation has dedicated army and border placement helpers.");
+  assert(gameStateSource.includes("generatedMapConnections[territoryId as keyof typeof generatedMapConnections]") && gameStateSource.includes("ownership[connectedId] !== playerId"), "Random allocation uses gameplay connections to find opponent borders.");
+  assert(appSource.includes("Territory Draft") && appSource.includes("Troop Allocation") && appSource.includes("Allocation style"), "Setup UI has draft and troop allocation config sections.");
+  assert(!appSource.includes("SegmentedControl") && !stylesSource.includes(".segmented-control"), "Old segmented draft config UI is removed.");
   assert(!gameTypesSource.includes("allocationWaiting"), "AppPhase does not include allocationWaiting.");
   assert(gameStateSource.includes('return { ...state, phase: "allocation", allocation: nextAllocation };'), "Sync ready keeps the shared phase in allocation.");
   assert(gameStateSource.includes("const readyAllocation = markAllocationReady(allocation, playerId)") && gameStateSource.includes("allAllocationsReady(readyAllocation, state.players)"), "Sync ready preserves the allocation timer until every player is ready.");
@@ -628,6 +634,10 @@ function colorLabel(color) {
   return color.charAt(0).toUpperCase() + color.slice(1);
 }
 
+function totalTroops(counts) {
+  return (counts?.heavy ?? 0) + (counts?.cavalry ?? 0) + (counts?.elite ?? 0) + (counts?.leader ?? 0);
+}
+
 async function startLocalSnakeDraft(page) {
   await page.getByRole("button", { name: "Local" }).click();
   await setPlayerName(page, 0, "Aragorn");
@@ -661,14 +671,21 @@ async function runSetupPreferenceChecks(page) {
   await setPlayerColor(page, 1, "blue");
   await setPlayerName(page, 2, "Legolas");
   await setPlayerColor(page, 2, "yellow");
-  await page.getByRole("button", { name: "Round robin" }).click();
-  await page.getByLabel("PICK TIME").selectOption("10");
-  await page.getByLabel("TROOP TIME").selectOption("120");
-  await page.getByRole("button", { name: "Random", exact: true }).click();
-  assert((await page.getByLabel("PICK TIME").inputValue()) === "0", "Random draft forces pick time to unlimited.");
-  assert(await page.getByLabel("PICK TIME").isDisabled(), "Random draft locks pick time after forcing unlimited.");
-  await page.getByRole("button", { name: "Round robin" }).click();
-  await page.getByLabel("PICK TIME").selectOption("10");
+  assert((await page.getByRole("heading", { name: "Territory Draft" }).count()) === 1, "Setup shows the Territory Draft section.");
+  assert((await page.getByRole("heading", { name: "Troop Allocation" }).count()) === 1, "Setup shows the Troop Allocation section.");
+  await page.getByLabel("Draft style").selectOption("roundRobin");
+  await page.getByLabel("Pick time").selectOption("10");
+  await page.getByLabel("Allocation time").selectOption("120");
+  await page.getByLabel("Draft style").selectOption("random");
+  assert((await page.getByLabel("Pick time").inputValue()) === "0", "Random draft forces pick time to unlimited.");
+  assert(await page.getByLabel("Pick time").isDisabled(), "Random draft locks pick time after forcing unlimited.");
+  await page.getByLabel("Draft style").selectOption("roundRobin");
+  await page.getByLabel("Pick time").selectOption("10");
+  await page.getByLabel("Allocation style").selectOption("random");
+  assert((await page.getByLabel("Allocation time").inputValue()) === "0", "Random allocation forces allocation time to unlimited.");
+  assert(await page.getByLabel("Allocation time").isDisabled(), "Random allocation locks allocation time after forcing unlimited.");
+  await page.getByLabel("Allocation style").selectOption("manual");
+  await page.getByLabel("Allocation time").selectOption("120");
   await page.getByRole("button", { name: "Randomize" }).click();
   const savedLocalNames = await playerNames(page);
   await checkColorMenuDismissal(page);
@@ -678,9 +695,10 @@ async function runSetupPreferenceChecks(page) {
 
   await page.getByRole("button", { name: "Local" }).click();
   assert(JSON.stringify(await playerNames(page)) === JSON.stringify(savedLocalNames), "Local names and order persist.");
-  assert((await page.getByRole("button", { name: "Round robin" }).getAttribute("class"))?.includes("selected"), "Draft style persists.");
-  assert((await page.getByLabel("PICK TIME").inputValue()) === "10", "Pick time persists.");
-  assert((await page.getByLabel("TROOP TIME").inputValue()) === "120", "Troop time persists.");
+  assert((await page.getByLabel("Draft style").inputValue()) === "roundRobin", "Draft style persists.");
+  assert((await page.getByLabel("Pick time").inputValue()) === "10", "Pick time persists.");
+  assert((await page.getByLabel("Allocation style").inputValue()) === "manual", "Allocation style persists.");
+  assert((await page.getByLabel("Allocation time").inputValue()) === "120", "Troop time persists.");
   await closeActiveSetup(page);
 
   await page.getByRole("button", { name: "Sync" }).click();
@@ -697,8 +715,9 @@ async function runSetupPreferenceChecks(page) {
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Host" }).click();
   await page.waitForSelector(".qr-code svg", { timeout: 10000 });
-  assert((await page.getByLabel("PICK TIME").inputValue()) === "10", "Sync host uses saved pick time.");
-  assert((await page.getByLabel("TROOP TIME").inputValue()) === "120", "Sync host uses saved troop time.");
+  assert((await page.getByLabel("Pick time").inputValue()) === "10", "Sync host uses saved pick time.");
+  assert((await page.getByLabel("Allocation style").inputValue()) === "manual", "Sync host uses saved allocation style.");
+  assert((await page.getByLabel("Allocation time").inputValue()) === "120", "Sync host uses saved troop time.");
   await closeActiveSetup(page);
 
   await page.getByRole("button", { name: "Local" }).click();
@@ -1116,7 +1135,7 @@ async function runRandomAllocationChecks(page) {
   await setPlayerColor(page, 0, "yellow");
   await setPlayerName(page, 1, "Sauron");
   await setPlayerColor(page, 1, "red");
-  await page.getByRole("button", { name: "Random", exact: true }).click();
+  await page.getByLabel("Draft style").selectOption("random");
   await page.getByRole("button", { name: "Start game" }).click();
   await page.waitForSelector('.app-shell[data-app-phase="allocationHandoff"]');
   await capture(page, "10-allocation-handoff-mobile.png");
@@ -1216,6 +1235,44 @@ async function runRandomAllocationChecks(page) {
   await page.getByRole("button", { name: "Fortify" }).click();
   await page.waitForSelector('.app-shell[data-app-phase="turnHandoff"]');
   await capture(page, "19-next-turn-handoff-mobile.png");
+}
+
+async function runConfiguredRandomAllocationChecks(page) {
+  console.log("Checking configured random troop allocation");
+  await page.goto(baseUrl);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.getByRole("button", { name: "Local" }).click();
+  await setPlayerName(page, 0, "Faramir");
+  await setPlayerColor(page, 0, "blue");
+  await setPlayerName(page, 1, "Gothmog");
+  await setPlayerColor(page, 1, "black");
+  await page.getByLabel("Draft style").selectOption("random");
+  await page.getByLabel("Allocation style").selectOption("random");
+  assert((await page.getByLabel("Allocation time").inputValue()) === "0", "Random allocation displays unlimited allocation time.");
+  assert(await page.getByLabel("Allocation time").isDisabled(), "Random allocation locks allocation timing.");
+  await page.getByRole("button", { name: "Start game" }).click();
+  await page.waitForSelector('.app-shell[data-app-phase="turnHandoff"]');
+  await capture(page, "20-random-allocation-turn-handoff-mobile.png");
+  assert((await page.locator(".army-build-modal").count()) === 0, "Random allocation skips army build UI.");
+  assert((await page.locator(".allocation-controls").count()) === 0, "Random allocation skips manual allocation controls.");
+
+  const state = await page.evaluate(() => JSON.parse(localStorage.getItem("ardature.localGame.v1") ?? "null"));
+  assert(state?.config?.allocationStyle === "random", "Saved game records random allocation style.");
+  assert(state?.allocation, "Random allocation creates authoritative allocation state.");
+
+  for (const player of state.players) {
+    const allocation = state.allocation.playerAllocations[player.id];
+    assert(allocation?.buildSubmitted, "Random allocation submits every army build.");
+    assert(allocation?.ready && allocation?.randomCompleted, "Random allocation marks every player ready and random-completed.");
+
+    const ownedTerritories = Object.entries(state.draft.ownership)
+      .filter(([, ownerId]) => ownerId === player.id)
+      .map(([territoryId]) => territoryId);
+    for (const territoryId of ownedTerritories) {
+      assert(totalTroops(allocation.territories[territoryId]) > 0, `Random allocation placed a troop on ${territoryId}.`);
+    }
+  }
 }
 
 async function runReadOnlyVisibilityChecks(page) {
@@ -1642,26 +1699,35 @@ async function finishAllocationTurn(page, skin, options = {}) {
   assert(territoryIds.length > 0, `Expected owned ${skin} territories.`);
 
   const covered = new Set(options.coveredTerritoryIds ?? []);
-  const troopPool = options.troopPool ? [...options.troopPool] : [
-    ...Array(13).fill("heavy"),
-    ...Array(13).fill("cavalry"),
-    ...Array(13).fill("elite"),
-    "leader",
-  ];
+  const troopPool = options.troopPool ? [...options.troopPool] : null;
 
   for (const territoryId of territoryIds.filter((id) => !covered.has(id))) {
-    const troopType = troopPool.shift();
-    assert(troopType, "Expected enough troops to cover owned territories.");
     await clickTerritory(page, territoryId);
-    await page.getByRole("button", { name: `Add ${troopType}` }).click();
+    if (troopPool) {
+      const troopType = troopPool.shift();
+      assert(troopType, "Expected enough troops to cover owned territories.");
+      await page.getByRole("button", { name: `Add ${troopType}` }).click();
+    } else {
+      await firstEnabledAddButton(page).click();
+    }
   }
 
   await clickTerritory(page, territoryIds[0]);
-  for (const troopType of troopPool) {
-    await page.getByRole("button", { name: `Add ${troopType}` }).click();
+  if (troopPool) {
+    for (const troopType of troopPool) {
+      await page.getByRole("button", { name: `Add ${troopType}` }).click();
+    }
+  } else {
+    for (let count = 0; count < 80 && (await firstEnabledAddButton(page).count()) > 0; count += 1) {
+      await firstEnabledAddButton(page).click();
+    }
   }
 
   await page.getByRole("button", { name: "Ready" }).click();
+}
+
+function firstEnabledAddButton(page) {
+  return page.locator(".allocation-controls .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").first();
 }
 
 async function finishReinforcementPlacement(page) {
@@ -1738,7 +1804,7 @@ async function runSyncReadyPageChecks(browser) {
   await host.getByRole("button", { name: "Scan" }).click();
   await pasteScannerText(host, await qrText(joiner));
   await host.getByText("Saruman").waitFor({ timeout: 15000 });
-  await host.getByRole("button", { name: "Random", exact: true }).click();
+  await host.getByLabel("Draft style").selectOption("random");
   await host.getByRole("button", { name: "Start game" }).click();
   await host.waitForSelector(".army-build-modal .army-triangle", { timeout: 15000 });
   await host.getByRole("button", { name: "Confirm army" }).click();
@@ -2059,6 +2125,7 @@ async function main() {
     await runMobileMapInteractionChecks(touchMobile);
     await touchMobile.close();
     await runRandomAllocationChecks(mobile);
+    await runConfiguredRandomAllocationChecks(mobile);
     const readOnlyMobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
     readOnlyMobile.setDefaultTimeout(10000);
     await runReadOnlyVisibilityChecks(readOnlyMobile);

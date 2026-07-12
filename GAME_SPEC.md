@@ -141,12 +141,13 @@ The setup state should allow:
 - Player colors: unique `green`, `blue`, `yellow`, `red`, `purple`, or `black`.
 - Draft style: random, round robin, or snake.
 - Draft pick time limit for round robin and snake: none, 5 seconds, 10 seconds, or 15 seconds.
-- Troop allocation time limit: none, 1 minute, 2 minutes, 3 minutes, 4 minutes, or 5 minutes.
+- Troop allocation style: manual or random.
+- Troop allocation time limit for manual allocation: none, 1 minute, 2 minutes, 3 minutes, 4 minutes, or 5 minutes.
 - Starting troop budget by original player count.
 - Reinforcement formula constants.
 - Region bonus definitions.
 
-The setup/draft milestone exposes player colors, turn order, draft style, draft pick timer, and troop allocation timer. The troop allocation milestone uses the configured allocation timer and the starting troop budget rules documented below. The turn-loop milestone uses the reinforcement constants and region bonus values documented in `docs/gameplay-turns-v1.md`.
+The setup/draft milestone exposes player colors, turn order, territory draft style, draft pick timer, troop allocation style, and troop allocation timer. Random draft forces pick time to unlimited. Random troop allocation forces allocation time to unlimited. The troop allocation milestone uses the configured allocation style/timer and the starting troop budget rules documented below. The turn-loop milestone uses the reinforcement constants and region bonus values documented in `docs/gameplay-turns-v1.md`.
 
 ### Territory Assignment
 
@@ -164,11 +165,13 @@ The draft engine should store progress rather than precomputing one fixed pick q
 
 ### Initial Troop Allocation
 
-After all territories have owners, the app enters initial troop allocation. The exact implementation source of truth for this milestone is `docs/troop-allocation-v1.md`.
+After all territories have owners, the app either enters manual initial troop allocation or immediately performs random initial troop allocation. The exact implementation source of truth for this milestone is `docs/troop-allocation-v1.md`.
 
 Rules:
 
-- Each player first chooses an army mixture using a reusable triangle component.
+- Manual allocation has players build and place their army through the allocation UI.
+- Random allocation skips the allocation UI, randomly samples each player's army mixture, uses the same budget/cost rules as manual allocation, gives every owned territory one troop, then places extras only on owned territories bordering opponents by gameplay connections.
+- In manual allocation, each player first chooses an army mixture using a reusable triangle component.
 - The triangle uses barycentric coordinates for army building.
 - Light-side colors (`green`, `blue`, `yellow`) use dwarf, rohirrim, and elf circular troop icons.
 - Dark-side colors (`red`, `purple`, `black`) use orc, warg, and uruk-hai circular troop icons.
@@ -899,11 +902,11 @@ Timer behavior:
 - If local mode pauses during an active pick or confirmation popup, the active timer and pending choice are preserved.
 - If sync mode pauses during an active pick or confirmation popup, any local pending pick is discarded and that player's turn starts over on resume.
 
-After all territories are drafted, the app enters the troop allocation phase. It does not remain on an ownership-only post-draft review screen.
+After all territories are drafted, the app resolves initial troop allocation according to setup configuration. It does not remain on an ownership-only post-draft review screen.
 
 ### Initial Troop Allocation View
 
-Initial troop allocation is a required game phase after draft and before turn play begins.
+Manual initial troop allocation is a required game phase after draft and before turn play begins when allocation style is `Manual`. When allocation style is `Random`, the game creates every player's army and territory placements immediately after draft, then proceeds to the first turn.
 
 Army build:
 
@@ -1416,7 +1419,7 @@ Suggested build order:
 
 1. Replace the sandbox page state with real app phases, shared game types, setup state, draft state, ownership state, and persistence keys.
 2. Convert the current map sandbox components into reusable map modes for read-only, draft picking, and territory focus.
-3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, draft style, pick timer, and troop allocation timer.
+3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, territory draft settings, and troop allocation settings.
 4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, and ownership assignment.
 5. Implement local draft UI and local persistence through setup, draft, manual pause, player removal, end-game confirmation, and refresh restore.
 6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardatúrë-specific payload names and prefixes.
@@ -1449,7 +1452,7 @@ Current implementation status:
 
 Before considering the first playable version complete:
 
-- Verify local setup supports 2 to 6 players, names, unique colors, turn order, draft style, draft timer, and troop allocation timer.
+- Verify local setup supports 2 to 6 players, names, unique colors, turn order, territory draft settings, and troop allocation settings.
 - Verify sync setup supports Qwixx-style QR handshake, host lobby, joiner lobby, name/color edits, host locks, duplicate-color blocking, and host-authoritative setup state.
 - Verify local and sync drafts support snake, round-robin, random simulation, timed picks, confirmation timeout, random timeout fallback, and transition into troop allocation.
 - Verify local pause preserves active timers, pending confirmation, result popup state, army/allocation progress, and player removal without reconnect state.
@@ -1461,7 +1464,8 @@ Before considering the first playable version complete:
 - Verify territory visual centers are generated from the large green circles in the territory drawing and are used for troop-count circles.
 - Verify army-build triangle barycentric coordinates, leader budget reservation, fixed-point costs, hard budget limits, closest-ratio selection, and budget-maximal non-dominated results.
 - Verify troop allocation requires at least one troop per owned territory and prevents placements that would make that impossible.
-- Verify local allocation uses configured turn order, pass-and-play handoff screens, allocation timer, timeout random completion, and second allocation turns after redistribution.
+- Verify local manual allocation uses configured turn order, pass-and-play handoff screens, allocation timer, timeout random completion, and second allocation turns after redistribution.
+- Verify random allocation skips manual allocation UI and immediately creates valid authoritative troop placements.
 - Verify sync allocation uses simultaneous private allocation, host-authoritative timer, ready/waiting state visible to all players, and host advance only when all remaining players are ready.
 - Verify allocation player removal redistributes territories and troops exactly as specified, unreadying affected sync players and adding second allocation turns for affected local players.
 - Verify read-only game map visibility for own territories, connected opponent territories, and distant opponent territories, using all gameplay connections including ship connections.

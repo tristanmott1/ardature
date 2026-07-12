@@ -77,13 +77,16 @@ Sync setup behavior:
 Setup options controlled by the host/local device:
 
 - Turn order, with manual reorder and randomize matching Qwixx.
-- Draft style: `random`, `roundRobin`, or `snake`.
-- Default draft style: `snake`.
-- Pick time limit for `roundRobin` and `snake`: `none`, `5 seconds`, `10 seconds`, or `15 seconds`.
-- When draft style is `random`, pick time is forced to `none`/unlimited and the pick-time control is locked while displaying that value.
-- Troop allocation time limit: `none`, `1 minute`, `2 minutes`, `3 minutes`, `4 minutes`, or `5 minutes`.
-
-Troop allocation is configured now so the setting is present in state, but the milestone stops before troop allocation begins.
+- `Territory Draft` settings:
+  - Draft style dropdown: `Snake`, `Round Robin`, or `Random`.
+  - Pick-time dropdown: `5s`, `10s`, `15s`, or `Unlimited`.
+  - Default: `Snake` and `Unlimited`.
+  - When draft style is `Random`, pick time is forced to `Unlimited` and the pick-time control is locked while displaying that value.
+- `Troop Allocation` settings:
+  - Allocation style dropdown: `Manual` or `Random`.
+  - Allocation-time dropdown: `1m`, `2m`, `3m`, `4m`, `5m`, or `Unlimited`.
+  - Default: `Manual` and `Unlimited`.
+  - When allocation style is `Random`, allocation time is forced to `Unlimited` and the allocation-time control is locked while displaying that value.
 
 Once setup advances into the draft, names, colors, turn order, and configuration are frozen except for pause/removal behavior described below.
 
@@ -306,7 +309,7 @@ Build this milestone in this order:
 
 1. Replace the sandbox page state with real app phases, shared game types, setup state, draft state, ownership state, and persistence keys.
 2. Convert the current map sandbox components into reusable map modes for read-only, draft picking, and territory focus.
-3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, draft style, pick timer, and troop allocation timer.
+3. Build local setup/configuration on top of the map-first shell, including player add/edit/delete, colors, turn order, randomize, territory draft settings, and troop allocation settings.
 4. Implement the shared draft engine for snake, round-robin, random simulation, active-player calculation, timed picks, confirmation behavior, and ownership assignment.
 5. Implement local draft UI and local persistence through setup, draft, manual pause, player removal, end-game confirmation, refresh restore, and draft ownership state.
 6. Copy and adapt Qwixx sync transport, QR panels, scanner, and lobby interaction using Ardatúrë-specific payload names and prefixes.

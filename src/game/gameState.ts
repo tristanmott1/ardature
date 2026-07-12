@@ -3,6 +3,7 @@ import { generatedMapConnections } from "../map/generated/mapConnections";
 import type { MapSkin, TerritoryState } from "../map/mapTypes";
 import { MIXTURE_TROOP_TYPES, armyCountsForMarker, reinforcementCountsForMarker } from "./armyBuild";
 import type {
+  AllocationStyle,
   AllocationState,
   ArmyMarker,
   AppPhase,
@@ -25,6 +26,7 @@ import type {
 } from "./gameTypes";
 
 export const PLAYER_COLORS: PlayerColor[] = ["green", "blue", "yellow", "red", "purple", "black"];
+export const ALLOCATION_STYLES: AllocationStyle[] = ["manual", "random"];
 export const PICK_TIME_LIMITS: PickTimeLimit[] = [5, 10, 15, 0];
 export const TROOP_ALLOCATION_TIME_LIMITS: TroopAllocationTimeLimit[] = [60, 120, 180, 240, 300, 0];
 export const LOCAL_GAME_KEY = "ardature.localGame.v1";
@@ -35,6 +37,7 @@ export { MIXTURE_TROOP_TYPES, armyCountsForMarker } from "./armyBuild";
 const DEFAULT_CONFIG: GameConfig = {
   draftStyle: "snake",
   pickTimeLimit: 0,
+  allocationStyle: "manual",
   troopAllocationTimeLimit: 0,
 };
 
@@ -312,16 +315,23 @@ export function startDraft(players: GamePlayer[], config: GameConfig) {
     : draft;
 }
 
-export function startAllocation(state: GameState, now: number): GameState {
+export function advanceAfterDraft(state: GameState, now: number): GameState {
   if (!state.draft) {
     return state;
   }
 
-  const allocation = beginAllocationTimer(createAllocationState(state.players, state.draft.ownership, state.config), state.config, now);
+  const allocation = createAllocationState(state.players, state.draft.ownership, state.config);
+  if (state.config.allocationStyle === "random") {
+    return startTurnLoop({
+      ...state,
+      allocation: clearAllocationTimer(randomCompleteAllAllocations(allocation, state.draft.ownership, state.players), state.config),
+    }, state.mode === "local");
+  }
+
   return {
     ...state,
     phase: state.mode === "local" ? "allocationHandoff" : "allocation",
-    allocation,
+    allocation: beginAllocationTimer(allocation, state.config, now),
   };
 }
 
@@ -1106,7 +1116,7 @@ export function confirmTerritoryPick(state: GameState, territoryId: string, now:
   }, state.config);
 
   if (remainingTerritoryIds(ownership).length === 0) {
-    return startAllocation({
+    return advanceAfterDraft({
       ...state,
       phase: "allocation" as const,
       draft: {
@@ -2007,6 +2017,114 @@ function nextLocalAllocationIndex(allocation: AllocationState, players: GamePlay
   return null;
 }
 
+function randomCompleteAllAllocations(allocation: AllocationState, ownership: TerritoryOwnerMap, players: GamePlayer[]): AllocationState {
+  let nextAllocation = allocation;
+
+  // Each player receives a random legal army and immediate placements.
+  for (const player of players) {
+    nextAllocation = randomCompleteStartingAllocation(nextAllocation, ownership, player);
+  }
+
+  return nextAllocation;
+}
+
+function randomCompleteStartingAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, player: GamePlayer): AllocationState {
+  const playerAllocation = allocation.playerAllocations[player.id];
+  if (!playerAllocation) {
+    return allocation;
+  }
+
+  const marker = randomArmyMarker();
+  const baseTroops = armyCountsForMarker(marker, player.color, allocation.originalPlayerCount);
+  const builtAllocation = {
+    ...allocation,
+    playerAllocations: {
+      ...allocation.playerAllocations,
+      [player.id]: {
+        ...playerAllocation,
+        marker,
+        buildSubmitted: true,
+        baseTroops,
+      },
+    },
+  };
+  const filledAllocation = randomPlaceStartingAllocation(builtAllocation, ownership, player.id);
+
+  return {
+    ...filledAllocation,
+    playerAllocations: {
+      ...filledAllocation.playerAllocations,
+      [player.id]: {
+        ...filledAllocation.playerAllocations[player.id],
+        ready: true,
+        randomCompleted: true,
+      },
+    },
+  };
+}
+
+function randomPlaceStartingAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, playerId: string): AllocationState {
+  const playerAllocation = allocation.playerAllocations[playerId];
+  if (!playerAllocation) {
+    return allocation;
+  }
+
+  const ownedIds = shuffle(ownedTerritoryIds(ownership, playerId));
+  const troops = shuffle(expandTroops(remainingTroops(allocation, playerId)));
+  const territories = { ...playerAllocation.territories };
+  let troopIndex = 0;
+
+  if (troops.length < ownedIds.length) {
+    throw new Error(`Random allocation cannot place one troop on every territory for ${playerId}.`);
+  }
+
+  // Place one random troop on every owned territory first.
+  for (const territoryId of ownedIds) {
+    const troopType = troops[troopIndex];
+    territories[territoryId] = addOneTroop(territories[territoryId] ?? createTroopCounts(), troopType);
+    troopIndex += 1;
+  }
+
+  const borderTargets = ownedIds.filter((territoryId) => bordersOpponentTerritory(ownership, playerId, territoryId));
+  if (troopIndex < troops.length && borderTargets.length === 0) {
+    throw new Error(`Random allocation found no border territories for ${playerId}.`);
+  }
+
+  // Extra troops go only to territories bordering an opponent.
+  for (; troopIndex < troops.length; troopIndex += 1) {
+    const territoryId = randomItem(borderTargets);
+    const troopType = troops[troopIndex];
+    territories[territoryId] = addOneTroop(territories[territoryId] ?? createTroopCounts(), troopType);
+  }
+
+  return {
+    ...allocation,
+    playerAllocations: {
+      ...allocation.playerAllocations,
+      [playerId]: {
+        ...playerAllocation,
+        territories,
+      },
+    },
+  };
+}
+
+function bordersOpponentTerritory(ownership: TerritoryOwnerMap, playerId: string, territoryId: string) {
+  const connections = generatedMapConnections[territoryId as keyof typeof generatedMapConnections] ?? [];
+  return connections.some((connectedId) => ownership[connectedId] && ownership[connectedId] !== playerId);
+}
+
+function randomArmyMarker(): ArmyMarker {
+  const root = Math.sqrt(Math.random());
+  const split = Math.random();
+
+  return {
+    heavy: 1 - root,
+    cavalry: root * (1 - split),
+    elite: root * split,
+  };
+}
+
 function randomFillAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, playerId: string): AllocationState {
   const playerAllocation = allocation.playerAllocations[playerId];
   if (!playerAllocation) {
@@ -2122,13 +2240,16 @@ function normalizeConfig(value: unknown): GameConfig {
   const config = value as Partial<GameConfig>;
   const draftStyle = config.draftStyle === "random" || config.draftStyle === "roundRobin" || config.draftStyle === "snake" ? config.draftStyle : "snake";
   const pickTimeLimit = PICK_TIME_LIMITS.includes(config.pickTimeLimit as PickTimeLimit) ? config.pickTimeLimit as PickTimeLimit : 0;
+  const allocationStyle = ALLOCATION_STYLES.includes(config.allocationStyle as AllocationStyle) ? config.allocationStyle as AllocationStyle : "manual";
+  const troopAllocationTimeLimit = TROOP_ALLOCATION_TIME_LIMITS.includes(config.troopAllocationTimeLimit as TroopAllocationTimeLimit)
+    ? config.troopAllocationTimeLimit as TroopAllocationTimeLimit
+    : 0;
 
   return {
     draftStyle,
     pickTimeLimit: draftStyle === "random" ? 0 : pickTimeLimit,
-    troopAllocationTimeLimit: TROOP_ALLOCATION_TIME_LIMITS.includes(config.troopAllocationTimeLimit as TroopAllocationTimeLimit)
-      ? config.troopAllocationTimeLimit as TroopAllocationTimeLimit
-      : 0,
+    allocationStyle,
+    troopAllocationTimeLimit: allocationStyle === "random" ? 0 : troopAllocationTimeLimit,
   };
 }
 

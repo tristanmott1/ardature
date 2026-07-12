@@ -7,10 +7,10 @@ This milestone starts after every playable territory has exactly one owner. It a
 The app phase order for this milestone is:
 
 ```text
-Home -> Setup and configuration -> Territory draft -> Troop allocation -> Read-only game map
+Home -> Setup and configuration -> Territory draft -> Troop allocation -> Turn loop
 ```
 
-The old post-draft ownership-only review is no longer the final milestone state. After draft completion, the app enters troop allocation. After every remaining player has allocated troops, this milestone enters a read-only game map. The next milestone replaces that endpoint with the turn loop documented in `gameplay-turns-v1.md`.
+The old post-draft ownership-only review is no longer the final milestone state. After draft completion, the app either enters manual troop allocation or immediately performs random troop allocation, depending on setup configuration. After every remaining player has allocated troops, the app enters the turn loop documented in `gameplay-turns-v1.md`.
 
 ## Troop Classes
 
@@ -77,6 +77,27 @@ Budget rules:
 Inherited troops from removed players are additive. They do not change the player's budget and they do not get converted into budget. Leaders from removed players are not inherited as leaders; each removed wizard or witch-king is randomly replaced with one heavy, cavalry, or elite troop before redistribution. If a player selected a `100%` cavalry mixture and later receives `2` heavy and `1` elite from a removed player, their live allocation pool shows their original cavalry count, their original leader, plus the inherited `2` heavy and `1` elite.
 
 All starting budgets, the fixed-point scale, the leader cost, and regular troop costs are kept together in `src/game/armyBuild.ts`. Future cost tuning should change those rule constants rather than the candidate-selection algorithm.
+
+## Allocation Styles
+
+The setup screen has a `Troop Allocation` section with two dropdowns:
+
+- Allocation style: `Manual` or `Random`.
+- Allocation time: `1m`, `2m`, `3m`, `4m`, `5m`, or `Unlimited`.
+
+The default is `Manual` and `Unlimited`. If allocation style is `Random`, allocation time is forced to `Unlimited` and locked.
+
+Manual allocation uses the army build and placement flow below. Random allocation skips the allocation UI entirely in both local and sync mode. The host/game state immediately creates every player's army and placements after the territory draft finishes, then the game proceeds to the first turn.
+
+Random allocation rules:
+
+- Each player gets a random marker sampled uniformly inside the army triangle.
+- The existing `armyCountsForMarker()` economy is used to convert that marker into the player's base army. Random allocation does not duplicate or bypass starting budget, leader, or troop-cost rules.
+- For each player, owned territories are shuffled and the player's generated troop pool is shuffled.
+- Every owned territory receives exactly one random troop first.
+- Remaining troops are placed one at a time on a random owned territory, with replacement, but only among owned territories that border at least one opponent territory.
+- Gameplay connections from `maps/territory-key.md` determine opponent borders. Both land and ship connections count. Physical map borders do not matter for this rule.
+- Because the gameplay graph is connected and at least two players are active, every player with extra troops should have at least one eligible opponent-border territory.
 
 ## Territory Allocation
 

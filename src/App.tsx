@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  ALLOCATION_STYLES,
   PICK_TIME_LIMITS,
   LOCAL_GAME_KEY,
   MIXTURE_TROOP_TYPES,
@@ -84,8 +85,8 @@ import {
   saveLocalGame,
   saveSyncHostGame,
   spyCaptureProbability,
+  advanceAfterDraft,
   startDraft,
-  startAllocation,
   startGameMapAfterAllocation,
   startReinforcements,
   startSpySelection,
@@ -99,6 +100,7 @@ import {
   turnPlayer,
 } from "./game/gameState";
 import type {
+  AllocationStyle,
   AppPhase,
   ArmyMarker,
   DraftStyle,
@@ -172,8 +174,12 @@ type ExtendedMediaTrackConstraintSet = MediaTrackConstraintSet & {
 
 const DRAFT_STYLE_LABELS: Record<DraftStyle, string> = {
   random: "Random",
-  roundRobin: "Round robin",
+  roundRobin: "Round Robin",
   snake: "Snake",
+};
+const ALLOCATION_STYLE_LABELS: Record<AllocationStyle, string> = {
+  manual: "Manual",
+  random: "Random",
 };
 
 const EMPTY_TROOPS: TroopCounts = {
@@ -1332,6 +1338,7 @@ function App() {
         config: {
           ...config,
           pickTimeLimit: config.draftStyle === "random" ? 0 : config.pickTimeLimit,
+          troopAllocationTimeLimit: config.allocationStyle === "random" ? 0 : config.troopAllocationTimeLimit,
         },
       };
     });
@@ -1350,7 +1357,7 @@ function App() {
     };
 
     setGame(remainingTerritoryIds(draft.ownership).length === 0
-      ? startAllocation(draftState, Date.now())
+      ? advanceAfterDraft(draftState, Date.now())
       : {
           ...draftState,
           draft: beginDraftTimer(draft, game.config, Date.now()),
@@ -2398,28 +2405,48 @@ function SetupPanel({
       ) : null}
 
       <div className="config-grid">
-        <SegmentedControl
-          disabled={!canControl}
-          options={(["snake", "roundRobin", "random"] as DraftStyle[]).map((value) => ({ value, label: DRAFT_STYLE_LABELS[value] }))}
-          value={config.draftStyle}
-          onChange={(value) => onUpdateConfig({ draftStyle: value as DraftStyle })}
-        />
-        <div className="time-select-grid">
-          <SelectField
-            disabled={!canControl || config.draftStyle === "random"}
-            label="PICK TIME"
-            options={PICK_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTimerOption(value) }))}
-            value={String(config.pickTimeLimit)}
-            onChange={(value) => onUpdateConfig({ pickTimeLimit: Number(value) as PickTimeLimit })}
-          />
-          <SelectField
-            disabled={!canControl}
-            label="TROOP TIME"
-            options={TROOP_ALLOCATION_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTroopTimerOption(value) }))}
-            value={String(config.troopAllocationTimeLimit)}
-            onChange={(value) => onUpdateConfig({ troopAllocationTimeLimit: Number(value) as TroopAllocationTimeLimit })}
-          />
-        </div>
+        <section className="config-section" aria-labelledby="territory-draft-heading">
+          <h2 id="territory-draft-heading">Territory Draft</h2>
+          <div className="config-select-row">
+            <SelectField
+              disabled={!canControl}
+              hideLabel
+              label="Draft style"
+              options={(["snake", "roundRobin", "random"] as DraftStyle[]).map((value) => ({ value, label: DRAFT_STYLE_LABELS[value] }))}
+              value={config.draftStyle}
+              onChange={(value) => onUpdateConfig({ draftStyle: value as DraftStyle })}
+            />
+            <SelectField
+              disabled={!canControl || config.draftStyle === "random"}
+              hideLabel
+              label="Pick time"
+              options={PICK_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTimerOption(value) }))}
+              value={String(config.pickTimeLimit)}
+              onChange={(value) => onUpdateConfig({ pickTimeLimit: Number(value) as PickTimeLimit })}
+            />
+          </div>
+        </section>
+        <section className="config-section" aria-labelledby="troop-allocation-heading">
+          <h2 id="troop-allocation-heading">Troop Allocation</h2>
+          <div className="config-select-row">
+            <SelectField
+              disabled={!canControl}
+              hideLabel
+              label="Allocation style"
+              options={ALLOCATION_STYLES.map((value) => ({ value, label: ALLOCATION_STYLE_LABELS[value] }))}
+              value={config.allocationStyle}
+              onChange={(value) => onUpdateConfig({ allocationStyle: value as AllocationStyle })}
+            />
+            <SelectField
+              disabled={!canControl || config.allocationStyle === "random"}
+              hideLabel
+              label="Allocation time"
+              options={TROOP_ALLOCATION_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTroopTimerOption(value) }))}
+              value={String(config.troopAllocationTimeLimit)}
+              onChange={(value) => onUpdateConfig({ troopAllocationTimeLimit: Number(value) as TroopAllocationTimeLimit })}
+            />
+          </div>
+        </section>
       </div>
 
       {canControl ? (
@@ -3341,44 +3368,16 @@ function ColorSelect({
   );
 }
 
-function SegmentedControl({
-  disabled = false,
-  onChange,
-  options,
-  value,
-}: {
-  disabled?: boolean;
-  onChange: (value: string) => void;
-  options: { label: string; value: string }[];
-  value: string;
-}) {
-  return (
-    <div className="segmented-field">
-      <div className="segmented-control">
-        {options.map((option) => (
-          <button
-            className={value === option.value ? "selected" : ""}
-            disabled={disabled}
-            key={option.value}
-            onClick={() => onChange(option.value)}
-            type="button"
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function SelectField({
   disabled = false,
+  hideLabel = false,
   label,
   onChange,
   options,
   value,
 }: {
   disabled?: boolean;
+  hideLabel?: boolean;
   label: string;
   onChange: (value: string) => void;
   options: { label: string; value: string }[];
@@ -3386,8 +3385,8 @@ function SelectField({
 }) {
   return (
     <label className="select-field">
-      <span>{label}</span>
-      <select disabled={disabled} onChange={(event) => onChange(event.target.value)} value={value}>
+      {hideLabel ? null : <span>{label}</span>}
+      <select aria-label={label} disabled={disabled} onChange={(event) => onChange(event.target.value)} value={value}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

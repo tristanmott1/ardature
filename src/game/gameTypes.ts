@@ -6,6 +6,8 @@ export type PlayerColor = "green" | "blue" | "yellow" | "red" | "purple" | "blac
 
 export type DraftStyle = "random" | "roundRobin" | "snake";
 
+export type AllocationStyle = "manual" | "random";
+
 export type PickTimeLimit = 0 | 5 | 10 | 15;
 
 export type TroopAllocationTimeLimit = 0 | 60 | 120 | 180 | 240 | 300;
@@ -24,6 +26,7 @@ export type GamePlayer = {
 export type GameConfig = {
   draftStyle: DraftStyle;
   pickTimeLimit: PickTimeLimit;
+  allocationStyle: AllocationStyle;
   troopAllocationTimeLimit: TroopAllocationTimeLimit;
 };
 

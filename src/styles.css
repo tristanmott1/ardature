@@ -613,19 +613,28 @@ select {
 
 .config-grid {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   margin-bottom: 6px;
 }
 
-.time-select-grid {
+.config-section {
+  display: grid;
+  gap: 7px;
+}
+
+.config-section h2 {
+  margin: 0;
+  color: rgba(24, 24, 27, 0.72);
+  font-size: 0.76rem;
+  font-weight: 860;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.config-select-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-}
-
-.segmented-field {
-  display: grid;
-  gap: 5px;
 }
 
 .select-field {
@@ -642,27 +651,6 @@ select {
   font-size: 0.78rem;
   font-weight: 760;
   text-transform: uppercase;
-}
-
-.segmented-control {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
-  gap: 4px;
-}
-
-.segmented-control button {
-  min-height: 34px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.28);
-}
-
-.segmented-control button.selected {
-  color: #ffffff;
-  border-color: #18181b;
-  background: #18181b;
 }
 
 .player-dot {

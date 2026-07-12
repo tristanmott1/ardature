@@ -1,5 +1,5 @@
 import type { GameConfig, GamePlayer, PlayerColor } from "./gameTypes";
-import { PICK_TIME_LIMITS, PLAYER_COLORS, TROOP_ALLOCATION_TIME_LIMITS, createPlayer } from "./gameState";
+import { ALLOCATION_STYLES, PICK_TIME_LIMITS, PLAYER_COLORS, TROOP_ALLOCATION_TIME_LIMITS, createPlayer } from "./gameState";
 
 export type SetupPreferences = {
   localPlayers: SetupPreferencePlayer[];
@@ -22,6 +22,7 @@ const SETUP_PREFERENCES_KEY = "ardature.setupPreferences.v1";
 const DEFAULT_CONFIG: GameConfig = {
   draftStyle: "snake",
   pickTimeLimit: 0,
+  allocationStyle: "manual",
   troopAllocationTimeLimit: 0,
 };
 
@@ -134,13 +135,18 @@ function normalizeConfig(value: unknown): GameConfig {
   const pickTimeLimit = PICK_TIME_LIMITS.includes(config?.pickTimeLimit as GameConfig["pickTimeLimit"])
     ? config.pickTimeLimit as GameConfig["pickTimeLimit"]
     : DEFAULT_CONFIG.pickTimeLimit;
+  const allocationStyle = ALLOCATION_STYLES.includes(config?.allocationStyle as GameConfig["allocationStyle"])
+    ? config.allocationStyle as GameConfig["allocationStyle"]
+    : DEFAULT_CONFIG.allocationStyle;
+  const troopAllocationTimeLimit = TROOP_ALLOCATION_TIME_LIMITS.includes(config?.troopAllocationTimeLimit as GameConfig["troopAllocationTimeLimit"])
+    ? config.troopAllocationTimeLimit as GameConfig["troopAllocationTimeLimit"]
+    : DEFAULT_CONFIG.troopAllocationTimeLimit;
 
   return {
     draftStyle,
     pickTimeLimit: draftStyle === "random" ? 0 : pickTimeLimit,
-    troopAllocationTimeLimit: TROOP_ALLOCATION_TIME_LIMITS.includes(config?.troopAllocationTimeLimit as GameConfig["troopAllocationTimeLimit"])
-      ? config.troopAllocationTimeLimit as GameConfig["troopAllocationTimeLimit"]
-      : DEFAULT_CONFIG.troopAllocationTimeLimit,
+    allocationStyle,
+    troopAllocationTimeLimit: allocationStyle === "random" ? 0 : troopAllocationTimeLimit,
   };
 }
 

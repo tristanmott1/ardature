@@ -152,7 +152,10 @@ Both local and sync modes share the same setup and draft state model:
 - Turn order with Qwixx-style manual reorder and randomize.
 - Draft style: random, round robin, or snake.
 - Optional draft pick timers.
-- Optional troop allocation timer used by the troop allocation phase.
+- Troop allocation style: manual or random.
+- Optional troop allocation timer used by the manual troop allocation phase.
+
+Random allocation is an authoritative game-state transition after the territory draft. It samples each player's army mixture, builds troops with the same economy rules as manual allocation, places all troops, marks allocations complete, and proceeds to the first turn without rendering the manual allocation UI.
 
 The old sandbox interaction is no longer a user-facing app mode. Its useful capabilities remain as reusable map behavior: pan, zoom, selected-territory focus, hit targets, and state-driven territory fills.
 
