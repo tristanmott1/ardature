@@ -85,6 +85,7 @@ import { notificationMessage } from "./game/notificationText";
 import {
   activeOverlayForState,
   applyMapSelectionUpdates,
+  canAdvanceAllocationWaiting,
   clearNonDraftMapSelections as clearNonDraftMapSelectionState,
   clearTurnMapSelections,
   createTroopMarkers,
@@ -1583,7 +1584,7 @@ function App() {
           <AllocationWaitingPanel
             players={game.players}
             allocation={game.allocation}
-            canAdvance={isSyncHost && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
+            canAdvance={canAdvanceAllocationWaiting(game, isSyncHost)}
             onAdvance={startAllocatedGame}
           />
         ) : null;

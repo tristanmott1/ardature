@@ -761,6 +761,14 @@ export function playerBarControlsForGame(game: GameState, isSyncHost: boolean): 
   };
 }
 
+export function canAdvanceAllocationWaiting(game: GameState, isSyncHost: boolean) {
+  return Boolean(
+    isSyncHost &&
+      game.allocation &&
+      game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready),
+  );
+}
+
 export function notificationPlayerId(game: GameState, syncRole: SyncRole, localPlayerId: string | null, turnViewerId: string | null) {
   if (game.mode === "sync") {
     return syncRole === "joiner" || syncRole === "host" ? localPlayerId : null;
