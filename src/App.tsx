@@ -193,6 +193,19 @@ type TerritoryInspectionContext = {
   viewerId: string | null;
 };
 
+type MapPressMode = "draft" | "allocation" | "reinforcement" | "spy" | "inspect";
+
+type MapPressModeContext = {
+  activeDraftPlayer: GamePlayer | null;
+  allocationBuildSubmitted: boolean;
+  allocationPlayerId: string | null;
+  canControlActivePlayer: boolean;
+  canControlTurnPlayer: boolean;
+  game: GameState;
+  localAllocationReady: boolean;
+  syncJoinerBlocked: boolean;
+};
+
 function firstActiveOverlay(...overlays: Array<ActiveOverlay | null>): ActiveOverlay | null {
   for (const overlay of overlays) {
     if (overlay) {
@@ -373,14 +386,16 @@ function App() {
     : null;
   const timerRemaining = playerBarTimerRemaining(game, now);
   const canControlSetup = game.mode === "local" || syncRole === "host";
-  const canDraftOnMap = !syncJoinerBlocked &&
-    game.phase === "draft" &&
-    canControlActivePlayer &&
-    Boolean(active);
-  const canAllocateOnMap = !syncJoinerBlocked && game.phase === "allocation" && Boolean(allocationPlayerId) && allocationBuildSubmitted && !localAllocationReady;
-  const canReinforceOnMap = !syncJoinerBlocked && game.phase === "turn" && canControlTurnPlayer && game.turn?.stage === "reinforcementPlace";
-  const canSpyOnMap = !syncJoinerBlocked && game.phase === "turn" && canControlTurnPlayer && game.turn?.stage === "spyTarget";
-  const canInspectGameMap = !syncJoinerBlocked && (game.phase === "gameMap" || (game.phase === "turn" && !canReinforceOnMap && !canSpyOnMap));
+  const mapPressMode = mapPressModeForGame({
+    activeDraftPlayer: active,
+    allocationBuildSubmitted,
+    allocationPlayerId,
+    canControlActivePlayer,
+    canControlTurnPlayer,
+    game,
+    localAllocationReady,
+    syncJoinerBlocked,
+  });
   const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
   const canShowAllocationSection = game.phase === "allocation" && !localAllocationReady;
   const needsAllocationArmyBuild = Boolean(canShowAllocationSection && allocationPlayer && !allocationBuildSubmitted);
@@ -1376,44 +1391,33 @@ function App() {
   }
 
   function pressTerritory(territoryId: string) {
-    if (syncJoinerBlocked) {
-      return;
-    }
-
-    if (game.phase === "allocation" && allocationPlayerId) {
-      if (ownership[territoryId] === allocationPlayerId) {
-        setAllocationSelectedTerritoryId(territoryId);
-      }
-      return;
-    }
-
-    if (game.phase === "gameMap" && gameMapViewerId) {
-      setGameMapSelectedTerritoryId(territoryId);
-      return;
-    }
-
-    if (game.phase === "turn") {
-      if (canReinforceOnMap && turnPlayerId && ownership[territoryId] === turnPlayerId) {
-        setTurnSelectedTerritoryId(territoryId);
-        return;
-      }
-
-      if (canSpyOnMap && turnPlayerId && ownership[territoryId] && ownership[territoryId] !== turnPlayerId) {
-        setPendingSpyTerritoryId(territoryId);
-        return;
-      }
-
-      if (turnViewerId) {
+    switch (mapPressMode) {
+      case "allocation":
+        if (allocationPlayerId && ownership[territoryId] === allocationPlayerId) {
+          setAllocationSelectedTerritoryId(territoryId);
+        }
+        break;
+      case "draft":
+        if (canPickTerritory(game, territoryId)) {
+          setPendingDraftTerritoryId(territoryId);
+        }
+        break;
+      case "inspect":
         setGameMapSelectedTerritoryId(territoryId);
-      }
-      return;
+        break;
+      case "reinforcement":
+        if (turnPlayerId && ownership[territoryId] === turnPlayerId) {
+          setTurnSelectedTerritoryId(territoryId);
+        }
+        break;
+      case "spy":
+        if (turnPlayerId && ownership[territoryId] && ownership[territoryId] !== turnPlayerId) {
+          setPendingSpyTerritoryId(territoryId);
+        }
+        break;
+      default:
+        break;
     }
-
-    if (!canPickTerritory(game, territoryId)) {
-      return;
-    }
-
-    setPendingDraftTerritoryId(territoryId);
   }
 
   function cancelPendingPick() {
@@ -2108,7 +2112,7 @@ function App() {
         autoFocusEnabled={autoFocusEnabled}
         frozen={freezeMapGestures}
         mapData={generatedMapData}
-        onTerritoryPress={!freezeMapGestures && (canDraftOnMap || canAllocateOnMap || canReinforceOnMap || canSpyOnMap || canInspectGameMap) ? pressTerritory : undefined}
+        onTerritoryPress={!freezeMapGestures && mapPressMode ? pressTerritory : undefined}
         onAutoFocusChange={changeAutoFocusEnabled}
         resetCameraKey={resetCameraKey}
         selectedTerritoryId={viewerSelectedTerritoryId}
@@ -3687,6 +3691,51 @@ function selectedTerritoryForMap({
   }
 
   return gameMapSelectedTerritoryId;
+}
+
+function mapPressModeForGame({
+  activeDraftPlayer,
+  allocationBuildSubmitted,
+  allocationPlayerId,
+  canControlActivePlayer,
+  canControlTurnPlayer,
+  game,
+  localAllocationReady,
+  syncJoinerBlocked,
+}: MapPressModeContext): MapPressMode | null {
+  if (syncJoinerBlocked) {
+    return null;
+  }
+
+  if (game.phase === "draft") {
+    return canControlActivePlayer && activeDraftPlayer ? "draft" : null;
+  }
+
+  if (game.phase === "allocation") {
+    return allocationPlayerId && allocationBuildSubmitted && !localAllocationReady ? "allocation" : null;
+  }
+
+  if (game.phase === "gameMap") {
+    return "inspect";
+  }
+
+  if (game.phase !== "turn") {
+    return null;
+  }
+
+  if (!canControlTurnPlayer) {
+    return "inspect";
+  }
+
+  if (game.turn?.stage === "reinforcementPlace") {
+    return "reinforcement";
+  }
+
+  if (game.turn?.stage === "spyTarget") {
+    return "spy";
+  }
+
+  return "inspect";
 }
 
 function territoryInspectionForViewer({
