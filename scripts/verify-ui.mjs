@@ -261,6 +261,7 @@ async function runSourceChecks() {
   assert(!territoryFillSource.includes('state.status === "selected" ? "#ffffff"'), "Selected territory fill is not hard-coded to white.");
   assert(troopMarkerSource.includes("data-troop-marker"), "Troop markers expose territory ids for visibility verification.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
+  assert(appSource.includes('className="connection-label" aria-hidden={mode !== "sync"}') && appSource.includes("canRemove && player.id !== localPlayerId"), "Pause rows keep local and sync action/status slots aligned.");
   assert(appSource.includes("function PlayerBar") && appSource.includes("showPlayerBar") && appSource.includes("allocation-waiting-panel"), "Game stages use the shared persistent player bar.");
   assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");

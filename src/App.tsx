@@ -3068,20 +3068,16 @@ function PausePanel({
             <article className="player-row compact-row" data-player-status={player.connectionStatus} key={player.id}>
               <span className="player-dot" style={{ background: colorCss(player.color) }} />
               <strong>{player.name}</strong>
-              {mode === "sync" ? <span className="connection-label">{player.connectionStatus}</span> : null}
-              {canRemove || mode === "sync" ? (
-                player.id === localPlayerId ? (
-                  <span className="icon-button-spacer" aria-hidden="true" />
-                ) : (
-                  canRemove ? (
-                    <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
-                      <Trash2 size={16} />
-                    </button>
-                  ) : (
-                    <span className="icon-button-spacer" aria-hidden="true" />
-                  )
-                )
-              ) : null}
+              <span className="connection-label" aria-hidden={mode !== "sync"}>
+                {mode === "sync" ? player.connectionStatus : ""}
+              </span>
+              {canRemove && player.id !== localPlayerId ? (
+                <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
+                  <Trash2 size={16} />
+                </button>
+              ) : (
+                <span className="icon-button-spacer" aria-hidden="true" />
+              )}
             </article>
           ))}
         </div>
