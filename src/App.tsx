@@ -198,6 +198,10 @@ type TerritoryInspectionContext = {
 
 type MapPressMode = "draft" | "allocation" | "reinforcement" | "spy" | "inspect";
 
+type TroopSectionMode = "none" | "allocation" | "allocationWaiting" | "gameMapInfo" | "reinforcement" | "turnInfo";
+
+type ActionSectionMode = "none" | "turn";
+
 type MapPressModeContext = {
   activeDraftPlayer: GamePlayer | null;
   allocationBuildSubmitted: boolean;
@@ -210,18 +214,12 @@ type MapPressModeContext = {
 };
 
 type GameStageLayout = {
+  actionSection: ActionSectionMode;
   canUseMapCameraControls: boolean;
   freezeMapGestures: boolean;
-  showActionSection: boolean;
-  showAllocationTroopSection: boolean;
-  showAllocationWaitingSection: boolean;
-  showGameMapInfoSection: boolean;
   showGameStageLayout: boolean;
   showPlayerBar: boolean;
-  showReinforcementTroopSection: boolean;
-  showTurnActionSection: boolean;
-  showTurnInfoSection: boolean;
-  showTroopSection: boolean;
+  troopSection: TroopSectionMode;
 };
 
 type GameStageLayoutContext = {
@@ -2011,78 +2009,71 @@ function App() {
   }
 
   function renderTroopSection() {
-    if (layout.showAllocationTroopSection && allocationPlayer) {
-      return (
-        <AllocationPanel
-          allocation={game.allocation}
-          canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
-          onAdjustTroop={adjustSelectedTroop}
-          onFinish={finishCurrentAllocation}
-          ownership={ownership}
-          player={allocationPlayer}
-          selectedTerritoryId={allocationSelectedTerritoryId}
-        />
-      );
+    switch (layout.troopSection) {
+      case "allocation":
+        return allocationPlayer ? (
+          <AllocationPanel
+            allocation={game.allocation}
+            canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
+            onAdjustTroop={adjustSelectedTroop}
+            onFinish={finishCurrentAllocation}
+            ownership={ownership}
+            player={allocationPlayer}
+            selectedTerritoryId={allocationSelectedTerritoryId}
+          />
+        ) : null;
+      case "allocationWaiting":
+        return allocationPlayer ? (
+          <AllocationWaitingPanel
+            players={game.players}
+            allocation={game.allocation}
+            canAdvance={isSyncHost && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
+            onAdvance={startAllocatedGame}
+          />
+        ) : null;
+      case "gameMapInfo":
+        return (
+          <GameMapPanel
+            capturedSpies={gameMapInspection.capturedSpies}
+            players={game.players}
+            selectedTerritory={gameMapInspection.selectedTerritory}
+            troopBreakdown={gameMapInspection.troopBreakdown}
+            troopPlayerId={gameMapInspection.troopPlayerId}
+            viewerId={gameMapViewerId}
+          />
+        );
+      case "reinforcement":
+        return turnActionPlayer && turnReinforcement ? (
+          <ReinforcementPanel
+            allocation={game.allocation}
+            canFinish={Boolean(turnPlayerId && reinforcementComplete(game, turnPlayerId))}
+            onAdjustTroop={adjustSelectedReinforcementTroop}
+            onFinish={finishCurrentReinforcements}
+            player={turnActionPlayer}
+            players={game.players}
+            reinforcement={turnReinforcement}
+            capturedSpies={reinforcementCapturedSpies}
+            selectedTerritory={turnSelectedTerritory}
+          />
+        ) : null;
+      case "turnInfo":
+        return (
+          <GameMapPanel
+            capturedSpies={turnMapInspection.capturedSpies}
+            players={game.players}
+            selectedTerritory={turnMapInspection.selectedTerritory}
+            troopBreakdown={turnMapInspection.troopBreakdown}
+            troopPlayerId={turnMapInspection.troopPlayerId}
+            viewerId={turnViewerId}
+          />
+        );
+      case "none":
+        return null;
     }
-
-    if (layout.showGameMapInfoSection) {
-      return (
-        <GameMapPanel
-          capturedSpies={gameMapInspection.capturedSpies}
-          players={game.players}
-          selectedTerritory={gameMapInspection.selectedTerritory}
-          troopBreakdown={gameMapInspection.troopBreakdown}
-          troopPlayerId={gameMapInspection.troopPlayerId}
-          viewerId={gameMapViewerId}
-        />
-      );
-    }
-
-    if (layout.showAllocationWaitingSection && allocationPlayer) {
-      return (
-        <AllocationWaitingPanel
-          players={game.players}
-          allocation={game.allocation}
-          canAdvance={isSyncHost && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
-          onAdvance={startAllocatedGame}
-        />
-      );
-    }
-
-    if (layout.showReinforcementTroopSection && turnActionPlayer && turnReinforcement) {
-      return (
-        <ReinforcementPanel
-          allocation={game.allocation}
-          canFinish={Boolean(turnPlayerId && reinforcementComplete(game, turnPlayerId))}
-          onAdjustTroop={adjustSelectedReinforcementTroop}
-          onFinish={finishCurrentReinforcements}
-          player={turnActionPlayer}
-          players={game.players}
-          reinforcement={turnReinforcement}
-          capturedSpies={reinforcementCapturedSpies}
-          selectedTerritory={turnSelectedTerritory}
-        />
-      );
-    }
-
-    if (layout.showTurnInfoSection) {
-      return (
-        <GameMapPanel
-          capturedSpies={turnMapInspection.capturedSpies}
-          players={game.players}
-          selectedTerritory={turnMapInspection.selectedTerritory}
-          troopBreakdown={turnMapInspection.troopBreakdown}
-          troopPlayerId={turnMapInspection.troopPlayerId}
-          viewerId={turnViewerId}
-        />
-      );
-    }
-
-    return null;
   }
 
   function renderActionSection() {
-    if (!layout.showTurnActionSection || !turnActionPlayer) {
+    if (layout.actionSection !== "turn" || !turnActionPlayer) {
       return null;
     }
 
@@ -3769,29 +3760,69 @@ function gameStageLayoutForState({
 }: GameStageLayoutContext): GameStageLayout {
   const hasActiveOverlay = Boolean(activeOverlay);
   const isGameStage = game.phase !== "home" && game.phase !== "setup";
-  const showTroopSection = !hasActiveOverlay;
-  const showActionSection = !hasActiveOverlay;
-  const showAllocationWaitingSection = showTroopSection && game.mode === "sync" && game.phase === "allocation" && localAllocationReady;
+  const hideSections = hasActiveOverlay;
+  const troopSection = hideSections
+    ? "none"
+    : troopSectionModeForGame({
+        canControlTurnPlayer,
+        canShowAllocationSection,
+        game,
+        gameMapInspection,
+        localAllocationReady,
+        turnActionPlayer,
+        turnMapInspection,
+      });
+  const actionSection = !hideSections && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer ? "turn" : "none";
 
   return {
-    canUseMapCameraControls: isGameStage && !hasActiveOverlay && !showAllocationWaitingSection,
+    actionSection,
+    canUseMapCameraControls: isGameStage && !hideSections && troopSection !== "allocationWaiting",
     freezeMapGestures: hasActiveOverlay,
-    showActionSection,
-    showAllocationTroopSection: showTroopSection && canShowAllocationSection,
-    showAllocationWaitingSection,
-    showGameMapInfoSection: showTroopSection && game.phase === "gameMap" && Boolean(gameMapInspection.selectedTerritory),
     showGameStageLayout: isGameStage,
     showPlayerBar: isGameStage && Boolean(playerBarPlayer),
-    showReinforcementTroopSection: showTroopSection && game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer) && game.turn?.stage === "reinforcementPlace",
-    showTurnActionSection: showActionSection && game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer),
-    showTurnInfoSection: showTroopSection &&
-      game.phase === "turn" &&
-      game.turn?.stage !== "reinforcementBuild" &&
-      game.turn?.stage !== "reinforcementPlace" &&
-      game.turn?.stage !== "spyTarget" &&
-      Boolean(turnMapInspection.selectedTerritory),
-    showTroopSection,
+    troopSection,
   };
+}
+
+function troopSectionModeForGame({
+  canControlTurnPlayer,
+  canShowAllocationSection,
+  game,
+  gameMapInspection,
+  localAllocationReady,
+  turnActionPlayer,
+  turnMapInspection,
+}: Omit<GameStageLayoutContext, "activeOverlay" | "playerBarPlayer">): TroopSectionMode {
+  if (canShowAllocationSection) {
+    return "allocation";
+  }
+
+  if (game.mode === "sync" && game.phase === "allocation" && localAllocationReady) {
+    return "allocationWaiting";
+  }
+
+  if (game.phase === "gameMap" && gameMapInspection.selectedTerritory) {
+    return "gameMapInfo";
+  }
+
+  if (game.phase !== "turn") {
+    return "none";
+  }
+
+  if (canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace") {
+    return "reinforcement";
+  }
+
+  if (
+    game.turn?.stage !== "reinforcementBuild" &&
+    game.turn?.stage !== "reinforcementPlace" &&
+    game.turn?.stage !== "spyTarget" &&
+    turnMapInspection.selectedTerritory
+  ) {
+    return "turnInfo";
+  }
+
+  return "none";
 }
 
 function territoryInspectionForViewer({
