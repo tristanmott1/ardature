@@ -265,6 +265,7 @@ async function runSourceChecks() {
   assert(appSource.includes('className="connection-label" aria-hidden={mode !== "sync"}') && appSource.includes("canRemove && player.id !== localPlayerId"), "Pause rows keep local and sync action/status slots aligned.");
   assert(appSource.includes("function PlayerIdentity") && (appSource.match(/className=\"player-dot\"/g) ?? []).length === 1, "Read-only player identity rows share one dot/name component.");
   assert(appSource.includes("function PlayerBar") && appSource.includes("showPlayerBar") && appSource.includes("allocation-waiting-panel"), "Game stages use the shared persistent player bar.");
+  assert(appSource.includes("function ConfigSelectSection") && (appSource.match(/className=\"config-section\"/g) ?? []).length === 1 && (appSource.match(/className=\"config-select-row\"/g) ?? []).length === 1, "Setup configuration sections share one section wrapper.");
   assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
   assert(appSource.includes("TroopIconCount") && appSource.includes("troopIconSrc"), "Allocation UI uses troop image icons.");

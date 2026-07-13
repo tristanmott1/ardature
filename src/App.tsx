@@ -1,4 +1,4 @@
-import { type CSSProperties, type ClipboardEvent as ReactClipboardEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ClipboardEvent as ReactClipboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
 import {
@@ -2398,9 +2398,9 @@ function SetupPanel({
                 player.id === localPlayerId ? (
                   <span className="icon-button-spacer" aria-hidden="true" />
                 ) : (
-                <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name || "player"}`}>
-                  <Trash2 size={16} />
-                </button>
+                  <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name || "player"}`}>
+                    <Trash2 size={16} />
+                  </button>
                 )
               ) : null}
             </article>
@@ -2418,48 +2418,42 @@ function SetupPanel({
       ) : null}
 
       <div className="config-grid">
-        <section className="config-section" aria-labelledby="territory-draft-heading">
-          <h2 id="territory-draft-heading">Territory Draft</h2>
-          <div className="config-select-row">
-            <SelectField
-              disabled={!canControl}
-              hideLabel
-              label="Draft style"
-              options={(["snake", "roundRobin", "random"] as DraftStyle[]).map((value) => ({ value, label: DRAFT_STYLE_LABELS[value] }))}
-              value={config.draftStyle}
-              onChange={(value) => onUpdateConfig({ draftStyle: value as DraftStyle })}
-            />
-            <SelectField
-              disabled={!canControl || config.draftStyle === "random"}
-              hideLabel
-              label="Pick time"
-              options={PICK_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTimerOption(value) }))}
-              value={String(config.pickTimeLimit)}
-              onChange={(value) => onUpdateConfig({ pickTimeLimit: Number(value) as PickTimeLimit })}
-            />
-          </div>
-        </section>
-        <section className="config-section" aria-labelledby="troop-allocation-heading">
-          <h2 id="troop-allocation-heading">Troop Allocation</h2>
-          <div className="config-select-row">
-            <SelectField
-              disabled={!canControl}
-              hideLabel
-              label="Allocation style"
-              options={ALLOCATION_STYLES.map((value) => ({ value, label: ALLOCATION_STYLE_LABELS[value] }))}
-              value={config.allocationStyle}
-              onChange={(value) => onUpdateConfig({ allocationStyle: value as AllocationStyle })}
-            />
-            <SelectField
-              disabled={!canControl || config.allocationStyle === "random"}
-              hideLabel
-              label="Allocation time"
-              options={TROOP_ALLOCATION_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTroopTimerOption(value) }))}
-              value={String(config.troopAllocationTimeLimit)}
-              onChange={(value) => onUpdateConfig({ troopAllocationTimeLimit: Number(value) as TroopAllocationTimeLimit })}
-            />
-          </div>
-        </section>
+        <ConfigSelectSection headingId="territory-draft-heading" title="Territory Draft">
+          <SelectField
+            disabled={!canControl}
+            hideLabel
+            label="Draft style"
+            options={(["snake", "roundRobin", "random"] as DraftStyle[]).map((value) => ({ value, label: DRAFT_STYLE_LABELS[value] }))}
+            value={config.draftStyle}
+            onChange={(value) => onUpdateConfig({ draftStyle: value as DraftStyle })}
+          />
+          <SelectField
+            disabled={!canControl || config.draftStyle === "random"}
+            hideLabel
+            label="Pick time"
+            options={PICK_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTimerOption(value) }))}
+            value={String(config.pickTimeLimit)}
+            onChange={(value) => onUpdateConfig({ pickTimeLimit: Number(value) as PickTimeLimit })}
+          />
+        </ConfigSelectSection>
+        <ConfigSelectSection headingId="troop-allocation-heading" title="Troop Allocation">
+          <SelectField
+            disabled={!canControl}
+            hideLabel
+            label="Allocation style"
+            options={ALLOCATION_STYLES.map((value) => ({ value, label: ALLOCATION_STYLE_LABELS[value] }))}
+            value={config.allocationStyle}
+            onChange={(value) => onUpdateConfig({ allocationStyle: value as AllocationStyle })}
+          />
+          <SelectField
+            disabled={!canControl || config.allocationStyle === "random"}
+            hideLabel
+            label="Allocation time"
+            options={TROOP_ALLOCATION_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTroopTimerOption(value) }))}
+            value={String(config.troopAllocationTimeLimit)}
+            onChange={(value) => onUpdateConfig({ troopAllocationTimeLimit: Number(value) as TroopAllocationTimeLimit })}
+          />
+        </ConfigSelectSection>
       </div>
 
       {canControl ? (
@@ -3305,6 +3299,17 @@ function ColorSelect({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ConfigSelectSection({ children, headingId, title }: { children: ReactNode; headingId: string; title: string }) {
+  return (
+    <section className="config-section" aria-labelledby={headingId}>
+      <h2 id={headingId}>{title}</h2>
+      <div className="config-select-row">
+        {children}
+      </div>
+    </section>
   );
 }
 
