@@ -1972,6 +1972,98 @@ function App() {
     }
   }
 
+  function renderTroopSection() {
+    if (showAllocationTroopSection && allocationPlayer) {
+      return (
+        <AllocationPanel
+          allocation={game.allocation}
+          canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
+          onAdjustTroop={adjustSelectedTroop}
+          onFinish={finishCurrentAllocation}
+          ownership={ownership}
+          player={allocationPlayer}
+          selectedTerritoryId={allocationSelectedTerritoryId}
+        />
+      );
+    }
+
+    if (showGameMapInfoSection) {
+      return (
+        <GameMapPanel
+          capturedSpies={gameMapCapturedSpies}
+          players={game.players}
+          selectedTerritory={gameMapSelectedTerritory}
+          troopBreakdown={gameMapSelectedTerritoryId && gameMapSelectedOwnTerritory ? territoryTroops(game.allocation, gameMapSelectedTerritoryId) : null}
+          viewerId={gameMapViewerId}
+        />
+      );
+    }
+
+    if (showAllocationWaitingSection && allocationPlayer) {
+      return (
+        <AllocationWaitingPanel
+          players={game.players}
+          allocation={game.allocation}
+          canAdvance={syncRole === "host" && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
+          onAdvance={startAllocatedGame}
+        />
+      );
+    }
+
+    if (showReinforcementTroopSection && turnActionPlayer && turnReinforcement) {
+      return (
+        <ReinforcementPanel
+          allocation={game.allocation}
+          canFinish={Boolean(turnPlayerId && reinforcementComplete(game, turnPlayerId))}
+          onAdjustTroop={adjustSelectedReinforcementTroop}
+          onFinish={finishCurrentReinforcements}
+          player={turnActionPlayer}
+          players={game.players}
+          reinforcement={turnReinforcement}
+          capturedSpies={reinforcementCapturedSpies}
+          selectedTerritory={turnSelectedTerritory}
+        />
+      );
+    }
+
+    if (showTurnInfoSection) {
+      return (
+        <GameMapPanel
+          capturedSpies={turnMapCapturedSpies}
+          players={game.players}
+          selectedTerritory={turnMapSelectedTerritory}
+          troopBreakdown={turnMapTroopBreakdown}
+          troopPlayerId={turnMapTroopPlayerId}
+          viewerId={turnViewerId}
+        />
+      );
+    }
+
+    return null;
+  }
+
+  function renderActionSection() {
+    if (!showTurnActionSection || !turnActionPlayer) {
+      return null;
+    }
+
+    return (
+      <TurnActionPanel
+        canSpy={Boolean(turnPlayerId && (canUseSpy(game, turnPlayerId) || game.turn?.stage === "spyTarget"))}
+        onDismissSpy={dismissTurnSpy}
+        onFortify={endTurnWithFortify}
+        onReinforce={beginTurnReinforcements}
+        onSpy={toggleTurnSpy}
+        player={turnActionPlayer}
+        stage={game.turn?.stage ?? "reinforcementReady"}
+        spyMissing={Boolean(turnPlayerId && game.turn?.spies[turnPlayerId]?.status !== "available")}
+        spyReturnStage={game.turn?.spyReturnStage ?? null}
+      />
+    );
+  }
+
+  const troopSectionElement = renderTroopSection();
+  const actionSectionElement = renderActionSection();
   const activeOverlayElement = renderActiveOverlay();
 
   return (
@@ -1993,61 +2085,7 @@ function App() {
         />
       ) : null}
 
-      {showAllocationTroopSection && allocationPlayer ? (
-        <AllocationPanel
-          allocation={game.allocation}
-          canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
-          onAdjustTroop={adjustSelectedTroop}
-          onFinish={finishCurrentAllocation}
-          ownership={ownership}
-          player={allocationPlayer}
-          selectedTerritoryId={allocationSelectedTerritoryId}
-        />
-      ) : null}
-
-      {showGameMapInfoSection ? (
-        <GameMapPanel
-          capturedSpies={gameMapCapturedSpies}
-          players={game.players}
-          selectedTerritory={gameMapSelectedTerritory}
-          troopBreakdown={gameMapSelectedTerritoryId && gameMapSelectedOwnTerritory ? territoryTroops(game.allocation, gameMapSelectedTerritoryId) : null}
-          viewerId={gameMapViewerId}
-        />
-      ) : null}
-
-      {showAllocationWaitingSection && allocationPlayer ? (
-        <AllocationWaitingPanel
-          players={game.players}
-          allocation={game.allocation}
-          canAdvance={syncRole === "host" && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
-          onAdvance={startAllocatedGame}
-        />
-      ) : null}
-
-      {showReinforcementTroopSection && turnActionPlayer && turnReinforcement ? (
-        <ReinforcementPanel
-          allocation={game.allocation}
-          canFinish={Boolean(turnPlayerId && reinforcementComplete(game, turnPlayerId))}
-          onAdjustTroop={adjustSelectedReinforcementTroop}
-          onFinish={finishCurrentReinforcements}
-          player={turnActionPlayer}
-          players={game.players}
-          reinforcement={turnReinforcement}
-          capturedSpies={reinforcementCapturedSpies}
-          selectedTerritory={turnSelectedTerritory}
-        />
-      ) : null}
-
-      {showTurnInfoSection ? (
-        <GameMapPanel
-          capturedSpies={turnMapCapturedSpies}
-          players={game.players}
-          selectedTerritory={turnMapSelectedTerritory}
-          troopBreakdown={turnMapTroopBreakdown}
-          troopPlayerId={turnMapTroopPlayerId}
-          viewerId={turnViewerId}
-        />
-      ) : null}
+      {troopSectionElement}
 
       <MapView
         autoFocusEnabled={autoFocusEnabled}
@@ -2062,19 +2100,7 @@ function App() {
         troopMarkers={troopMarkers}
       />
 
-      {showTurnActionSection && turnActionPlayer ? (
-        <TurnActionPanel
-          canSpy={Boolean(turnPlayerId && (canUseSpy(game, turnPlayerId) || game.turn?.stage === "spyTarget"))}
-          onDismissSpy={dismissTurnSpy}
-          onFortify={endTurnWithFortify}
-          onReinforce={beginTurnReinforcements}
-          onSpy={toggleTurnSpy}
-          player={turnActionPlayer}
-          stage={game.turn?.stage ?? "reinforcementReady"}
-          spyMissing={Boolean(turnPlayerId && game.turn?.spies[turnPlayerId]?.status !== "available")}
-          spyReturnStage={game.turn?.spyReturnStage ?? null}
-        />
-      ) : null}
+      {actionSectionElement}
 
       {game.phase === "home" && !syncEntryOpen ? (
         <HomePanel onStartLocal={startLocalSetup} onStartSync={openSyncEntry} />
