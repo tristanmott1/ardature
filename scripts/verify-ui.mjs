@@ -203,6 +203,7 @@ async function runSourceChecks() {
   assert(!syncMessagesSource.includes('type: "gameState"') && !appSource.includes('type: "gameState"'), "Old unversioned gameState sync messages are removed.");
   assert(!syncMessagesSource.includes('type: "hostQuit"') && !appSource.includes('type: "hostQuit"'), "Old hostQuit sync messages are removed.");
   assert(appSource.includes("SyncSessionState") && appSource.includes("syncJoinerBlocked"), "Joiners track disconnected session state outside GameState.");
+  assert(appSource.includes('const isSyncGame = game.mode === "sync"') && appSource.includes('const isSyncHost = isSyncGame && syncRole === "host"') && appSource.includes('const isSyncJoiner = isSyncGame && syncRole === "joiner"') && appSource.includes("const canSendSyncCommand = !isSyncJoiner || syncSession === \"connected\""), "App-level sync role checks use named derived session booleans.");
   assert(appSource.includes("lastSnapshotRevisionRef") && appSource.includes("rawMessage.revision <= lastSnapshotRevisionRef.current"), "Joiners ignore stale snapshots.");
   assert(syncTransportSource.includes("DEFAULT_RECONNECT_GRACE_MS = 10000"), "Sync reconnect grace is 10 seconds.");
   assert(syncTransportSource.includes("HEARTBEAT_INTERVAL_MS = 1000") && syncTransportSource.includes("HEARTBEAT_TIMEOUT_MS = 3000"), "Sync transport has explicit heartbeat timing.");
@@ -249,7 +250,7 @@ async function runSourceChecks() {
   assert(appSource.includes("const timerRemaining = playerBarTimerRemaining(game, now)") && appSource.includes("timerRemaining={timerRemaining}"), "A persistent player bar keeps relevant timers visible through one timer helper.");
   assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
   assert(appSource.includes("data-qr-text") && appSource.includes("handlePaste"), "QR scanner supports paste-driven verification.");
-  assert(appSource.includes("canAdvance={syncRole === \"host\"") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
+  assert(appSource.includes("canAdvance={isSyncHost") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
