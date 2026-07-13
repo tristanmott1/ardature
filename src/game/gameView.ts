@@ -1,6 +1,6 @@
 import { generatedMapConnections } from "../map/generated/mapConnections";
-import { generatedMapData } from "../map/generated/mapData";
 import type { GeneratedTerritoryData } from "../map/mapTypes";
+import { territoryForId } from "../map/territoryLookup";
 import {
   activePlayer,
   capturedSpiesOnTerritory,
@@ -172,7 +172,6 @@ export function createTroopMarkers(game: GameState, allocationPlayerId: string |
     return [];
   }
 
-  const territoryById = new Map<string, GeneratedTerritoryData>(generatedMapData.territories.map((territory) => [territory.id, territory]));
   const visibleIds: Set<string> = game.phase === "gameMap" || game.phase === "turn" || game.phase === "turnHandoff" || (game.phase === "paused" && game.turn)
     ? visibleTroopTotalTerritoryIds(game.draft.ownership, viewerId)
     : new Set(ownedTerritoryIds(game.draft.ownership, viewerId));
@@ -186,7 +185,7 @@ export function createTroopMarkers(game: GameState, allocationPlayerId: string |
 
   return [...visibleIds]
     .map((territoryId) => {
-      const territory = territoryById.get(territoryId);
+      const territory = territoryForId(territoryId);
       const count = territoryTroopTotalWithTurnPreview(game, territoryId);
 
       return territory && count > 0

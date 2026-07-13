@@ -1,4 +1,4 @@
-import { generatedMapData } from "../map/generated/mapData";
+import { territoryName } from "../map/territoryLookup";
 import type { GameNotification, GamePlayer } from "./gameTypes";
 
 const REGION_NAMES: Record<string, string> = {
@@ -24,8 +24,4 @@ export function notificationMessage(notification: GameNotification, players: Gam
   return notification.type === "regionGained"
     ? `You control ${regionName}`
     : `You lost ${regionName}`;
-}
-
-function territoryName(territoryId: string) {
-  return generatedMapData.territories.find((territory) => territory.id === territoryId)?.name ?? territoryId;
 }

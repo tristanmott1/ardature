@@ -1,6 +1,7 @@
 import { generatedMapData } from "../map/generated/mapData";
 import { generatedMapConnections } from "../map/generated/mapConnections";
 import type { MapSkin, TerritoryState } from "../map/mapTypes";
+import { territoriesInRegion } from "../map/territoryLookup";
 import { MIXTURE_TROOP_TYPES, armyCountsForMarker, reinforcementCountsForMarker } from "./armyBuild";
 import type {
   AllocationStyle,
@@ -1499,7 +1500,7 @@ function regionControlForOwnership(ownership: TerritoryOwnerMap): Record<string,
 }
 
 function regionOwner(ownership: TerritoryOwnerMap, regionId: string) {
-  const regionTerritories = generatedMapData.territories.filter((territory) => territory.regionId === regionId);
+  const regionTerritories = territoriesInRegion(regionId);
   if (regionTerritories.length === 0) {
     return null;
   }
@@ -1550,7 +1551,7 @@ function regionBonusTroops(ownership: TerritoryOwnerMap, playerId: string) {
   let bonus = createTroopCounts();
 
   for (const [regionId, troops] of Object.entries(REGION_REINFORCEMENTS)) {
-    const regionTerritories = generatedMapData.territories.filter((territory) => territory.regionId === regionId);
+    const regionTerritories = territoriesInRegion(regionId);
     if (regionTerritories.length > 0 && regionTerritories.every((territory) => ownership[territory.id] === playerId)) {
       bonus = addTroops(bonus, troops);
     }

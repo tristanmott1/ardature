@@ -9,8 +9,8 @@ import {
 import type { GamePlayer, GameState, ReinforcementState, TerritoryOwnerMap, TroopCounts, TroopType } from "../game/gameTypes";
 import type { CapturedSpyView } from "../game/gameView";
 import { spyIconSrc, TroopIconImage } from "../game/troopIcons";
-import { generatedMapData } from "../map/generated/mapData";
 import type { GeneratedTerritoryData } from "../map/mapTypes";
+import { territoryForId } from "../map/territoryLookup";
 import { PlayerIdentity } from "./PlayerChrome";
 import { CapturedSpyRow, TroopCountRow, TroopPlacementRows, UnknownTroopCountRow } from "./TroopControls";
 
@@ -255,7 +255,7 @@ function AllocationControls({
 }) {
   const selectedTroops = selectedTerritoryId ? territoryTroops(allocation, selectedTerritoryId) : null;
   const remaining = remainingTroops(allocation, player.id);
-  const selectedTerritory = generatedMapData.territories.find((territory) => territory.id === selectedTerritoryId);
+  const selectedTerritory = territoryForId(selectedTerritoryId);
   const canAddType = (troopType: TroopType) => Boolean(selectedTerritoryId && canAddTroop(allocation, ownership, player.id, selectedTerritoryId, troopType));
   const canRemoveType = (troopType: TroopType) => Boolean(selectedTroops && selectedTroops[troopType] > 0);
 

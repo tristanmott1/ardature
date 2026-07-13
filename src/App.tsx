@@ -103,6 +103,7 @@ import {
 import { generatedMapData } from "./map/generated/mapData";
 import { MapView } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
+import { territoryForId } from "./map/territoryLookup";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
 import { formatQrHandshakeError } from "./sync/syncErrors";
 import { QrScanner } from "./sync/QrCodeUi";
@@ -221,23 +222,15 @@ function App() {
           ? [{ color: player.color, id: player.id, name: player.name }]
           : [])
     : [];
-  const gameMapSelectedTerritory = gameMapSelectedTerritoryId
-    ? generatedMapData.territories.find((territory) => territory.id === gameMapSelectedTerritoryId) ?? null
-    : null;
+  const gameMapSelectedTerritory = territoryForId(gameMapSelectedTerritoryId);
   const gameMapViewer = game.players.find((player) => player.id === turnViewerId) ?? game.players[0] ?? null;
   const turnActionPlayer = currentTurnPlayer;
   const turnReinforcement = game.turn?.reinforcement ?? null;
   const turnProjectedReinforcements = turnPlayerId ? projectReinforcementTroops(game, turnPlayerId) : null;
   const turnBuildSubmitted = Boolean(turnReinforcement?.buildSubmitted);
-  const turnSelectedTerritory = turnSelectedTerritoryId
-    ? generatedMapData.territories.find((territory) => territory.id === turnSelectedTerritoryId) ?? null
-    : null;
-  const spyIntelTerritory = canControlTurnPlayer && game.turn?.spyIntel?.targetTerritoryId
-    ? generatedMapData.territories.find((territory) => territory.id === game.turn?.spyIntel?.targetTerritoryId) ?? null
-    : null;
-  const spyTargetTerritory = pendingSpyTerritoryId
-    ? generatedMapData.territories.find((territory) => territory.id === pendingSpyTerritoryId) ?? null
-    : null;
+  const turnSelectedTerritory = territoryForId(turnSelectedTerritoryId);
+  const spyIntelTerritory = canControlTurnPlayer ? territoryForId(game.turn?.spyIntel?.targetTerritoryId) : null;
+  const spyTargetTerritory = territoryForId(pendingSpyTerritoryId);
   const spyCapturePercent = pendingSpyTerritoryId && turnPlayerId ? spyCaptureProbability(game, turnPlayerId, pendingSpyTerritoryId) : null;
   const currentNotificationPlayerId = notificationPlayerId(game, syncRole, localPlayerId, turnViewerId);
   const currentNotification = visibleNotification(game, currentNotificationPlayerId, syncJoinerBlocked);
@@ -257,9 +250,7 @@ function App() {
     viewerId: turnViewerId,
   });
   const reinforcementCapturedSpies = turnSelectedTerritory ? capturedSpiesOnTerritory(game, turnSelectedTerritory.id) : [];
-  const viewerPendingTerritory = pendingDraftTerritoryId
-    ? generatedMapData.territories.find((territory) => territory.id === pendingDraftTerritoryId) ?? null
-    : null;
+  const viewerPendingTerritory = territoryForId(pendingDraftTerritoryId);
   const timerRemaining = playerBarTimerRemaining(game, now, pausedReturnPhase);
   const canControlSetup = game.mode === "local" || isSyncHost;
   const mapPressMode = mapPressModeForGame({
