@@ -181,7 +181,7 @@ async function runSourceChecks() {
   assert(!gameTypesSource.includes("selectedTerritoryId") && !gameStateSource.includes("selectedTerritoryId: null") && !gameStateSource.includes("allocation.selectedTerritoryId"), "Shared allocation state does not store selected visual territory.");
   assert(!syncMessagesSource.includes("draftPending"), "Sync messages do not share pending draft selections.");
   assert(!syncMessagesSource.includes('type: "allocationUpdate";\n      allocation: PlayerAllocation;') || !syncMessagesSource.includes("selectedTerritoryId"), "Allocation sync messages do not include selected territory UI state.");
-  assert(!showDraftPanelSource(appSource).includes("viewerPendingTerritory"), "Draft top bar stays visible during confirmation.");
+  assert(appSource.includes('const showGameTopBar = game.phase !== "home" && game.phase !== "setup"') && appSource.includes('const showGameStageLayout = game.phase !== "home" && game.phase !== "setup"'), "Game-stage layout and top bar are not gated by overlay-specific draft state.");
   assert(appSource.includes("RotateCcw") && appSource.includes("restartPausedGame"), "Pause can restart to setup without closing transports.");
   assert(!appSource.includes('closeLabel="End game"'), "Pause modal does not use a close X to end the game.");
   assert(appSource.includes("closeOnOutsidePress"), "Color dropdowns close on outside press.");
@@ -296,16 +296,6 @@ function cssZIndex(source, selector) {
   }
 
   return Number(match[1]);
-}
-
-function showDraftPanelSource(source) {
-  const match = source.match(/const showDraftPanel = [\s\S]*?;/);
-
-  if (!match) {
-    throw new Error("Missing showDraftPanel expression.");
-  }
-
-  return match[0];
 }
 
 function generatedViewport(source, name) {

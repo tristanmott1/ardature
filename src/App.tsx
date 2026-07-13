@@ -344,9 +344,9 @@ function App() {
   const canSpyOnMap = !syncJoinerBlocked && game.phase === "turn" && canControlTurnPlayer && game.turn?.stage === "spyTarget";
   const canInspectGameMap = !syncJoinerBlocked && (game.phase === "gameMap" || (game.phase === "turn" && !canReinforceOnMap && !canSpyOnMap));
   const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
-  const showAllocationControlsBase = game.phase === "allocation" && !localAllocationReady;
-  const showArmyBuildModal = Boolean(showAllocationControlsBase && allocationPlayer && !allocationBuildSubmitted);
-  const showReinforcementBuildModal = game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementBuild";
+  const canShowAllocationSection = game.phase === "allocation" && !localAllocationReady;
+  const needsAllocationArmyBuild = Boolean(canShowAllocationSection && allocationPlayer && !allocationBuildSubmitted);
+  const needsReinforcementArmyBuild = game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementBuild";
   const activeOverlay: ActiveOverlay | null = syncJoinerBlocked
     ? { type: "syncBlocked" }
     : syncCameraMode
@@ -361,9 +361,9 @@ function App() {
               ? { type: "handoff", handoff: "allocation" }
               : game.phase === "turnHandoff"
                 ? { type: "handoff", handoff: "turn" }
-                : showArmyBuildModal
+                : needsAllocationArmyBuild
                   ? { type: "armyBuild", build: "allocation" }
-                  : showReinforcementBuildModal
+                  : needsReinforcementArmyBuild
                     ? { type: "armyBuild", build: "reinforcement" }
                     : currentNotification
                       ? { type: "notification" }
@@ -376,10 +376,8 @@ function App() {
   const showTroopSection = !hasActiveOverlay;
   const showActionSection = !hasActiveOverlay;
   const mapFrozen = hasActiveOverlay;
-  const showAllocationControls = showTroopSection && showAllocationControlsBase;
-  const showDraftPanel = showTroopSection && game.phase === "draft";
+  const showAllocationControls = showTroopSection && canShowAllocationSection;
   const showAllocationWaiting = showTroopSection && game.mode === "sync" && game.phase === "allocation" && localAllocationReady;
-  const showAllocationHandoff = showTroopSection && game.phase === "allocationHandoff";
   const showGameMapControls = showTroopSection && game.phase === "gameMap";
   const showTurnControls = showActionSection && game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer);
   const showReinforcementControls = showTroopSection && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace";
@@ -414,7 +412,7 @@ function App() {
     ? draftProgressForPlayer(game, gameTopBarPlayer.id)
     : null;
   const showGameTopBar = game.phase !== "home" && game.phase !== "setup" && Boolean(gameTopBarPlayer);
-  const showGameStageLayout = showGameTopBar || showDraftPanel || showAllocationControls || showAllocationWaiting || showAllocationHandoff || showGameMapControls || showTurnControls || showReinforcementControls || showTurnMapControls;
+  const showGameStageLayout = game.phase !== "home" && game.phase !== "setup";
   const canUseMapCameraControls = game.phase !== "home" && game.phase !== "setup" && !hasActiveOverlay && !showAllocationWaiting;
 
   useEffect(() => {
@@ -1853,7 +1851,6 @@ function App() {
       <main
       className={`app-shell${showGameStageLayout ? " game-layout" : ""}`}
       data-app-phase={game.phase}
-      data-draft-controls={showDraftPanel ? "visible" : "hidden"}
       data-sync-role={syncRole ?? "none"}
     >
       {showGameTopBar ? (
@@ -1929,7 +1926,6 @@ function App() {
         autoFocusEnabled={autoFocusEnabled}
         frozen={mapFrozen}
         mapData={generatedMapData}
-        onMapPress={undefined}
         onTerritoryPress={!mapFrozen && (canDraftOnMap || canAllocateOnMap || canReinforceOnMap || canSpyOnMap || canInspectGameMap) ? pressTerritory : undefined}
         onAutoFocusChange={changeAutoFocusEnabled}
         resetCameraKey={resetCameraKey}
