@@ -409,6 +409,8 @@ Host-to-joiner game updates are revisioned snapshots:
 
 Joiners ignore stale snapshots. Joiner-to-host messages are intentionally small: `profileUpdate`, `draftConfirm`, `allocationUpdate`, and `quit`. The host validates every payload before it reaches game logic. Joiners can edit their own unlocked name/color during setup, while the host can edit any name/color and lock or unlock those fields. During sync draft, joiners send only confirmed draft picks, not pending selection previews. During sync allocation, joiners send actual allocation updates, not selected-territory UI state. Ready/waiting is derived locally from each player's `ready` flag while the shared phase remains `allocation` until the host starts the map. The host owns the canonical allocation timer and advances only after every remaining player is ready or after timeout random-completion.
 
+Timer expiry resolution belongs in `src/game/gameState.ts`. `App.tsx` may detect that a visible timer has expired, but the game layer decides whether an expired draft confirms a pending pick or autodrafts, and whether an expired allocation random-completes one local player or all unready sync players.
+
 Sync setup identity is atomic. QR offers and answers must carry player id, name, and color together. A screen should never render a sync player name with an unknown color and rely on a later profile update to fill the gap.
 
 During sync draft and allocation, graceful quit and ungraceful disconnect are separate:

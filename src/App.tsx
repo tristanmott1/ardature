@@ -16,13 +16,13 @@ import {
   beginDraftTimer,
   beginTurnAfterHandoff,
   canAddReinforcementTroop,
-  canPickTerritory,
   canUseSpy,
   cancelSpySelection,
   capturedSpiesOnTerritory,
   clearLocalGame,
   clearSyncHostGame,
-  completeTimedOutSyncAllocations,
+  completeTimedOutAllocation,
+  completeTimedOutDraftPick,
   confirmSpyAttempt,
   confirmTerritoryPick,
   createInitialGameState,
@@ -38,8 +38,6 @@ import {
   isSetupValid,
   pauseDraftTimer,
   pauseAllocationTimer,
-  randomCompleteAllocationForPlayer,
-  randomPickForActivePlayer,
   pauseSyncGame,
   projectReinforcementTroops,
   readLocalGame,
@@ -452,13 +450,8 @@ function App() {
     }
 
     setGame((current) => {
-      if (current.phase !== "draft" || !current.draft?.timerEndsAt || current.draft.timerEndsAt > Date.now()) {
-        return current;
-      }
-
-      return pendingDraftTerritoryId && canPickTerritory(current, pendingDraftTerritoryId)
-        ? confirmTerritoryPick(current, pendingDraftTerritoryId, Date.now())
-        : randomPickForActivePlayer(current, Date.now());
+      const currentTime = Date.now();
+      return completeTimedOutDraftPick(current, pendingDraftTerritoryId, currentTime);
     });
   }, [game.phase, game.draft?.timerEndsAt, isSyncGame, isSyncHost, now, pendingDraftTerritoryId]);
 
@@ -489,17 +482,8 @@ function App() {
     }
 
     setGame((current) => {
-      if (current.phase !== "allocation" || !current.allocation?.timerEndsAt || current.allocation.timerEndsAt > Date.now()) {
-        return current;
-      }
-
-      if (current.mode === "sync") {
-        return completeTimedOutSyncAllocations(current);
-      }
-
-      return allocationPlayerId
-        ? finishAllocationForPlayer(randomCompleteAllocationForPlayer(current, allocationPlayerId), allocationPlayerId)
-        : current;
+      const currentTime = Date.now();
+      return completeTimedOutAllocation(current, allocationPlayerId, currentTime);
     });
   }, [allocationPlayerId, game.phase, game.allocation?.timerEndsAt, isSyncGame, isSyncHost, now]);
 

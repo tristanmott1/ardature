@@ -893,6 +893,20 @@ export function completeTimedOutSyncAllocations(state: GameState): GameState {
   };
 }
 
+export function completeTimedOutAllocation(state: GameState, allocationPlayerId: string | null, now: number): GameState {
+  if (state.phase !== "allocation" || !state.allocation?.timerEndsAt || state.allocation.timerEndsAt > now) {
+    return state;
+  }
+
+  if (state.mode === "sync") {
+    return completeTimedOutSyncAllocations(state);
+  }
+
+  return allocationPlayerId
+    ? finishAllocationForPlayer(randomCompleteAllocationForPlayer(state, allocationPlayerId), allocationPlayerId)
+    : state;
+}
+
 export function applySyncAllocationUpdate(state: GameState, playerId: string, update: PlayerAllocation): GameState {
   const allocation = state.allocation;
   const ownership = state.draft?.ownership;
@@ -1168,6 +1182,16 @@ export function randomPickForActivePlayer(state: GameState, now: number): GameSt
   }
 
   return confirmTerritoryPick(state, randomItem(remaining), now);
+}
+
+export function completeTimedOutDraftPick(state: GameState, localCandidateTerritoryId: string | null, now: number): GameState {
+  if (state.phase !== "draft" || !state.draft?.timerEndsAt || state.draft.timerEndsAt > now) {
+    return state;
+  }
+
+  return localCandidateTerritoryId && canPickTerritory(state, localCandidateTerritoryId)
+    ? confirmTerritoryPick(state, localCandidateTerritoryId, now)
+    : randomPickForActivePlayer(state, now);
 }
 
 export function removePlayerFromDraft(state: GameState, playerId: string): GameState {
