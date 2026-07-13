@@ -91,11 +91,13 @@ import {
   playerBarDraftProgress,
   playerBarPlayerForGame,
   playerBarTimerRemaining,
+  sanitizeMapSelections,
   selectedTerritoryForMap,
   syncSnapshotForViewer,
   territoryInspectionForViewer,
   visibleNotification,
   type ActiveOverlay,
+  type MapSelectionState,
   type MapPressMode,
   type SyncRole,
 } from "./game/gameView";
@@ -126,14 +128,6 @@ import {
 type SyncCameraMode = "hostOffer" | "joinAnswer" | null;
 
 type JoinerSyncCommand = Extract<ArdatureSyncMessage, { type: "profileUpdate" | "draftConfirm" | "allocationUpdate" | "turnCommand" | "quit" }>;
-
-type MapSelectionState = {
-  allocationSelectedTerritoryId: string | null;
-  gameMapSelectedTerritoryId: string | null;
-  pendingDraftTerritoryId: string | null;
-  pendingSpyTerritoryId: string | null;
-  turnSelectedTerritoryId: string | null;
-};
 
 const EMPTY_MAP_SELECTIONS: MapSelectionState = {
   allocationSelectedTerritoryId: null,
@@ -331,78 +325,14 @@ function App() {
   }
 
   useEffect(() => {
-    const isPausedLocalDraft = game.mode === "local" && game.phase === "paused" && Boolean(game.draft) && !game.allocation;
-    if (game.phase !== "draft" && !isPausedLocalDraft) {
-      updateMapSelections({ pendingDraftTerritoryId: null });
-    }
-  }, [game.allocation, game.draft, game.mode, game.phase]);
-
-  useEffect(() => {
-    if (game.phase !== "allocation") {
-      updateMapSelections({ allocationSelectedTerritoryId: null });
-    }
-  }, [game.phase]);
-
-  useEffect(() => {
-    if (game.phase !== "gameMap") {
-      updateMapSelections({ gameMapSelectedTerritoryId: null });
-    }
-  }, [game.phase]);
-
-  useEffect(() => {
-    if (game.phase !== "turn") {
-      updateMapSelections({
-        pendingSpyTerritoryId: null,
-        turnSelectedTerritoryId: null,
-      });
-    }
-  }, [game.phase]);
-
-  useEffect(() => {
-    if (!pendingDraftTerritoryId) {
-      return;
-    }
-
-    if (!canControlActivePlayer || !canPickTerritory(game, pendingDraftTerritoryId)) {
-      updateMapSelections({ pendingDraftTerritoryId: null });
-    }
-  }, [canControlActivePlayer, game, pendingDraftTerritoryId]);
-
-  useEffect(() => {
-    if (!allocationSelectedTerritoryId) {
-      return;
-    }
-
-    if (!allocationPlayerId || ownership[allocationSelectedTerritoryId] !== allocationPlayerId) {
-      updateMapSelections({ allocationSelectedTerritoryId: null });
-    }
-  }, [allocationPlayerId, allocationSelectedTerritoryId, ownership]);
-
-  useEffect(() => {
-    if (!gameMapSelectedTerritoryId) {
-      return;
-    }
-
-    if (!ownership || !(gameMapSelectedTerritoryId in ownership)) {
-      updateMapSelections({ gameMapSelectedTerritoryId: null });
-    }
-  }, [gameMapSelectedTerritoryId, ownership]);
-
-  useEffect(() => {
-    if (!turnSelectedTerritoryId || !turnPlayerId || ownership[turnSelectedTerritoryId] === turnPlayerId) {
-      return;
-    }
-
-    updateMapSelections({ turnSelectedTerritoryId: null });
-  }, [ownership, turnPlayerId, turnSelectedTerritoryId]);
-
-  useEffect(() => {
-    if (!pendingSpyTerritoryId || !turnPlayerId || (ownership[pendingSpyTerritoryId] && ownership[pendingSpyTerritoryId] !== turnPlayerId)) {
-      return;
-    }
-
-    updateMapSelections({ pendingSpyTerritoryId: null });
-  }, [ownership, pendingSpyTerritoryId, turnPlayerId]);
+    setMapSelections((current) => sanitizeMapSelections(current, {
+      allocationPlayerId,
+      canControlActivePlayer,
+      game,
+      ownership,
+      turnPlayerId,
+    }));
+  }, [allocationPlayerId, canControlActivePlayer, game, mapSelections, ownership, turnPlayerId]);
 
   useEffect(() => {
     if (game.mode === "local") {

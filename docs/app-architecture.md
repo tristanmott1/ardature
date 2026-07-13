@@ -435,6 +435,8 @@ The host should always maintain enough authoritative state to resume the game af
 
 This principle should continue through future phases: the host needs the latest committed model needed to resume, while temporary presentation state remains device-local.
 
+Local map-selection UI state is one explicit model, not a set of phase-specific state variables with separate cleanup effects. `src/game/gameView.ts` owns the sanitizer that clears pending draft picks, allocation selections, turn selections, spy targets, and inspection selections when the current game state makes them invalid. `App.tsx` may update local selections in response to user events, but it should not grow new one-off cleanup effects for individual selection fields.
+
 Player names and colors travel together in QR answers and host-authored snapshots. UI should not render a known player name with an unknown or guessed color. Shared color helpers live in `src/game/playerColors.ts`; player bars, dots, troop icon owner rings, and setup controls should use those helpers rather than defining separate color mappings.
 
 During sync gameplay turns, inactive devices render only a read-only/explore-style map from their own viewer perspective. They do not see another player's pending selections, automatic focus, confirmation sheets, provisional reinforcement edits, or successful spy intel. They receive visible updates only when the host broadcasts committed facts, such as finalized reinforcements, future resolved attacks, fortify/end-turn, or player removal. A failed spy is the one defender-facing spy event: the defender receives a local notification that they captured the active player's spy in the target territory.

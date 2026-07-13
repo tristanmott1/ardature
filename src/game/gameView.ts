@@ -4,6 +4,7 @@ import { territoryForId } from "../map/territoryLookup";
 import {
   activePlayer,
   capturedSpiesOnTerritory,
+  canPickTerritory,
   draftProgressForPlayer,
   ownedTerritoryIds,
   territoryTroopTotal,
@@ -34,6 +35,14 @@ export type TerritoryInspection = {
 };
 
 export type MapPressMode = "draft" | "allocation" | "reinforcement" | "spy" | "inspect";
+
+export type MapSelectionState = {
+  allocationSelectedTerritoryId: string | null;
+  gameMapSelectedTerritoryId: string | null;
+  pendingDraftTerritoryId: string | null;
+  pendingSpyTerritoryId: string | null;
+  turnSelectedTerritoryId: string | null;
+};
 
 export type TroopSectionMode =
   | { type: "allocation"; source: "initial" | "reinforcement" }
@@ -71,6 +80,14 @@ type MapSelectionContext = {
   pendingDraftTerritoryId: string | null;
   pendingSpyTerritoryId: string | null;
   turnSelectedTerritoryId: string | null;
+};
+
+type MapSelectionCleanupContext = {
+  allocationPlayerId: string | null;
+  canControlActivePlayer: boolean;
+  game: GameState;
+  ownership: TerritoryOwnerMap;
+  turnPlayerId: string | null;
 };
 
 type TerritoryInspectionContext = {
@@ -231,6 +248,69 @@ export function selectedTerritoryForMap({
   }
 
   return gameMapSelectedTerritoryId;
+}
+
+export function sanitizeMapSelections(
+  selections: MapSelectionState,
+  {
+    allocationPlayerId,
+    canControlActivePlayer,
+    game,
+    ownership,
+    turnPlayerId,
+  }: MapSelectionCleanupContext,
+): MapSelectionState {
+  let next = selections;
+
+  function clear(key: keyof MapSelectionState) {
+    if (next[key] === null) {
+      return;
+    }
+
+    next = next === selections ? { ...selections } : next;
+    next[key] = null;
+  }
+
+  if (selections.pendingDraftTerritoryId && (!canControlActivePlayer || !canPickTerritory(game, selections.pendingDraftTerritoryId))) {
+    clear("pendingDraftTerritoryId");
+  }
+
+  if (
+    selections.allocationSelectedTerritoryId &&
+    (game.phase !== "allocation" ||
+      !allocationPlayerId ||
+      ownership[selections.allocationSelectedTerritoryId] !== allocationPlayerId)
+  ) {
+    clear("allocationSelectedTerritoryId");
+  }
+
+  if (
+    selections.gameMapSelectedTerritoryId &&
+    (game.phase !== "gameMap" && game.phase !== "turn" || !(selections.gameMapSelectedTerritoryId in ownership))
+  ) {
+    clear("gameMapSelectedTerritoryId");
+  }
+
+  if (
+    selections.turnSelectedTerritoryId &&
+    (game.phase !== "turn" ||
+      !turnPlayerId ||
+      ownership[selections.turnSelectedTerritoryId] !== turnPlayerId)
+  ) {
+    clear("turnSelectedTerritoryId");
+  }
+
+  if (
+    selections.pendingSpyTerritoryId &&
+    (game.phase !== "turn" ||
+      !turnPlayerId ||
+      !ownership[selections.pendingSpyTerritoryId] ||
+      ownership[selections.pendingSpyTerritoryId] === turnPlayerId)
+  ) {
+    clear("pendingSpyTerritoryId");
+  }
+
+  return next;
 }
 
 export function mapPressModeForGame({
