@@ -1719,14 +1719,16 @@ function App() {
     }
   }
 
-  function renderTroopSection() {
-    if (!layout.troopSection) {
+  function renderUpperSection() {
+    if (!layout.upperSection) {
       return null;
     }
 
-    switch (layout.troopSection.type) {
-      case "allocation":
-        if (layout.troopSection.source === "reinforcement") {
+    switch (layout.upperSection.type) {
+      case "troop": {
+        const { troopSection } = layout.upperSection;
+
+        if (troopSection.type === "allocation" && troopSection.source === "reinforcement") {
           return turnActionPlayer && turnReinforcement ? (
             <TroopSection
               allocation={game.allocation}
@@ -1743,29 +1745,22 @@ function App() {
           ) : null;
         }
 
-        return allocationPlayer ? (
-          <TroopSection
-            allocation={game.allocation}
-            canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
-            mode="initialAllocation"
-            onAdjustTroop={adjustSelectedTroop}
-            onFinish={finishCurrentAllocation}
-            ownership={ownership}
-            player={allocationPlayer}
-            selectedTerritoryId={allocationSelectedTerritoryId}
-          />
-        ) : null;
-      case "allocationWaiting":
-        return allocationPlayer ? (
-          <AllocationWaitingPanel
-            players={game.players}
-            allocation={game.allocation}
-            canAdvance={isSyncHost && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
-            onAdvance={startAllocatedGame}
-          />
-        ) : null;
-      case "info":
-        if (layout.troopSection.source === "turn") {
+        if (troopSection.type === "allocation") {
+          return allocationPlayer ? (
+            <TroopSection
+              allocation={game.allocation}
+              canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
+              mode="initialAllocation"
+              onAdjustTroop={adjustSelectedTroop}
+              onFinish={finishCurrentAllocation}
+              ownership={ownership}
+              player={allocationPlayer}
+              selectedTerritoryId={allocationSelectedTerritoryId}
+            />
+          ) : null;
+        }
+
+        if (troopSection.source === "turn") {
           return (
             <TroopSection
               capturedSpies={turnMapInspection.capturedSpies}
@@ -1790,6 +1785,16 @@ function App() {
             viewerId={gameMapViewerId}
           />
         );
+      }
+      case "allocationWaiting":
+        return allocationPlayer ? (
+          <AllocationWaitingPanel
+            players={game.players}
+            allocation={game.allocation}
+            canAdvance={isSyncHost && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
+            onAdvance={startAllocatedGame}
+          />
+        ) : null;
     }
   }
 
@@ -1813,7 +1818,7 @@ function App() {
     );
   }
 
-  const troopSectionElement = renderTroopSection();
+  const upperSectionElement = renderUpperSection();
   const actionSectionElement = renderActionSection();
   const activeOverlayElement = renderActiveOverlay();
 
@@ -1836,7 +1841,7 @@ function App() {
         />
       ) : null}
 
-      {troopSectionElement}
+      {upperSectionElement}
 
       <MapView
         autoFocusEnabled={autoFocusEnabled}

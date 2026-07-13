@@ -172,11 +172,10 @@ The `PlayerBar` is always present from the start of draft. It is never covered b
 
 `PlayerBar` and the small dot/name `PlayerIdentity` live in `src/ui/PlayerChrome.tsx`. Game screens should import these shared components instead of defining new player-name rows or local player-bar variants. Player-bar identity, timer, draft progress, pause availability, title-press behavior, and pause labels are projected in `src/game/gameView.ts`; `App.tsx` wires the callbacks but should not inline those phase rules in JSX.
 
-The `TroopSection` slot is optional and appears below the player bar. It has two troop-display modes plus one sync waiting state:
+The upper game-stage content slot is optional and appears below the player bar. It can render the `TroopSection` or the sync allocation waiting panel. `TroopSection` itself has exactly two troop-display modes:
 
 - `allocation`: used during initial manual troop allocation and reinforcement placement.
 - `info`: used during normal map inspection after allocation, during passive sync turns, and during successful spy intel.
-- `allocationWaiting`: used when this sync device has finished allocation and is waiting for other players.
 
 In `allocation` mode, the troop section is hidden until a valid owned territory is selected. Pressing the selected territory again unselects it and hides the section. The top row shows the remaining troop pool and uses the non-clickable `+` affordance. The selected territory name is bold between the rows. The bottom row shows troops on the selected territory and uses the non-clickable `-` affordance. The Ready/Finish check button remains in this troop section below the rows.
 
@@ -184,7 +183,7 @@ In `info` mode, the troop section is hidden until a territory is selected. Press
 
 In code, the troop section should stay driven by one explicit section mode. It must be either absent or fully rendered as one mode, never partially present because several overlapping booleans disagreed.
 
-Sync allocation waiting uses the same upper game-stage section slot as troop rows. Ready/waiting columns are visible, troop rows are absent, and the map remains below the section. It is not a popup or modal, so it must not create a separate fifth section or a separate status-section render path.
+Sync allocation waiting uses the same upper game-stage section slot as troop rows, but it is not a `TroopSection` mode. Ready/waiting columns are visible, troop rows are absent, and the map remains below the section. It is not a popup or modal, so it must not create a separate fifth section or a separate status-section render path.
 
 Pure game-stage projection rules live in `src/game/gameView.ts`. `App.tsx` should use that module for active overlay priority, selected territory priority, map press mode, player-bar identity/progress, notification visibility, sync snapshot redaction, and section layout. The app shell should wire state and events; it should not grow duplicate phase-condition clusters for those rules.
 

@@ -46,8 +46,11 @@ export type MapSelectionState = {
 
 export type TroopSectionMode =
   | { type: "allocation"; source: "initial" | "reinforcement" }
+  | { type: "info"; source: "gameMap" | "turn" };
+
+export type UpperGameSectionMode =
+  | { type: "troop"; troopSection: TroopSectionMode }
   | { type: "allocationWaiting" }
-  | { type: "info"; source: "gameMap" | "turn" }
   | null;
 
 export type ActionSectionMode = "none" | "turn";
@@ -58,7 +61,7 @@ export type GameStageLayout = {
   freezeMapGestures: boolean;
   showGameStageLayout: boolean;
   showPlayerBar: boolean;
-  troopSection: TroopSectionMode;
+  upperSection: UpperGameSectionMode;
 };
 
 export type PlayerBarControls = {
@@ -455,9 +458,9 @@ export function gameStageLayoutForState({
   const hasActiveOverlay = Boolean(activeOverlay);
   const isGameStage = game.phase !== "home" && game.phase !== "setup";
   const hideSections = hasActiveOverlay;
-  const troopSection = hideSections
+  const upperSection = hideSections
     ? null
-    : troopSectionModeForGame({
+    : upperSectionModeForGame({
         canControlTurnPlayer,
         allocationBuildSubmitted,
         allocationSelectedTerritoryId,
@@ -476,7 +479,7 @@ export function gameStageLayoutForState({
     freezeMapGestures: hasActiveOverlay,
     showGameStageLayout: isGameStage,
     showPlayerBar: isGameStage && Boolean(playerBarPlayer),
-    troopSection,
+    upperSection,
   };
 }
 
@@ -664,7 +667,7 @@ export function syncSnapshotForViewer(game: GameState, viewerId: string): GameSt
   };
 }
 
-function troopSectionModeForGame({
+function upperSectionModeForGame({
   allocationBuildSubmitted,
   allocationSelectedTerritoryId,
   canControlTurnPlayer,
@@ -674,17 +677,17 @@ function troopSectionModeForGame({
   turnActionPlayer,
   turnMapInspection,
   turnSelectedTerritoryId,
-}: Omit<GameStageLayoutContext, "activeOverlay" | "playerBarPlayer">): TroopSectionMode {
+}: Omit<GameStageLayoutContext, "activeOverlay" | "playerBarPlayer">): UpperGameSectionMode {
   if (game.mode === "sync" && game.phase === "allocation" && localAllocationReady) {
     return { type: "allocationWaiting" };
   }
 
   if (game.phase === "allocation" && allocationBuildSubmitted && allocationSelectedTerritoryId) {
-    return { type: "allocation", source: "initial" };
+    return { type: "troop", troopSection: { type: "allocation", source: "initial" } };
   }
 
   if (game.phase === "gameMap" && gameMapInspection.selectedTerritory) {
-    return { type: "info", source: "gameMap" };
+    return { type: "troop", troopSection: { type: "info", source: "gameMap" } };
   }
 
   if (game.phase !== "turn") {
@@ -698,7 +701,7 @@ function troopSectionModeForGame({
     game.turn?.stage === "reinforcementPlace" &&
     turnSelectedTerritoryId
   ) {
-    return { type: "allocation", source: "reinforcement" };
+    return { type: "troop", troopSection: { type: "allocation", source: "reinforcement" } };
   }
 
   if (
@@ -707,7 +710,7 @@ function troopSectionModeForGame({
     game.turn?.stage !== "spyTarget" &&
     turnMapInspection.selectedTerritory
   ) {
-    return { type: "info", source: "turn" };
+    return { type: "troop", troopSection: { type: "info", source: "turn" } };
   }
 
   return null;
