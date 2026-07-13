@@ -272,21 +272,21 @@ function App() {
     localAllocationReady,
     syncJoinerBlocked,
   });
-  const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
-  const canUseAllocationPhase = game.phase === "allocation" && !localAllocationReady;
-  const needsAllocationArmyBuild = Boolean(canUseAllocationPhase && allocationPlayer && !allocationBuildSubmitted);
-  const needsReinforcementArmyBuild = Boolean(game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementBuild");
   const activeOverlay = activeOverlayForState({
-    canShowDraftConfirm: canShowConfirm,
+    allocationBuildSubmitted,
+    allocationPlayerId,
+    canControlActivePlayer,
+    canControlTurnPlayer,
     game,
     hasCurrentNotification: Boolean(currentNotification),
-    hasSpyConfirm: Boolean(spyTargetTerritory && spyCapturePercent !== null),
     isEndGamePromptOpen,
     isRestartGamePromptOpen,
-    needsAllocationArmyBuild,
-    needsReinforcementArmyBuild,
+    localAllocationReady,
+    pendingDraftTerritoryId,
+    pendingSpyTerritoryId,
     syncCameraMode: Boolean(syncCameraMode),
     syncJoinerBlocked,
+    turnPlayerId,
   });
   const playerBarPlayer = playerBarPlayerForGame({
     activeDraftPlayer: active,

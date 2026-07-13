@@ -111,16 +111,20 @@ type MapPressModeContext = {
 };
 
 type ActiveOverlayContext = {
-  canShowDraftConfirm: boolean;
+  allocationBuildSubmitted: boolean;
+  allocationPlayerId: string | null;
+  canControlActivePlayer: boolean;
+  canControlTurnPlayer: boolean;
   game: GameState;
   hasCurrentNotification: boolean;
-  hasSpyConfirm: boolean;
   isEndGamePromptOpen: boolean;
   isRestartGamePromptOpen: boolean;
-  needsAllocationArmyBuild: boolean;
-  needsReinforcementArmyBuild: boolean;
+  localAllocationReady: boolean;
+  pendingDraftTerritoryId: string | null;
+  pendingSpyTerritoryId: string | null;
   syncCameraMode: boolean;
   syncJoinerBlocked: boolean;
+  turnPlayerId: string | null;
 };
 
 type GameStageLayoutContext = {
@@ -138,17 +142,46 @@ type GameStageLayoutContext = {
 };
 
 export function activeOverlayForState({
-  canShowDraftConfirm,
+  allocationBuildSubmitted,
+  allocationPlayerId,
+  canControlActivePlayer,
+  canControlTurnPlayer,
   game,
   hasCurrentNotification,
-  hasSpyConfirm,
   isEndGamePromptOpen,
   isRestartGamePromptOpen,
-  needsAllocationArmyBuild,
-  needsReinforcementArmyBuild,
+  localAllocationReady,
+  pendingDraftTerritoryId,
+  pendingSpyTerritoryId,
   syncCameraMode,
   syncJoinerBlocked,
+  turnPlayerId,
 }: ActiveOverlayContext): ActiveOverlay | null {
+  const canShowDraftConfirm = Boolean(
+    pendingDraftTerritoryId &&
+      canControlActivePlayer &&
+      canPickTerritory(game, pendingDraftTerritoryId),
+  );
+  const needsAllocationArmyBuild = Boolean(
+    game.phase === "allocation" &&
+      !localAllocationReady &&
+      allocationPlayerId &&
+      !allocationBuildSubmitted,
+  );
+  const needsReinforcementArmyBuild = Boolean(
+    game.phase === "turn" &&
+      canControlTurnPlayer &&
+      turnPlayerId &&
+      game.turn?.stage === "reinforcementBuild",
+  );
+  const hasSpyConfirm = Boolean(
+    game.phase === "turn" &&
+      canControlTurnPlayer &&
+      turnPlayerId &&
+      pendingSpyTerritoryId &&
+      game.turn?.stage === "spyTarget",
+  );
+
   return firstActiveOverlay(
     syncJoinerBlocked ? { type: "syncBlocked" } : null,
     syncCameraMode ? { type: "scanner" } : null,
