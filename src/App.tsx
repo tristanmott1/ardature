@@ -1904,8 +1904,28 @@ function App() {
   }
 
   function renderTroopSection() {
-    switch (layout.troopSection) {
+    if (!layout.troopSection) {
+      return null;
+    }
+
+    switch (layout.troopSection.type) {
       case "allocation":
+        if (layout.troopSection.source === "reinforcement") {
+          return turnActionPlayer && turnReinforcement ? (
+            <ReinforcementPanel
+              allocation={game.allocation}
+              canFinish={Boolean(turnPlayerId && reinforcementComplete(game, turnPlayerId))}
+              onAdjustTroop={adjustSelectedReinforcementTroop}
+              onFinish={finishCurrentReinforcements}
+              player={turnActionPlayer}
+              players={game.players}
+              reinforcement={turnReinforcement}
+              capturedSpies={reinforcementCapturedSpies}
+              selectedTerritory={turnSelectedTerritory}
+            />
+          ) : null;
+        }
+
         return allocationPlayer ? (
           <AllocationPanel
             allocation={game.allocation}
@@ -1917,16 +1937,20 @@ function App() {
             selectedTerritoryId={allocationSelectedTerritoryId}
           />
         ) : null;
-      case "allocationWaiting":
-        return allocationPlayer ? (
-          <AllocationWaitingPanel
-            players={game.players}
-            allocation={game.allocation}
-            canAdvance={isSyncHost && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
-            onAdvance={startAllocatedGame}
-          />
-        ) : null;
-      case "gameMapInfo":
+      case "info":
+        if (layout.troopSection.source === "turn") {
+          return (
+            <GameMapPanel
+              capturedSpies={turnMapInspection.capturedSpies}
+              players={game.players}
+              selectedTerritory={turnMapInspection.selectedTerritory}
+              troopBreakdown={turnMapInspection.troopBreakdown}
+              troopPlayerId={turnMapInspection.troopPlayerId}
+              viewerId={turnViewerId}
+            />
+          );
+        }
+
         return (
           <GameMapPanel
             capturedSpies={gameMapInspection.capturedSpies}
@@ -1937,31 +1961,20 @@ function App() {
             viewerId={gameMapViewerId}
           />
         );
-      case "reinforcement":
-        return turnActionPlayer && turnReinforcement ? (
-          <ReinforcementPanel
-            allocation={game.allocation}
-            canFinish={Boolean(turnPlayerId && reinforcementComplete(game, turnPlayerId))}
-            onAdjustTroop={adjustSelectedReinforcementTroop}
-            onFinish={finishCurrentReinforcements}
-            player={turnActionPlayer}
+    }
+  }
+
+  function renderStatusSection() {
+    switch (layout.statusSection) {
+      case "allocationWaiting":
+        return allocationPlayer ? (
+          <AllocationWaitingPanel
             players={game.players}
-            reinforcement={turnReinforcement}
-            capturedSpies={reinforcementCapturedSpies}
-            selectedTerritory={turnSelectedTerritory}
+            allocation={game.allocation}
+            canAdvance={isSyncHost && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
+            onAdvance={startAllocatedGame}
           />
         ) : null;
-      case "turnInfo":
-        return (
-          <GameMapPanel
-            capturedSpies={turnMapInspection.capturedSpies}
-            players={game.players}
-            selectedTerritory={turnMapInspection.selectedTerritory}
-            troopBreakdown={turnMapInspection.troopBreakdown}
-            troopPlayerId={turnMapInspection.troopPlayerId}
-            viewerId={turnViewerId}
-          />
-        );
       case "none":
         return null;
     }
@@ -1988,6 +2001,7 @@ function App() {
   }
 
   const troopSectionElement = renderTroopSection();
+  const statusSectionElement = renderStatusSection();
   const actionSectionElement = renderActionSection();
   const activeOverlayElement = renderActiveOverlay();
 
@@ -2009,6 +2023,8 @@ function App() {
           title={playerBarPlayer?.name ?? "Game"}
         />
       ) : null}
+
+      {statusSectionElement}
 
       {troopSectionElement}
 

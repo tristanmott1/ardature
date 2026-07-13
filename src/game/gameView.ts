@@ -35,9 +35,13 @@ export type TerritoryInspection = {
 
 export type MapPressMode = "draft" | "allocation" | "reinforcement" | "spy" | "inspect";
 
-export type TroopSectionMode = "none" | "allocation" | "allocationWaiting" | "gameMapInfo" | "reinforcement" | "turnInfo";
+export type TroopSectionMode =
+  | { type: "allocation"; source: "initial" | "reinforcement" }
+  | { type: "info"; source: "gameMap" | "turn" }
+  | null;
 
 export type ActionSectionMode = "none" | "turn";
+export type StatusSectionMode = "none" | "allocationWaiting";
 
 export type GameStageLayout = {
   actionSection: ActionSectionMode;
@@ -45,6 +49,7 @@ export type GameStageLayout = {
   freezeMapGestures: boolean;
   showGameStageLayout: boolean;
   showPlayerBar: boolean;
+  statusSection: StatusSectionMode;
   troopSection: TroopSectionMode;
 };
 
@@ -248,15 +253,17 @@ export function gameStageLayoutForState({
   const hasActiveOverlay = Boolean(activeOverlay);
   const isGameStage = game.phase !== "home" && game.phase !== "setup";
   const hideSections = hasActiveOverlay;
+  const statusSection = !hideSections && game.mode === "sync" && game.phase === "allocation" && localAllocationReady
+    ? "allocationWaiting"
+    : "none";
   const troopSection = hideSections
-    ? "none"
+    ? null
     : troopSectionModeForGame({
         canControlTurnPlayer,
         canShowAllocationSection,
         canShowReinforcementSection,
         game,
         gameMapInspection,
-        localAllocationReady,
         turnActionPlayer,
         turnMapInspection,
       });
@@ -264,10 +271,11 @@ export function gameStageLayoutForState({
 
   return {
     actionSection,
-    canUseMapCameraControls: isGameStage && !hideSections && troopSection !== "allocationWaiting",
+    canUseMapCameraControls: isGameStage && !hideSections && statusSection === "none",
     freezeMapGestures: hasActiveOverlay,
     showGameStageLayout: isGameStage,
     showPlayerBar: isGameStage && Boolean(playerBarPlayer),
+    statusSection,
     troopSection,
   };
 }
@@ -448,28 +456,23 @@ function troopSectionModeForGame({
   canShowReinforcementSection,
   game,
   gameMapInspection,
-  localAllocationReady,
   turnActionPlayer,
   turnMapInspection,
-}: Omit<GameStageLayoutContext, "activeOverlay" | "playerBarPlayer">): TroopSectionMode {
+}: Omit<GameStageLayoutContext, "activeOverlay" | "localAllocationReady" | "playerBarPlayer">): TroopSectionMode {
   if (canShowAllocationSection) {
-    return "allocation";
-  }
-
-  if (game.mode === "sync" && game.phase === "allocation" && localAllocationReady) {
-    return "allocationWaiting";
+    return { type: "allocation", source: "initial" };
   }
 
   if (game.phase === "gameMap" && gameMapInspection.selectedTerritory) {
-    return "gameMapInfo";
+    return { type: "info", source: "gameMap" };
   }
 
   if (game.phase !== "turn") {
-    return "none";
+    return null;
   }
 
   if (canControlTurnPlayer && turnActionPlayer && canShowReinforcementSection) {
-    return "reinforcement";
+    return { type: "allocation", source: "reinforcement" };
   }
 
   if (
@@ -478,10 +481,10 @@ function troopSectionModeForGame({
     game.turn?.stage !== "spyTarget" &&
     turnMapInspection.selectedTerritory
   ) {
-    return "turnInfo";
+    return { type: "info", source: "turn" };
   }
 
-  return "none";
+  return null;
 }
 
 function territoryTroopTotalWithTurnPreview(game: GameState, territoryId: string) {
