@@ -47,8 +47,6 @@ export type DraftState = {
   startIndex: number;
   step: number;
   ownership: TerritoryOwnerMap;
-  resultTerritoryId: string | null;
-  resultPlayerId: string | null;
   timerRemainingMs: number | null;
   timerEndsAt: number | null;
 };

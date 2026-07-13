@@ -293,11 +293,13 @@ Spy is optional and can be used at any point during the active player's turn whe
 
 Spy cannot be used during reinforcement placement, during an attack, during fortify, or after fortify ends the turn.
 
-If the active player's spy is captured, the spy button is unavailable until that spy is released. The button should be missing but reserve its spacing so the turn action bar does not jump.
+If the active player's spy is captured, the spy button is unavailable until that spy is released. The button should be missing but reserve its spacing so the action section does not jump.
 
 ### Spy Targeting
 
 The selected spy target must be owned by an opponent. Any opponent territory may be selected because the gameplay graph is connected.
+
+When spy targeting is selected, the action section instruction is `Select a territory`. Selecting an opponent territory opens a compact confirmation sheet with X and check controls. While this confirmation sheet is active, the map is frozen, manual pan/zoom controls are hidden, troop/action sections are hidden, and the target is canceled with the sheet X rather than by tapping the selected target again.
 
 The capture probability is based on the shortest gameplay-connection distance from the target territory to the active player's nearest owned territory:
 
@@ -316,9 +318,11 @@ All gameplay connections from `maps/territory-key.md` count, including ship conn
 If the spy succeeds:
 
 - reveal the target territory's exact heavy/cavalry/elite/leader counts
+- reveal captured spies imprisoned on the target territory
 - reveal total troop counts in adjacent territories owned by the same opponent
 - show adjacent totals through normal white map troop counters
-- replace the turn controls with a dismiss button
+- show the target territory through the troop section in information mode using the same exact-count UI used for own territories
+- replace the action section buttons with a dismiss button
 - preserve the spy for future use
 
 The active player may inspect the successful spy intel as long as they want. Pressing dismiss clears the intel and resumes the turn. Spy intel is a temporary UI snapshot and does not become permanent memory.
@@ -875,32 +879,56 @@ The exact QR prefixes should be project-specific, not Qwixx-specific.
 
 ### Draft View
 
-During manual drafts, the active player selects a remaining territory on the map. The current-player top bar stays visible during confirmation and draft result notifications.
+During manual drafts, the active player selects a remaining territory on the map. The current-player bar stays visible during confirmation.
 
 Draft selection flow:
 
 1. Select a remaining territory.
 2. Show a compact confirmation bottom sheet with cancel and confirm controls.
 3. Confirming assigns the territory immediately and colors it with the owner's player color.
-4. Show a result popup naming the player and drafted territory.
+4. Immediately advance to the next pick.
 
-The confirmation popup is a compact bottom sheet with the territory name and cancel/confirm controls. The shared game top bar remains visible during confirmation. The pending territory itself is highlighted on the map for the active drafting viewer. While confirmation is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels it.
+The confirmation sheet is a compact bottom sheet with the territory name and cancel/confirm controls. The shared player bar remains visible during confirmation. The pending territory itself is highlighted on the map for the active drafting viewer. While confirmation is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels it.
 
-The result popup uses the exact same compact bottom-sheet footprint and also keeps the shared game top bar visible. In local mode, it auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
+Draft result notifications do not exist. Confirmed picks, including timeout/autodraft picks, immediately update ownership and advance the draft.
 
-In sync mode, pending selections are local-only. Another player's pending selection is not synced, never moves or focuses your map, and never highlights on your device. Confirmed picks are synced as ownership changes; each device turns that local observation into its own small drafted notification. The next player's turn starts immediately on that player's device. The result popup also auto-dismisses after about one second and can be dismissed early.
+In sync mode, pending selections are local-only. Another player's pending selection is not synced, never moves or focuses your map, and never highlights on your device. Confirmed picks are synced as ownership changes.
 
 The compact draft controls show the active player's draft progress as confirmed picks over expected final picks, such as `3 / 11`. The expected final pick count is computed from the current draft style, frozen turn order, active players, and remaining territories.
 
-The colored player bar is distinct from the controls section. Once draft starts, the player bar remains visible for the rest of the implemented game flow, including confirmation sheets, result notifications, pause, allocation, allocation waiting, local handoff, and read-only map. Pause and modal states may hide controls, but they do not hide the player/color bar. The bar shows the relevant timer whenever one exists: live remaining time, paused remaining time, upcoming handoff time, or shared sync allocation time while waiting.
+Once draft starts, the game-stage layout has exactly four ordered sections: player bar, optional troop section, map, and optional action section. The player bar remains visible for the rest of the game, including confirmation sheets, game notifications, pause, allocation, allocation waiting, local handoff, read-only inspection, and turn play. Pause and modal states may hide troop/action sections and cover the map, but they do not hide or cover the player bar. Draft has no troop section and no action section. The bar shows the relevant timer whenever one exists during draft or allocation: live remaining time, paused remaining time, upcoming handoff time, or shared sync allocation time while waiting. No timer is shown after troop allocation.
+
+Game-stage popups and modals are organized by role. Only one overlay is active at a time. If multiple overlays are pending, the app shows them in this priority order:
+
+1. Sync blocked / disconnected
+2. Scanner
+3. Decision confirm
+4. Pause
+5. Handoff
+6. Army build
+7. Game notification
+8. Confirm sheet
+
+Every active overlay freezes the map, hides return-to-map and auto-focus controls, and hides troop/action sections until dismissed. The player bar remains visible once draft has started, except for scanner/rejoin utility flows that happen before the device has joined or rejoined the game.
+
+Overlay roles:
+
+- Confirm sheet: compact bottom sheet with title, optional text, X, and check. Used by draft, spy target confirmation, and later attack/fortify confirmation. Spy uses the optional text for capture probability.
+- Army build task modal: centered modal for initial army build and reinforcement army build.
+- Game notification modal: centered dismiss-only modal for authoritative region and spy notifications.
+- Pause modal: centered modal; sync host pause may include recovery QR tools, while sync non-host pause never shows QR recovery tools.
+- Decision modal: centered destructive confirmation for restart and exit/end game.
+- Handoff modal: local-only centered arrow gate. Before local handoff is shown, the app returns the map to the home viewport, then freezes it. The player bar shows the next player.
+- Scanner modal: QR camera utility. Scanner flows opened before a device joins/rejoins a game are not bound by game-stage player bar rules.
+- Sync blocked modal: centered reconnecting/disconnected/host-ended blocker. Reconnecting devices must not present stale host facts as current truth.
 
 Timer behavior:
 
-- If a timed pick expires with a confirmation popup open, the pending territory is confirmed.
-- If a timed pick expires with no confirmation popup open, a random remaining territory is chosen for the active player.
+- If a timed pick expires with a confirmation sheet open, the pending territory is confirmed.
+- If a timed pick expires with no confirmation sheet open, a random remaining territory is chosen for the active player.
 - If pick time is unlimited, there is no timer and no automatic draft selection.
-- If local mode pauses during an active pick or confirmation popup, the active timer and pending choice are preserved.
-- If sync mode pauses during an active pick or confirmation popup, any local pending pick is discarded and that player's turn starts over on resume.
+- If local mode pauses during an active pick or confirmation sheet, the active timer and pending choice are preserved.
+- If sync mode pauses during an active pick or confirmation sheet, any local pending pick is discarded and that player's turn starts over on resume.
 
 After all territories are drafted, the app resolves initial troop allocation according to setup configuration. It does not remain on an ownership-only post-draft review screen.
 
@@ -922,7 +950,9 @@ Territory allocation:
 - The player allocates all available troops to owned territories.
 - Only owned territories are selectable.
 - Selecting an owned territory highlights it locally. If automatic focus is enabled, the map also focuses on that territory locally.
-- The controls show icon-only troop totals for the selected territory and icon-only remaining troop totals.
+- The troop section is hidden until an owned territory is selected.
+- Pressing the selected territory again unselects it and hides the troop section.
+- The troop section shows icon-only remaining troop totals in the top row, the selected territory name between rows, and icon-only selected-territory troop totals in the bottom row.
 - The player may remove troops from the selected territory.
 - The player may add remaining troops to the selected territory only when enough total remaining troops are preserved to place at least one troop on every still-empty owned territory.
 - The player can finish only when all owned territories contain at least one troop and no troops remain unallocated.
@@ -934,7 +964,7 @@ Local allocation:
 - The allocation timer includes army build and territory allocation.
 - If time expires, the current army mixture is locked if needed and the rest of that player's troops are randomly allocated.
 - After time expiration, the app briefly says `The remainder of your troops have been randomly allocated.`
-- The top bar shows the next player, and a simple arrow popup gates the handoff before that player begins.
+- The player bar shows the next player, and a simple arrow popup gates the handoff before that player begins.
 
 Sync allocation:
 
@@ -944,7 +974,7 @@ Sync allocation:
 - Ready players go to a local waiting page while unready players stay in allocation.
 - Ready is final unless another player is removed and redistribution affects that player.
 - The waiting page shows all remaining players in two columns: `READY` and `WAITING`.
-- The waiting page keeps the device player's colored top bar visible and shows the shared allocation timer while it is relevant.
+- The waiting page keeps the device player's colored player bar visible and shows the shared allocation timer while it is relevant.
 - The host can advance only when every remaining player is ready.
 - If time expires, the host randomly completes allocation for every unready player.
 
@@ -956,15 +986,19 @@ Visibility rules:
 
 - Ownership is visible to everyone.
 - A viewer sees total troop counts on their own territories.
-- A viewer can select any territory to show its name in the top controls section.
-- Selecting one of your own territories also shows its heavy/cavalry/elite/leader breakdown.
-- Selecting an opponent territory never shows its troop breakdown.
+- A viewer can select any territory to open the troop section in information mode.
+- Pressing the selected territory again unselects it and hides the troop section.
+- Selecting one of your own territories shows its name and heavy/cavalry/elite/leader breakdown.
+- Any troop type with count `0` is grayed out.
+- Selecting an opponent territory shows its name and all four troop types grayed out with `?` in the count bubbles.
+- Opponent territory breakdowns are never shown during normal inspection, even if the viewer can see the total troop count on the map.
 - Opponent territories connected to any of the viewer's territories show total troop count only.
 - Opponent territories not connected to any of the viewer's territories show ownership only.
+- Captured spies are shown only when exact troop breakdown is visible.
 - Visibility connections use all gameplay connections from `maps/territory-key.md`, including both land and ship connections.
 - Visibility connections are independent of physical shared borders in generated geometry.
 
-In local mode, pressing the player name in the top bar cycles the current viewer. Sync mode uses the device's local player as the viewer, including on the host device.
+In local mode, pressing the player name in the player bar cycles the current viewer. Sync mode uses the device's local player as the viewer, including on the host device.
 
 ### Sync Turn Viewer Rules
 
@@ -974,7 +1008,7 @@ During another player's turn, inactive sync devices show only a read-only/explor
 - the viewer's own territory total markers are visible
 - opponent total markers are visible only where the viewer has gameplay adjacency
 - own territory breakdowns are visible only through local inspection
-- opponent breakdowns are not visible except during that viewer's own successful spy intel
+- opponent inspection shows grayed `?` troop icons, never breakdowns, except during that viewer's own successful spy intel
 - no turn action controls are shown
 - no pending selection, focus, confirmation, or provisional reinforcement placement from the active player is shown
 
@@ -994,8 +1028,7 @@ Local and sync modes use the same pause button placement and icon. In local mode
 Local pause is a true pause of the single-device draft:
 
 - If the pick timer is running, it freezes with the remaining time preserved.
-- If a confirmation popup is open, the pending selected territory stays pending.
-- If the result popup is open, no timer is running and the same popup remains.
+- If a confirmation sheet is open, the pending selected territory stays pending.
 - On resume, the same player continues from the same state.
 - Local pause has a restart button, confirmed like quitting, that returns to local setup/config with the same players and settings.
 - Local pause has no end-game or close button.
@@ -1007,7 +1040,7 @@ Local pause is a true pause of the single-device draft:
 Sync host pause is a synchronization reset:
 
 - The active pick timer is not preserved.
-- Any pending selected territory or confirmation popup is discarded.
+- Any pending selected territory or confirmation sheet is discarded.
 - On unpause, the current player's turn starts over with a fresh timer.
 - The host can restart from pause after confirmation, returning everyone to setup while keeping current sync connections open.
 - Sync pause includes connected, disconnected, and reconnecting player status.
@@ -1455,7 +1488,7 @@ Before considering the first playable version complete:
 - Verify local setup supports 2 to 6 players, names, unique colors, turn order, territory draft settings, and troop allocation settings.
 - Verify sync setup supports Qwixx-style QR handshake, host lobby, joiner lobby, name/color edits, host locks, duplicate-color blocking, and host-authoritative setup state.
 - Verify local and sync drafts support snake, round-robin, random simulation, timed picks, confirmation timeout, random timeout fallback, and transition into troop allocation.
-- Verify local pause preserves active timers, pending confirmation, result popup state, army/allocation progress, and player removal without reconnect state.
+- Verify local pause preserves active timers, pending confirmation, army/allocation progress, and player removal without reconnect state.
 - Verify local refresh during active play restores into pause with timers stopped and remaining time preserved.
 - Verify sync heartbeat defines connected state, missed heartbeat immediately enters reconnecting, and host/joiner independently transition after the 10-second grace period.
 - Verify joiner reconnecting UI shows only local identity/inert background plus wait/X controls, never stale host roster, timer, ready, or connection-status facts.

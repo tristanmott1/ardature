@@ -54,6 +54,7 @@ const PAN_MOMENTUM_DECAY_MS = 300;
 const PAN_MOMENTUM_MAX_MS = 900;
 
 export function MapView({
+  frozen = false,
   mapData,
   onMapPress,
   onTerritoryPress,
@@ -65,6 +66,7 @@ export function MapView({
   territoryStates,
   troopMarkers = [],
 }: {
+  frozen?: boolean;
   mapData: GeneratedMapData;
   onMapPress?: () => void;
   onTerritoryPress?: (territoryId: string) => void;
@@ -125,6 +127,10 @@ export function MapView({
   }
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
+    if (frozen) {
+      return;
+    }
+
     stopPanMomentum();
 
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -153,6 +159,10 @@ export function MapView({
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
+    if (frozen) {
+      return;
+    }
+
     const pointer = pointersRef.current.get(event.pointerId);
 
     if (!pointer) {
@@ -210,6 +220,10 @@ export function MapView({
   }
 
   function handlePointerUp(event: ReactPointerEvent<SVGSVGElement>) {
+    if (frozen) {
+      return;
+    }
+
     const pointer = pointersRef.current.get(event.pointerId);
 
     if (!pointer) {
@@ -271,6 +285,11 @@ export function MapView({
 
   function handleWheel(event: WheelEvent<SVGSVGElement>) {
     event.preventDefault();
+
+    if (frozen) {
+      return;
+    }
+
     stopPanMomentum();
 
     if (isAnimatingRef.current) {
@@ -514,10 +533,16 @@ export function MapView({
   }, [resetCameraKey]);
 
   useEffect(() => {
-    if (!showCameraControls) {
+    if (frozen || !showCameraControls) {
       stopPanMomentum();
     }
-  }, [showCameraControls]);
+
+    if (frozen) {
+      pointersRef.current.clear();
+      hadMultiplePointersRef.current = false;
+      panSamplesRef.current = [];
+    }
+  }, [frozen, showCameraControls]);
 
   useEffect(() => {
     function stopForResize() {

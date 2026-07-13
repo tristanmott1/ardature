@@ -146,11 +146,15 @@ type SyncSessionState = "idle" | "connecting" | "connected" | "reconnecting" | "
 
 type SyncCameraMode = "hostOffer" | "joinAnswer" | null;
 
-type SyncDraftNotice = {
-  key: string;
-  playerId: string;
-  territoryId: string;
-};
+type ActiveOverlay =
+  | { type: "syncBlocked" }
+  | { type: "scanner" }
+  | { type: "decision"; decision: "exit" | "restart" }
+  | { type: "pause" }
+  | { type: "handoff"; handoff: "allocation" | "turn" }
+  | { type: "armyBuild"; build: "allocation" | "reinforcement" }
+  | { type: "notification" }
+  | { type: "confirm"; confirm: "draft" | "spy" };
 
 type BarcodeDetectorResult = {
   rawValue: string;
@@ -213,7 +217,6 @@ function App() {
   const [syncCameraMode, setSyncCameraMode] = useState<SyncCameraMode>(null);
   const [syncMessage, setSyncMessage] = useState("");
   const [isAcceptingAnswer, setIsAcceptingAnswer] = useState(false);
-  const [syncDraftNotice, setSyncDraftNotice] = useState<SyncDraftNotice | null>(null);
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
   const [isEndGamePromptOpen, setIsEndGamePromptOpen] = useState(false);
   const [isRestartGamePromptOpen, setIsRestartGamePromptOpen] = useState(false);
@@ -277,18 +280,6 @@ function App() {
     [allocationPlayerId, game, gameMapViewerId, turnViewerId],
   );
   const remainingCount = game.draft ? remainingTerritoryIds(game.draft.ownership).length : generatedMapData.territories.length;
-  const blockingResultTerritory = game.draft?.resultTerritoryId
-    ? generatedMapData.territories.find((territory) => territory.id === game.draft?.resultTerritoryId) ?? null
-    : null;
-  const blockingResultPlayer = game.draft?.resultPlayerId
-    ? game.players.find((player) => player.id === game.draft?.resultPlayerId) ?? null
-    : null;
-  const noticeTerritory = syncDraftNotice
-    ? generatedMapData.territories.find((territory) => territory.id === syncDraftNotice.territoryId) ?? null
-    : null;
-  const noticePlayer = syncDraftNotice
-    ? game.players.find((player) => player.id === syncDraftNotice.playerId) ?? null
-    : null;
   const disconnectedSyncPlayers = game.mode === "sync"
     ? game.players
         .filter((player) => player.id !== localPlayerId && player.connectionStatus === "disconnected")
@@ -347,33 +338,57 @@ function App() {
   const canDraftOnMap = !syncJoinerBlocked &&
     game.phase === "draft" &&
     canControlActivePlayer &&
-    Boolean(active) &&
-    !game.draft?.resultTerritoryId;
+    Boolean(active);
   const canAllocateOnMap = !syncJoinerBlocked && game.phase === "allocation" && Boolean(allocationPlayerId) && allocationBuildSubmitted && !localAllocationReady;
   const canReinforceOnMap = !syncJoinerBlocked && game.phase === "turn" && canControlTurnPlayer && game.turn?.stage === "reinforcementPlace";
   const canSpyOnMap = !syncJoinerBlocked && game.phase === "turn" && canControlTurnPlayer && game.turn?.stage === "spyTarget";
   const canInspectGameMap = !syncJoinerBlocked && (game.phase === "gameMap" || (game.phase === "turn" && !canReinforceOnMap && !canSpyOnMap));
   const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
-  const showAllocationControls = game.phase === "allocation" && !localAllocationReady && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
-  const showArmyBuildModal = Boolean(showAllocationControls && allocationPlayer && !allocationBuildSubmitted);
-  const showDraftPanel = game.phase === "draft" &&
-    !syncCameraMode &&
-    !isEndGamePromptOpen &&
-    !isRestartGamePromptOpen;
-  const showAllocationWaiting = game.mode === "sync" && game.phase === "allocation" && localAllocationReady && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
-  const showAllocationHandoff = game.phase === "allocationHandoff" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
-  const showGameMapControls = game.phase === "gameMap" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
-  const showTurnControls = game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer) && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
-  const showReinforcementControls = game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
-  const showReinforcementBuildModal = game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementBuild" && !isEndGamePromptOpen && !isRestartGamePromptOpen && !syncCameraMode;
+  const showAllocationControlsBase = game.phase === "allocation" && !localAllocationReady;
+  const showArmyBuildModal = Boolean(showAllocationControlsBase && allocationPlayer && !allocationBuildSubmitted);
+  const showReinforcementBuildModal = game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementBuild";
+  const activeOverlay: ActiveOverlay | null = syncJoinerBlocked
+    ? { type: "syncBlocked" }
+    : syncCameraMode
+      ? { type: "scanner" }
+      : isEndGamePromptOpen
+        ? { type: "decision", decision: "exit" }
+        : isRestartGamePromptOpen
+          ? { type: "decision", decision: "restart" }
+          : game.phase === "paused"
+            ? { type: "pause" }
+            : game.phase === "allocationHandoff"
+              ? { type: "handoff", handoff: "allocation" }
+              : game.phase === "turnHandoff"
+                ? { type: "handoff", handoff: "turn" }
+                : showArmyBuildModal
+                  ? { type: "armyBuild", build: "allocation" }
+                  : showReinforcementBuildModal
+                    ? { type: "armyBuild", build: "reinforcement" }
+                    : currentNotification
+                      ? { type: "notification" }
+                      : spyTargetTerritory && spyCapturePercent !== null
+                        ? { type: "confirm", confirm: "spy" }
+                        : canShowConfirm
+                          ? { type: "confirm", confirm: "draft" }
+                          : null;
+  const hasActiveOverlay = Boolean(activeOverlay);
+  const showTroopSection = !hasActiveOverlay;
+  const showActionSection = !hasActiveOverlay;
+  const mapFrozen = hasActiveOverlay;
+  const showAllocationControls = showTroopSection && showAllocationControlsBase;
+  const showDraftPanel = showTroopSection && game.phase === "draft";
+  const showAllocationWaiting = showTroopSection && game.mode === "sync" && game.phase === "allocation" && localAllocationReady;
+  const showAllocationHandoff = showTroopSection && game.phase === "allocationHandoff";
+  const showGameMapControls = showTroopSection && game.phase === "gameMap";
+  const showTurnControls = showActionSection && game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer);
+  const showReinforcementControls = showTroopSection && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace";
   const showTurnMapControls = game.phase === "turn" &&
     game.turn?.stage !== "reinforcementBuild" &&
     game.turn?.stage !== "reinforcementPlace" &&
     game.turn?.stage !== "spyTarget" &&
     (Boolean(gameMapSelectedTerritoryId) || !canControlTurnPlayer || game.turn?.stage === "spyIntel") &&
-    !isEndGamePromptOpen &&
-    !isRestartGamePromptOpen &&
-    !syncCameraMode;
+    showTroopSection;
   const pausedDraftPlayer = game.phase === "paused" && game.draft && !game.allocation
     ? activePlayer({ ...game, phase: "draft" })
     : null;
@@ -400,34 +415,9 @@ function App() {
     : null;
   const showGameTopBar = game.phase !== "home" && game.phase !== "setup" && Boolean(gameTopBarPlayer);
   const showGameStageLayout = showGameTopBar || showDraftPanel || showAllocationControls || showAllocationWaiting || showAllocationHandoff || showGameMapControls || showTurnControls || showReinforcementControls || showTurnMapControls;
-  const canUseMapCameraControls = !Boolean(
-    game.phase === "home" ||
-    game.phase === "setup" ||
-    showArmyBuildModal ||
-    syncCameraMode ||
-    syncJoinerBlocked ||
-    isEndGamePromptOpen ||
-    isRestartGamePromptOpen ||
-    game.phase === "paused" ||
-    showAllocationHandoff ||
-    showAllocationWaiting ||
-    game.phase === "turnHandoff" ||
-    canShowConfirm ||
-    Boolean(spyTargetTerritory) ||
-    Boolean(currentNotification) ||
-    Boolean(blockingResultTerritory && blockingResultPlayer) ||
-    Boolean(noticeTerritory && noticePlayer)
-  );
+  const canUseMapCameraControls = game.phase !== "home" && game.phase !== "setup" && !hasActiveOverlay && !showAllocationWaiting;
 
   useEffect(() => {
-    const notice = syncDraftNoticeFromOwnershipChange(latestGameRef.current, game);
-    if (notice) {
-      setSyncDraftNotice({
-        ...notice,
-        key: `${notice.playerId}:${notice.territoryId}:${Date.now()}`,
-      });
-    }
-
     latestGameRef.current = game;
   }, [game]);
 
@@ -442,7 +432,6 @@ function App() {
   useEffect(() => {
     const isPausedLocalDraft = game.mode === "local" && game.phase === "paused" && Boolean(game.draft) && !game.allocation;
     if (game.phase !== "draft" && !isPausedLocalDraft) {
-      setSyncDraftNotice(null);
       setPendingDraftTerritoryId(null);
     }
   }, [game.allocation, game.draft, game.mode, game.phase]);
@@ -623,10 +612,14 @@ function App() {
     const previousPhase = previousPhaseRef.current;
     previousPhaseRef.current = game.phase;
 
-    if (previousPhase === "home" && game.phase === "draft" && game.draft && !game.draft.timerEndsAt && !game.draft.resultTerritoryId) {
+    if (previousPhase === "home" && game.phase === "draft" && game.draft && !game.draft.timerEndsAt) {
       setGame((current) => current.draft
         ? { ...current, draft: beginDraftTimer(current.draft, current.config, Date.now()) }
         : current);
+    }
+
+    if (game.mode === "local" && previousPhase !== game.phase && (game.phase === "allocationHandoff" || game.phase === "turnHandoff")) {
+      setResetCameraKey((current) => current + 1);
     }
   }, [game]);
 
@@ -1624,21 +1617,6 @@ function App() {
     setGame((current) => finishTurnWithFortify(cancelSpySelection(current), turnPlayerId));
   }
 
-  function nextDraftTurn() {
-    setResetCameraKey((current) => current + 1);
-
-    setGame((current) => current.draft
-      ? {
-          ...current,
-          draft: beginDraftTimer({
-            ...current.draft,
-            resultTerritoryId: null,
-            resultPlayerId: null,
-          }, current.config, Date.now()),
-        }
-      : current);
-  }
-
   function pauseDraft() {
     if (game.mode === "sync" && syncRole !== "host") {
       return;
@@ -1778,9 +1756,7 @@ function App() {
       return {
         ...current,
         phase: "draft",
-        draft: current.draft.resultTerritoryId
-          ? current.draft
-          : beginDraftTimer(current.draft, current.config, Date.now()),
+        draft: beginDraftTimer(current.draft, current.config, Date.now()),
       };
     });
   }
@@ -1811,7 +1787,6 @@ function App() {
       return;
     }
 
-    setSyncDraftNotice(null);
     setIsRestartGamePromptOpen(false);
     setGame((current) => current.phase === "paused" && (current.mode === "local" || syncRole === "host")
       ? {
@@ -1840,14 +1815,9 @@ function App() {
     setSyncRecoveryOfferText("");
     setSyncRecoverySlots([]);
     setSyncMessage("");
-    setSyncDraftNotice(null);
     setIsEndGamePromptOpen(false);
     setIsRestartGamePromptOpen(false);
     setGame(createInitialGameState());
-  }
-
-  function dismissNotice() {
-    setSyncDraftNotice(null);
   }
 
   function endSyncTransports() {
@@ -1957,9 +1927,10 @@ function App() {
 
       <MapView
         autoFocusEnabled={autoFocusEnabled}
+        frozen={mapFrozen}
         mapData={generatedMapData}
-        onMapPress={canShowConfirm ? cancelPendingPick : undefined}
-        onTerritoryPress={canDraftOnMap || canAllocateOnMap || canReinforceOnMap || canSpyOnMap || canInspectGameMap ? pressTerritory : undefined}
+        onMapPress={undefined}
+        onTerritoryPress={!mapFrozen && (canDraftOnMap || canAllocateOnMap || canReinforceOnMap || canSpyOnMap || canInspectGameMap) ? pressTerritory : undefined}
         onAutoFocusChange={changeAutoFocusEnabled}
         resetCameraKey={resetCameraKey}
         selectedTerritoryId={viewerSelectedTerritoryId}
@@ -1982,7 +1953,7 @@ function App() {
         />
       ) : null}
 
-      {showArmyBuildModal && allocationPlayer ? (
+      {activeOverlay?.type === "armyBuild" && activeOverlay.build === "allocation" && allocationPlayer ? (
         <ArmyBuildModal
           allocation={game.allocation}
           onArmyMarkerChange={changeArmyMarker}
@@ -1991,7 +1962,7 @@ function App() {
         />
       ) : null}
 
-      {showReinforcementBuildModal && turnActionPlayer && turnReinforcement && turnProjectedReinforcements ? (
+      {activeOverlay?.type === "armyBuild" && activeOverlay.build === "reinforcement" && turnActionPlayer && turnReinforcement && turnProjectedReinforcements ? (
         <ArmyBuildModal
           marker={turnReinforcement.marker}
           onArmyMarkerChange={changeReinforcementMarker}
@@ -2049,7 +2020,7 @@ function App() {
         />
       ) : null}
 
-      {game.phase === "paused" ? (
+      {activeOverlay?.type === "pause" ? (
         <PausePanel
           canRemove={game.mode === "local" || syncRole === "host"}
           canResume={game.mode === "local" || (syncRole === "host" && game.players.every((player) => player.connectionStatus === "connected"))}
@@ -2066,32 +2037,38 @@ function App() {
         />
       ) : null}
 
-      {game.phase === "allocationHandoff" && allocationPlayer ? (
+      {activeOverlay?.type === "handoff" && activeOverlay.handoff === "allocation" && allocationPlayer ? (
         <HandoffPanel ariaLabel="Allocation handoff" buttonLabel="Begin allocation" onContinue={startLocalAllocationTurn} />
       ) : null}
 
-      {game.phase === "turnHandoff" && currentTurnPlayer ? (
+      {activeOverlay?.type === "handoff" && activeOverlay.handoff === "turn" && currentTurnPlayer ? (
         <HandoffPanel ariaLabel="Turn handoff" buttonLabel="Begin turn" onContinue={startLocalTurn} />
       ) : null}
 
-      {canShowConfirm && viewerPendingTerritory && active ? (
-        <ConfirmPickDialog
+      {activeOverlay?.type === "confirm" && activeOverlay.confirm === "draft" && viewerPendingTerritory ? (
+        <ConfirmSheet
+          ariaLabel="Confirm territory"
+          cancelLabel="Cancel pick"
+          confirmLabel="Confirm pick"
           onCancel={cancelPendingPick}
           onConfirm={confirmPendingPick}
-          territory={viewerPendingTerritory}
+          title={viewerPendingTerritory.name}
         />
       ) : null}
 
-      {spyTargetTerritory && spyCapturePercent !== null ? (
-        <SpyConfirmDialog
-          capturePercent={spyCapturePercent}
+      {activeOverlay?.type === "confirm" && activeOverlay.confirm === "spy" && spyTargetTerritory && spyCapturePercent !== null ? (
+        <ConfirmSheet
+          ariaLabel="Confirm spy"
+          cancelLabel="Cancel spy"
+          confirmLabel="Send spy"
+          text={`${spyCapturePercent}% captured`}
           onCancel={cancelTurnSpy}
           onConfirm={confirmTurnSpy}
-          territory={spyTargetTerritory}
+          title={spyTargetTerritory.name}
         />
       ) : null}
 
-      {currentNotification ? (
+      {activeOverlay?.type === "notification" && currentNotification ? (
         <GameNotificationDialog
           notification={currentNotification}
           onClose={dismissCurrentNotification}
@@ -2099,25 +2076,7 @@ function App() {
         />
       ) : null}
 
-      {blockingResultTerritory && blockingResultPlayer ? (
-        <PickResultDialog
-          activePlayer={blockingResultPlayer}
-          onClose={nextDraftTurn}
-          resultKey={`local:${blockingResultPlayer.id}:${blockingResultTerritory.id}`}
-          territory={blockingResultTerritory}
-        />
-      ) : null}
-
-      {noticeTerritory && noticePlayer ? (
-        <PickResultDialog
-          activePlayer={noticePlayer}
-          onClose={dismissNotice}
-          resultKey={syncDraftNotice?.key ?? `sync:${noticePlayer.id}:${noticeTerritory.id}`}
-          territory={noticeTerritory}
-        />
-      ) : null}
-
-      {syncCameraMode ? (
+      {activeOverlay?.type === "scanner" && syncCameraMode ? (
         <QrScanner
           onCancel={() => setSyncCameraMode(null)}
           onScan={syncCameraMode === "hostOffer" ? scanHostOffer : acceptJoinAnswer}
@@ -2125,7 +2084,7 @@ function App() {
         />
       ) : null}
 
-      {isEndGamePromptOpen ? (
+      {activeOverlay?.type === "decision" && activeOverlay.decision === "exit" ? (
         <DecisionDialog
           message="End this game and return home?"
           onCancel={() => setIsEndGamePromptOpen(false)}
@@ -2133,7 +2092,7 @@ function App() {
         />
       ) : null}
 
-      {isRestartGamePromptOpen ? (
+      {activeOverlay?.type === "decision" && activeOverlay.decision === "restart" ? (
         <DecisionDialog
           confirmLabel="Restart game"
           message="Restart this game and return to setup?"
@@ -2142,7 +2101,7 @@ function App() {
         />
       ) : null}
 
-      {syncJoinerBlocked ? (
+      {activeOverlay?.type === "syncBlocked" ? (
         <SyncSessionBlocker
           onHome={resetAppToHome}
           session={syncSession}
@@ -3105,97 +3064,33 @@ function PausePanel({
   );
 }
 
-function ConfirmPickDialog({
+function ConfirmSheet({
+  ariaLabel,
+  cancelLabel,
+  confirmLabel,
   onCancel,
   onConfirm,
-  territory,
+  text,
+  title,
 }: {
+  ariaLabel: string;
+  cancelLabel: string;
+  confirmLabel: string;
   onCancel: () => void;
   onConfirm: () => void;
-  territory: GeneratedTerritoryData;
+  text?: string;
+  title: string;
 }) {
   return (
     <div className="draft-sheet-scrim">
-      <section className="modal-panel draft-sheet" role="dialog" aria-label="Confirm territory">
-        <h2>{territory.name}</h2>
+      <section className="modal-panel draft-sheet" role="dialog" aria-label={ariaLabel}>
+        <h2>{title}</h2>
+        {text ? <p className="muted">{text}</p> : null}
         <div className="modal-actions">
-          <button className="icon-button danger large" type="button" onClick={onCancel} aria-label="Cancel pick">
+          <button className="icon-button danger large" type="button" onClick={onCancel} aria-label={cancelLabel}>
             <X size={24} />
           </button>
-          <button className="icon-button primary large" type="button" onClick={onConfirm} aria-label="Confirm pick">
-            <Check size={24} />
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function PickResultDialog({
-  activePlayer,
-  onClose,
-  resultKey,
-  territory,
-}: {
-  activePlayer: GamePlayer;
-  onClose: () => void;
-  resultKey: string;
-  territory: GeneratedTerritoryData;
-}) {
-  const closedRef = useRef(false);
-  const onCloseRef = useRef(onClose);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  const closeOnce = useCallback(() => {
-    if (closedRef.current) {
-      return;
-    }
-
-    closedRef.current = true;
-    onCloseRef.current();
-  }, []);
-
-  useEffect(() => {
-    closedRef.current = false;
-    const timeout = window.setTimeout(closeOnce, 1000);
-    return () => window.clearTimeout(timeout);
-  }, [closeOnce, resultKey]);
-
-  return (
-    <div className="draft-sheet-scrim pick-result-scrim" onClick={closeOnce}>
-      <section className="modal-panel draft-sheet pick-result-modal" role="status" aria-live="polite">
-        <p className="muted">{activePlayer.name} drafted</p>
-        <h2>{territory.name}</h2>
-        <div className="draft-sheet-action-spacer" aria-hidden="true" />
-      </section>
-    </div>
-  );
-}
-
-function SpyConfirmDialog({
-  capturePercent,
-  onCancel,
-  onConfirm,
-  territory,
-}: {
-  capturePercent: number;
-  onCancel: () => void;
-  onConfirm: () => void;
-  territory: GeneratedTerritoryData;
-}) {
-  return (
-    <div className="draft-sheet-scrim turn-sheet-scrim">
-      <section className="modal-panel draft-sheet spy-sheet" role="dialog" aria-label="Confirm spy">
-        <h2>{territory.name}</h2>
-        <p className="muted">{capturePercent}% captured</p>
-        <div className="modal-actions">
-          <button className="icon-button danger large" type="button" onClick={onCancel} aria-label="Cancel spy">
-            <X size={24} />
-          </button>
-          <button className="icon-button primary large" type="button" onClick={onConfirm} aria-label="Send spy">
+          <button className="icon-button primary large" type="button" onClick={onConfirm} aria-label={confirmLabel}>
             <Check size={24} />
           </button>
         </div>
@@ -3825,27 +3720,6 @@ function visibleNotification(game: GameState, playerId: string | null, syncJoine
         game.turn?.currentPlayerId === playerId &&
         game.turn.turnNumber >= notification.minTurnNumber);
   }) ?? null;
-}
-
-function syncDraftNoticeFromOwnershipChange(previous: GameState, next: GameState): Omit<SyncDraftNotice, "key"> | null {
-  if (previous.mode !== "sync" || next.mode !== "sync" || !previous.draft || !next.draft || next.phase !== "draft") {
-    return null;
-  }
-
-  // Treat a newly owned territory as a local drafted notification.
-  for (const territory of generatedMapData.territories) {
-    const previousOwner = previous.draft.ownership[territory.id];
-    const nextOwner = next.draft.ownership[territory.id];
-
-    if (!previousOwner && nextOwner) {
-      return {
-        playerId: nextOwner,
-        territoryId: territory.id,
-      };
-    }
-  }
-
-  return null;
 }
 
 function syncSnapshotForViewer(game: GameState, viewerId: string): GameState {

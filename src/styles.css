@@ -1147,23 +1147,6 @@ select {
   width: 100%;
 }
 
-.draft-sheet-action-spacer {
-  height: 44px;
-}
-
-.pick-result-scrim {
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.pick-result-modal {
-  pointer-events: none;
-}
-
-.spy-sheet .muted {
-  justify-self: center;
-}
-
 .notification-backdrop {
   z-index: 30;
 }

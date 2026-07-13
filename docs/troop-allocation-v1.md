@@ -36,7 +36,7 @@ When a troop icon is displayed with a count, the count should appear in a small 
 
 ## Army Build
 
-Each player first chooses an army mixture with a reusable triangle component. This army build step should appear as a large centered modal over the map, not as part of the compact top controls. The compact controls for this step should stay minimal: current player identity plus pause/exit controls.
+Each player first chooses an army mixture with a reusable triangle component. This army build step should appear as a large centered modal over the map, not as part of the troop section. The player bar remains visible above it with current player identity plus pause/exit controls.
 
 Triangle rules:
 
@@ -109,13 +109,17 @@ Allocation rules:
 - Selecting a territory highlights it. If automatic focus is enabled, the map also focuses on that territory.
 - The selected allocation territory is local UI state. In sync mode, selecting a territory for allocation does not highlight or focus any other device.
 - Every owned territory must have at least one troop total before the player can finish.
-- Allocation uses the shared colored game top bar: X on the left, current player name prominent near the left, timer near pause when present, and pause on the right in local mode or for the sync host.
-- The colored player bar is not the same thing as the controls section. It remains visible during allocation pause, waiting, handoff, and read-only map; the controls below it may hide.
+- Allocation uses the shared colored player bar: X on the left, current player name prominent near the left, timer near pause when present, and pause on the right in local mode or for the sync host.
+- The colored player bar is not the same thing as the troop section. It remains visible during allocation pause, waiting, handoff, read-only map, and modals; the troop and action sections below it may hide.
 - The timer remains in the player bar whenever relevant, including paused remaining time, the time that will start after a local handoff, and shared sync allocation time while ready players wait.
+- The troop section is in `allocation` mode during initial manual allocation.
+- The allocation troop section is hidden until a valid owned territory is selected.
+- Pressing the selected territory again unselects it and hides the troop section.
 - The selected territory controls show two compact icon rows: remaining troops for adding and troops on the selected territory for removing.
 - The selected territory name is shown in bold between the add and remove rows, but its total troop count is not repeated in the controls because the map marker already shows that total.
 - The `+` and `-` row icons are non-clickable affordances. They are muted only when no troop in that row can currently be added or removed.
 - The circular troop icons are the action targets: tap a remaining troop icon to add one troop, or tap a selected-territory troop icon to remove one troop.
+- The Ready check button remains in the troop section below the troop rows.
 - The player can remove any number of troops from the selected territory.
 - The player can add any number of remaining troops to the selected territory, but only if the total remaining troop count after the add is at least the number of still-empty owned territories.
 - This rule guarantees that every empty territory can still receive at least one troop.
@@ -142,7 +146,7 @@ Local mode is pass-and-play.
 - The troop allocation timer includes both army build and territory allocation.
 - If the timer is unlimited, there is no timer and no automatic random completion.
 - If the timer expires, the app locks the current army build if needed, randomly completes remaining allocation, and shows a brief message: `The remainder of your troops have been randomly allocated.`
-- After each player finishes, the app shows the next player's name in the top bar and a handoff popup with only a continue arrow before that player begins.
+- After each player finishes, the app shows the next player's name in the player bar and a handoff popup with only a continue arrow before that player begins.
 - If a player who already finished allocation later receives redistributed territories or troops, they get a second allocation turn appended to the end of the local allocation order.
 - During a second allocation turn, the player can rearrange all of their troops across all of their current territories. Their previous placements remain where they were until the player changes them.
 
@@ -160,7 +164,7 @@ Sync mode is simultaneous and host-authoritative.
 - A ready player's allocation remains final even if a stale sync update arrives from that device.
 - Ready players go to a local waiting page while unready players stay in allocation.
 - The waiting page shows all remaining players in two columns: `READY` and `WAITING`. Column headers are left-justified within their columns.
-- The waiting page keeps the same colored top bar for the player whose device it is and shows the shared allocation timer whenever it is relevant.
+- The waiting page keeps the same colored player bar for the player whose device it is and shows the shared allocation timer whenever it is relevant.
 - All players can see readiness status, not only the host.
 - The host can advance only after every remaining player is ready.
 - One player becoming ready does not stop the shared timer for the remaining players.
@@ -224,18 +228,21 @@ Visibility rules:
 
 - Ownership is visible to everyone.
 - Each viewer sees total troop counts on their own territories.
-- Each viewer can select any territory to show its name in the top controls section.
-- Selecting one of your own territories also shows the heavy/cavalry/elite/leader breakdown.
-- Selecting an opponent territory never shows that territory's breakdown.
+- Each viewer can select any territory to open the troop section in `info` mode.
+- Pressing the selected territory again unselects it and hides the troop section.
+- Selecting one of your own territories shows the territory name plus the heavy/cavalry/elite/leader breakdown.
+- Any troop type with count `0` is grayed out.
+- Selecting an opponent territory shows the territory name plus all four troop types disabled/grayed with `?` in the count bubbles.
+- Opponent territory breakdowns are never shown in normal read-only inspection, even when the viewer can see that territory's total troop count on the map.
 - Opponent territories that have any connection to one of the viewer's territories show total troop count only.
-- Opponent territory breakdowns are never shown in this milestone.
 - Opponent territories with no connection to the viewer's territories show ownership only.
+- Captured spies are shown only when the viewer can see the exact troop breakdown for that territory.
 - Connections for visibility come from the territory key's gameplay connections, including both land and ship connections.
 - Visibility connections are decoupled from physical shared borders in the generated map geometry.
 
 Local read-only map:
 
-- Because local mode is pass-and-play on one device, pressing the player name in the top bar cycles the current viewer.
+- Because local mode is pass-and-play on one device, pressing the player name in the player bar cycles the current viewer.
 - Cycling the viewer changes the viewer perspective and therefore troop-count visibility.
 - Later turn play will replace this viewer-cycling shortcut with handoff/confirm screens between players.
 

@@ -108,31 +108,31 @@ The draft engine should not precompute one fixed 42-pick queue. It should store 
 
 Manual draft interaction:
 
-- Game-stage screens use a shared colored top bar. The X button is always in the top-left, the current player name is bold and prominent near the left, the timer appears near the right when present, and pause appears in the top-right in local mode and for the sync host.
-- The top bar background uses the current player's color instead of a small color dot.
-- The current-player top bar is distinct from the controls section. Once the draft starts, it stays visible for the rest of the implemented game flow, including confirmation sheets, draft result notifications, sync notifications, troop allocation controls, allocation waiting, read-only map, pause, and local allocation handoff.
-- Pause and other blocking states may hide the controls section, but they do not hide the player/color bar.
-- The top bar shows the relevant timer whenever one exists: live turn time, paused remaining time, upcoming handoff time, or shared sync allocation time while waiting.
+- Game-stage screens use the four-section layout documented in `app-architecture.md`: player bar, optional troop section, map, optional action section.
+- The player bar is always present from the start of the territory draft through the rest of the game. The X button is always in the top-left, the current player name is bold and prominent near the left, the timer appears near the right when present, and pause appears in the top-right in local mode and for the sync host.
+- The player bar background uses the current player's color instead of a small color dot.
+- The player bar is distinct from the troop and action sections. Once the draft starts, it stays visible for the rest of the implemented game flow, including confirmation sheets, game notifications, troop allocation, allocation waiting, read-only map, pause, and local allocation handoff.
+- Pause and other blocking states may hide the troop and action sections, but they do not hide or cover the player bar.
+- The player bar shows the relevant timer whenever one exists during draft or allocation: live turn time, paused remaining time, upcoming handoff time, or shared sync allocation time while waiting.
 - Local allocation handoff shows the next player's name in the bar and uses a popup with only the continue arrow.
+- Draft has no troop section and no action section.
 - The active player picks by selecting a remaining territory on the map.
-- Selecting a territory opens a confirmation popup with cancel and confirm controls.
-- The shared top bar remains visible during draft confirmation and draft result notifications.
-- While the confirmation popup is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels the pending pick.
+- Selecting a territory opens a compact bottom confirmation sheet with cancel and confirm controls.
+- The shared player bar remains visible during draft confirmation.
+- While the confirmation sheet is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels the pending pick.
 - Once confirmed, the territory becomes owned by that player and immediately uses that player's color.
-- The confirmation popup is a compact bottom sheet with the selected territory name and cancel/confirm controls.
+- The confirmation sheet uses the shared `ConfirmSheet` role documented in `app-architecture.md`.
 - The selected pending territory is highlighted on the map for the active drafting viewer using a brighter version of its current color.
-- A result popup uses the exact same compact bottom-sheet footprint and shows the player and territory name.
-- In local mode, the result popup auto-dismisses after about one second, can be dismissed early by tapping anywhere, and the next player's timer starts only after dismissal.
 - In sync mode, pending selections are local-only. Another player's pending selection is not synced, does not move or focus your map, and does not highlight on your device.
-- In sync mode, confirmed picks are synced as ownership changes; each device turns that local observation into its own small drafted notification.
-- In sync mode, the next player's turn starts immediately on their device; the result popup also auto-dismisses after about one second and can be dismissed early.
+- Confirmed picks are synced as ownership changes.
+- Draft result notifications do not exist. After any confirmed pick, including timeout/autodraft picks, the draft immediately advances to the next pick.
 - The compact draft controls show the active player's draft progress as confirmed picks over expected final picks, such as `3 / 11`.
 - The expected final pick count is computed from the current draft style, frozen turn order, active players, and remaining territories.
-- If a timed pick expires with a confirmation popup open, the selected territory is treated as confirmed.
-- If a timed pick expires with no confirmation popup open, the host/local device randomly chooses one remaining territory for the active player.
+- If a timed pick expires with a confirmation sheet open, the selected territory is treated as confirmed.
+- If a timed pick expires with no confirmation sheet open, the host/local device randomly chooses one remaining territory for the active player.
 - If pick time is unlimited, there is no timer and no automatic draft selection.
-- If local mode pauses during an active pick or confirmation popup, the timer and pending choice are preserved locally.
-- If sync mode pauses during an active pick or confirmation popup, any local pending choice is discarded and that player's turn starts over when the game resumes.
+- If local mode pauses during an active pick or confirmation sheet, the timer and pending choice are preserved locally.
+- If sync mode pauses during an active pick or confirmation sheet, any local pending choice is discarded and that player's turn starts over when the game resumes.
 
 Draft ownership map:
 
@@ -142,7 +142,7 @@ Draft ownership map:
 
 ## Pause And Player Removal
 
-Local and sync modes should use the same pause button placement and icon in the shared game top bar.
+Local and sync modes should use the same pause button placement and icon in the shared player bar.
 
 - In local mode, the pause button is always visible during game-stage screens.
 - In sync mode, only the host sees the pause button.
@@ -151,8 +151,7 @@ Local and sync modes should use the same pause button placement and icon in the 
 Local pause is a true pause of the single-device draft:
 
 - If the pick timer is running, it freezes with the remaining time preserved.
-- If a confirmation popup is open, the pending selected territory stays pending.
-- If the result popup is open, no timer is running and the same popup remains.
+- If a confirmation sheet is open, the pending selected territory stays pending.
 - On resume, the same player continues from the same state.
 - Local pause has a restart button, confirmed like quitting, that returns to local setup/config with the same players and settings.
 - Local pause has no end-game or close button.
@@ -164,7 +163,7 @@ Local pause is a true pause of the single-device draft:
 Sync host pause is a synchronization reset:
 
 - The active pick timer is not preserved.
-- Any pending selected territory or confirmation popup is discarded.
+- Any pending selected territory or confirmation sheet is discarded.
 - On unpause, the current player's turn starts over with a fresh timer.
 - The host can restart from pause after confirmation, returning everyone to setup while keeping current sync connections open.
 - Sync pause includes connected, disconnected, and reconnecting player status.
@@ -282,12 +281,12 @@ Local mode uses the same draft engine as sync mode, but without network messages
 
 - Ending the local game requires confirmation.
 - Local refresh during draft restores into local pause and preserves the active pick timer's remaining time.
-- Local manual pause preserves the active timer, pending confirmation, or result popup exactly as-is.
+- Local manual pause preserves the active timer and pending confirmation exactly as-is.
 - Local player removal is only available while paused.
 
 ## Map Behavior
 
-The app should be a map-first shell. During game stages, the colored top bar sits at the top, optional controls sit below it, and the map fills the remaining space without sliding underneath either section. Draft confirmation, result sheets, pause, scanner, and exit confirmation do not remove the top bar. Full-screen modal states may hide controls and cover the map.
+The app should be a map-first shell. During game stages, the player bar sits at the top, the optional troop section sits below it, the map fills the middle, and the optional action section sits at the bottom. Draft confirmation, pause, scanner, handoff, notifications, and decision confirmations do not remove or cover the player bar after draft has started. Overlay states may hide troop/action sections and cover the map.
 
 Reusable map modes for this milestone:
 
@@ -295,8 +294,8 @@ Reusable map modes for this milestone:
 - Draft active pick: pan, zoom, and selectable remaining territories.
 - Draft inactive player or non-owning sync device: pan and zoom; no valid pick action.
 - On touch devices, a quick one-finger pan may coast briefly after release. Pinch zoom, mouse drag, and wheel input stop normally, and any new map action interrupts the coast immediately.
-- Confirmation popup: map remains visible; pending pick is confirmed, canceled by the bottom sheet, canceled by tapping the map background, or replaced by tapping another remaining territory.
-- Camera controls hide while setup/configuration panels, popups, bottom sheets, or modals cover the map, including confirmation, result notification, pause, scanner, handoff, reconnect, and confirmation dialogs.
+- Confirmation sheet: map remains visible but frozen; pending pick is confirmed, canceled by the bottom sheet, canceled by tapping the map background, or replaced by tapping another remaining territory.
+- Camera controls hide while setup/configuration panels, popups, bottom sheets, or modals cover the map, including confirmation, pause, scanner, handoff, reconnect, notifications, and decision dialogs.
 - Draft ownership map: pan and zoom; no selection.
 
 The map renderer should continue using generated map data, shared SVG coordinates, static ink, territory fill paths, hit targets, and territory focus bounds. Draft ownership coloring should replace the old sandbox skin picker behavior.

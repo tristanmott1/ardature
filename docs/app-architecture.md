@@ -136,7 +136,7 @@ Source drawings and extraction rules are the only places geometry should be fixe
 
 ## App Flow
 
-The app should be a map-first shell. The map is normally present, while setup, configuration, draft confirmation, pause state, reconnect state, allocation state, and read-only map state appear as panels or modals around the shared map. Once the draft starts, the colored player bar is a persistent game-stage section, distinct from the optional controls section. It stays visible during draft, allocation, allocation handoff, read-only map, pause, confirmation sheets, result notifications, and other game-stage modals. Stage controls may hide during pause or blocking modals, but the player bar does not. The map fills the remaining space below any visible player bar and controls instead of sliding underneath them.
+The app should be a map-first shell. The map is normally present, while setup, configuration, draft confirmation, pause state, reconnect state, allocation state, and turn state appear as panels or modals around the shared map. Once the draft starts, every game-stage screen uses the same four-section layout described below. The map fills the available section between any visible top sections and the bottom action section instead of sliding underneath them.
 
 The setup/draft milestone is documented in `setup-draft-sync-v1.md`. The troop allocation milestone is documented in `troop-allocation-v1.md`. The first turn-loop milestone is documented in `gameplay-turns-v1.md`. The app phase order through the next gameplay step is:
 
@@ -158,6 +158,60 @@ Both local and sync modes share the same setup and draft state model:
 Random allocation is an authoritative game-state transition after the territory draft. It samples each player's army mixture, builds troops with the same economy rules as manual allocation, places all troops, marks allocations complete, and proceeds to the first turn without rendering the manual allocation UI.
 
 The old sandbox interaction is no longer a user-facing app mode. Its useful capabilities remain as reusable map behavior: pan, zoom, selected-territory focus, hit targets, and state-driven territory fills.
+
+## Game Stage Layout
+
+From the start of the territory draft through the rest of the game, the app has exactly four ordered game-stage sections:
+
+1. `PlayerBar`
+2. `TroopSection`
+3. `Map`
+4. `ActionSection`
+
+The `PlayerBar` is always present from the start of draft. It is never covered by modals, popups, sheets, or pause UI, and its X/pause controls remain usable whenever those controls are allowed. It uses the color of the player whose turn or draft/allocation step is current. In the sync allocation waiting room and sync passive views, it uses the color/name of the player whose device it is. The left side contains the X button. The player name is prominent near the left; draft may show progress beside the name, such as `3 / 7`. The right side contains the timer when a draft/allocation timer is relevant, and the pause button when pause is available. Timers appear only during draft and troop allocation, including paused remaining time, local handoff upcoming time, and sync waiting-room allocation time. Timers are never shown after troop allocation.
+
+The `TroopSection` is optional and appears below the player bar. It has exactly two modes:
+
+- `allocation`: used during initial manual troop allocation and reinforcement placement.
+- `info`: used during normal map inspection after allocation, during passive sync turns, and during successful spy intel.
+
+In `allocation` mode, the troop section is hidden until a valid owned territory is selected. Pressing the selected territory again unselects it and hides the section. The top row shows the remaining troop pool and uses the non-clickable `+` affordance. The selected territory name is bold between the rows. The bottom row shows troops on the selected territory and uses the non-clickable `-` affordance. The Ready/Finish check button remains in this troop section below the rows.
+
+In `info` mode, the troop section is hidden until a territory is selected. Pressing the selected territory again unselects it and hides the section. It shows the selected territory name and one row with all four troop-type icons. If the viewer can see the exact breakdown, the row shows the real heavy/cavalry/elite/leader counts, with any zero-count troop type grayed out. Captured spies are shown only when the viewer can see the exact breakdown. If the viewer cannot see the exact breakdown, all four troop types are disabled/grayed and their count bubbles show `?`, regardless of whether the viewer can see the total troop count on the map. Successful spy intel grants exact-breakdown permission for the spied territory only and should use this same `info` mode.
+
+The `Map` section is always the main visual section. It sits below the troop section when one is visible, otherwise below the player bar. It sits above the action section when one is visible, otherwise above the bottom of the screen. Pan, zoom, return-to-map, and auto-focus controls are available only when no popup, modal, sheet, handoff, pause, scanner, notification, army-build modal, or confirmation dialog covers the map. Any such overlay hides the map camera buttons and disables manual pan/zoom until dismissed.
+
+The `ActionSection` appears only after troop allocation is complete, and only when the local viewer can act on the current turn. It is a real bottom section, not a map overlay. It contains a single-line instruction row above the button row. When no action is selected, the instruction is `Choose an action`. When spy targeting is selected, the instruction is `Select a territory`. The button row has the spy button on the left, using the same circular troop-icon button style without a count bubble, and the stage/action button area in the middle/right. During successful spy intel, the stage/action buttons are replaced by a dismiss button while the troop section shows the intel in `info` mode.
+
+Draft has no troop section and no action section. Local handoff screens show the next player in the player bar, hide troop/action sections, and show only the continue-arrow popup. Pause hides troop/action sections but not the player bar.
+
+## Overlay Contract
+
+Game-stage overlays are organized by role, not by phase. Only one overlay should be active at a time. If several overlays are pending, the app shows the highest-priority one first:
+
+1. Sync blocked / disconnected
+2. Scanner
+3. Decision confirm
+4. Pause
+5. Handoff
+6. Army build
+7. Game notification
+8. Confirm sheet
+
+Every active overlay hides map camera buttons and disables manual pan/zoom until the overlay is dismissed. The player bar remains visible once draft has started, except for pre-game utility flows where the game has not started for that device. Troop and action sections hide whenever an overlay takes over the interaction.
+
+Overlay roles:
+
+- `ConfirmSheet`: compact bottom sheet used for draft territory confirmation, spy target confirmation, and later attack/fortify confirmations. It has a title, optional text, X, and check. The optional text is used for spy capture probability and may be reused by later actions.
+- `TaskModal`: centered modal used for required tasks such as army build. The player bar remains visible and interactive; troop/action sections hide; the map is frozen.
+- `NotificationModal`: centered dismiss-only modal for authoritative game notifications such as region control changes and spy capture/loss. These notifications are queued game state, not local toast effects.
+- `PauseModal`: centered pause UI. The player bar remains visible. Troop/action sections hide. Sync host pause may include recovery QR tools; sync non-host pause never shows QR recovery tools.
+- `DecisionModal`: centered destructive confirmation for restart and exit/end game. It shows a message with side-by-side X and check buttons.
+- `HandoffModal`: centered local-only gate with only the continue arrow. Before showing local handoff, the app returns the map to the home viewport, then freezes it. The player bar shows the next player.
+- `ScannerModal`: QR camera utility. Scanner flows opened before a device has joined/rejoined a game are not bound by game-stage player bar rules.
+- `SyncBlockedModal`: centered reconnecting/disconnected/host-ended blocker. While reconnecting, the device is not connected to host truth and must not show stale host-authored facts as current.
+
+Draft result notifications no longer exist. After a draft pick is confirmed, including timeout/autodraft picks, ownership updates and the draft immediately advances to the next pick.
 
 ## UI Style
 
@@ -236,7 +290,7 @@ Invisible topmost territory shapes identify territory geometry even where landma
 
 The background component is rendered but not selectable.
 
-Draft confirmation and result UI should use matching compact bottom sheets. Game-stage screens are organized as three sibling sections: the shared colored game top bar, an optional controls section, and the map. The top bar remains visible above the map during confirmation, draft result notifications, sync notifications, troop allocation controls, allocation waiting, read-only map inspection, local allocation handoff, and pause. Camera controls such as return-to-map and auto-focus hide whenever setup/configuration panels, popups, bottom sheets, or modals cover the map, then return when that overlay closes. During local allocation handoff, the top bar shows the next player and the popup contains only the continue arrow. The top bar should show the relevant timer whenever one exists: live remaining time during active turns, paused remaining time while paused, the upcoming turn limit during handoff, and the shared allocation time remaining while sync players wait. Territory emphasis belongs on the map: only the active drafting viewer receives selected-territory fill for the pending pick. If automatic focus is enabled, that viewer also focuses the pending territory. Pending picks are local UI state and are never sent through sync state or messages. Passive sync viewers should not receive, focus, or highlight another player's pending selection. While a confirmation sheet is open, the active drafter can tap another remaining territory to replace the pending pick, or tap the map background to cancel it.
+Draft confirmation uses the shared compact `ConfirmSheet`. The player bar remains visible above it. Camera controls such as return-to-map and auto-focus hide whenever setup/configuration panels, popups, bottom sheets, or modals cover the map, then return when that overlay closes. Territory emphasis belongs on the map: only the active drafting viewer receives selected-territory fill for the pending pick. If automatic focus is enabled, that viewer also focuses the pending territory. Pending picks are local UI state and are never sent through sync state or messages. Passive sync viewers should not receive, focus, or highlight another player's pending selection. While a confirmation sheet is open, the active drafter can tap another remaining territory to replace the pending pick, or tap the map background to cancel it.
 
 ## Territory State
 
@@ -268,7 +322,7 @@ Before draft ownership is assigned, playable territories render with the backgro
 
 During draft, allocation, and read-only map phases, playable territory fills are derived from ownership. Owned territories use the owner's unique player color, and unowned territories use the background color. The background component always uses the background skin and is not selectable.
 
-During allocation, only the allocating player's owned territories are selectable. During the read-only game map, any territory can be selected to show its name in the controls section. Own territories also show the troop breakdown; opponent territories never show breakdowns. In local read-only mode, pressing the player name in the top bar cycles the current viewer. Allocation and read-only selected territory IDs are local UI state; sync shares only the actual troop allocation data and confirmed ownership.
+During allocation, only the allocating player's owned territories are selectable. During normal post-allocation inspection, any territory can be selected to open the troop section in `info` mode. Own territories show exact troop breakdowns and captured spies. Opponent territories show four grayed `?` troop icons unless a successful spy grants temporary exact-breakdown permission for the spied territory. In local read-only mode, pressing the player name in the player bar cycles the current viewer. Allocation and read-only selected territory IDs are local UI state; sync shares only actual troop allocation data and confirmed ownership.
 
 Territory troop data should track heavy, cavalry, elite, and leader counts. The leader is wizard for light-side colors and witch-king for dark-side colors; army-build mixture math only applies to heavy/cavalry/elite.
 
@@ -352,7 +406,7 @@ Spy and region notifications are not local toast effects. They are authoritative
 
 Local and sync modes use the same pause icon/button placement during draft. In local mode, the pause button is always visible because the device owns the whole game. In sync mode, only the host sees the pause button.
 
-Local pause preserves current state exactly: running timer time remaining, pending confirmation, result popup, army build/allocation progress, or read-only map view. Local restart from pause returns to local setup/config with the same players and settings. Local refresh/close during an active phase restores into pause and stops timers. Sync pause resets the active pick for consistency across devices: pending confirmations are discarded, the active pick timer restarts on unpause, and host-authored reconnect state is shown when needed. The sync host can confirm a restart from pause, returning everyone to setup without closing transports.
+Local pause preserves current state exactly: running timer time remaining, pending confirmation, army build/allocation progress, or read-only map view. Local restart from pause returns to local setup/config with the same players and settings. Local refresh/close during an active phase restores into pause and stops timers. Sync pause resets the active pick for consistency across devices: pending confirmations are discarded, the active pick timer restarts on unpause, and host-authored reconnect state is shown when needed. The sync host can confirm a restart from pause, returning everyone to setup without closing transports.
 
 Both modes allow player removal while paused. During draft, removed players' territories are cleared and returned to the draft pool. During allocation, removed players' territories and troops are redistributed to remaining players according to `troop-allocation-v1.md`. During gameplay turns, removed players' populated territories are redistributed according to `gameplay-turns-v1.md`. Local pause has no disconnected/reconnecting state or QR tools.
 

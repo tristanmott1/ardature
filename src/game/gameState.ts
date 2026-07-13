@@ -293,7 +293,6 @@ export function canPickTerritory(state: GameState, territoryId: string) {
   return state.phase === "draft" &&
     Boolean(activePlayer(state)) &&
     Boolean(draft) &&
-    !draft?.resultTerritoryId &&
     draft?.ownership[territoryId] === null;
 }
 
@@ -304,8 +303,6 @@ export function startDraft(players: GamePlayer[], config: GameConfig) {
     startIndex: draftStartIndex(originalTurnOrder.length, config.draftStyle, TERRITORY_IDS.length),
     step: 0,
     ownership: createOwnershipMap(),
-    resultTerritoryId: null,
-    resultPlayerId: null,
     timerRemainingMs: timerMs(config.pickTimeLimit),
     timerEndsAt: null,
   };
@@ -995,11 +992,7 @@ export function pauseSyncGame(state: GameState): GameState {
     ...state,
     phase: "paused",
     draft: state.draft
-      ? clearDraftTimer({
-          ...state.draft,
-          resultTerritoryId: null,
-          resultPlayerId: null,
-        }, state.config)
+      ? clearDraftTimer(state.draft, state.config)
       : state.draft,
     allocation: state.allocation
       ? {
@@ -1110,8 +1103,6 @@ export function confirmTerritoryPick(state: GameState, territoryId: string, now:
   const draft = clearDraftTimer({
     ...state.draft,
     ownership,
-    resultTerritoryId: state.mode === "local" ? territoryId : null,
-    resultPlayerId: state.mode === "local" ? player.id : null,
     step: nextStep,
   }, state.config);
 
@@ -1119,17 +1110,13 @@ export function confirmTerritoryPick(state: GameState, territoryId: string, now:
     return advanceAfterDraft({
       ...state,
       phase: "allocation" as const,
-      draft: {
-        ...draft,
-        resultTerritoryId: null,
-        resultPlayerId: null,
-      },
+      draft,
     }, now);
   }
 
   return {
     ...state,
-    draft: state.mode === "sync" ? beginDraftTimer(draft, state.config, now) : draft,
+    draft: beginDraftTimer(draft, state.config, now),
   };
 }
 
@@ -1165,8 +1152,6 @@ export function removePlayerFromDraft(state: GameState, playerId: string): GameS
             ownerId === playerId ? null : ownerId,
           ]),
         ),
-        resultTerritoryId: null,
-        resultPlayerId: null,
       }
     : null;
 
@@ -1232,8 +1217,6 @@ function removePlayerFromGameplay(state: GameState, playerId: string): GameState
     draft: {
       ...state.draft,
       ownership,
-      resultTerritoryId: null,
-      resultPlayerId: null,
     },
     allocation: {
       ...state.allocation,
@@ -1735,8 +1718,6 @@ function restoreSyncHostGame(game: GameState, localPlayerId: string): GameState 
     draft: game.draft
       ? {
           ...game.draft,
-          resultTerritoryId: null,
-          resultPlayerId: null,
           timerEndsAt: null,
         }
       : game.draft,
@@ -1776,11 +1757,6 @@ function simulateRandomDraft(players: GamePlayer[], config: GameConfig, draft: D
       state = {
         ...state,
         phase: "draft" as const,
-        draft: {
-          ...state.draft,
-          resultTerritoryId: null,
-          resultPlayerId: null,
-        },
       };
     }
   }
@@ -1901,8 +1877,6 @@ function removePlayerFromAllocation(state: GameState, playerId: string): GameSta
     draft: {
       ...state.draft,
       ownership,
-      resultTerritoryId: null,
-      resultPlayerId: null,
     },
     allocation,
   };
@@ -2344,8 +2318,6 @@ function normalizeDraft(value: unknown): DraftState | null {
     startIndex: Number.isInteger(draft.startIndex) ? Math.max(0, draft.startIndex ?? 0) : 0,
     step: Number.isInteger(draft.step) ? Math.max(0, draft.step ?? 0) : 0,
     ownership,
-    resultTerritoryId: typeof draft.resultTerritoryId === "string" ? draft.resultTerritoryId : null,
-    resultPlayerId: typeof draft.resultPlayerId === "string" ? draft.resultPlayerId : null,
     timerRemainingMs: typeof draft.timerRemainingMs === "number" ? draft.timerRemainingMs : null,
     timerEndsAt: null,
   };

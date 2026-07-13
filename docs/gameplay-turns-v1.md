@@ -46,19 +46,35 @@ For the first gameplay implementation:
 - Fortify is available but simply ends the turn without moving troops.
 - Local mode uses the existing handoff popup between turns.
 
-## Turn Controls
+## Turn Layout
 
-The shared colored player bar remains at the top of the game screen. It shows the current player's name. There is no normal turn timer to show during this milestone.
+The shared colored player bar remains at the top of the game screen. It shows the current player's name. There is no normal turn timer to show during this milestone. In sync mode, passive devices use the owning device player's name/color while viewing another player's turn.
 
-A compact turn action bar sits in its own section below the map. It is not an overlay, so it pushes the map upward and remains visible during turn popups such as spy confirmation. Once the turn loop has started and a player is actively on turn, this section is always present for the active local viewer.
+When the current viewer is not in the middle of an action, map inspection uses the troop section in `info` mode:
 
-The turn action bar indicates the active turn options:
+- By default no territory is selected and the troop section is hidden.
+- Selecting any territory opens the troop section.
+- Pressing the selected territory again unselects it and hides the troop section.
+- The troop section shows the territory name and all four troop-type icons.
+- Own territories show exact counts, with zero-count troop types grayed out.
+- Opponent territories show all four troop types disabled/grayed with `?` in the count bubbles.
+- Captured spies are shown only when exact counts are visible.
+- Passive sync devices use this same default inspection mode during opponent turns.
+
+A compact turn action section sits below the map. It is not an overlay, so it pushes the map upward. Once the turn loop has started and a player is actively on turn, this section is normally present for the active local viewer. It hides while a modal, popup, bottom sheet, pause, scanner, handoff, notification, or decision confirmation takes over the interaction.
+
+The action section has a single-line instruction row above the buttons:
+
+- When no action is selected, the instruction is `Choose an action`.
+- When spy targeting is selected, the instruction is `Select a territory`.
+
+The turn action section indicates the active turn options:
 
 - A small spy button, using the Gollum/Smeagol icon for light-side players and the crow icon for dark-side players.
 - A larger stage button that initially says `Reinforcements`.
 - After reinforcements are complete, the stage area becomes `Attack` and `Fortify` buttons next to the spy button.
 
-Pressing a stage button changes the current local action prompt. Pressing another stage button while choosing a spy target aborts the spy selection. Popups and modals may appear above the map area, but they should not cover or replace the persistent turn action bar.
+Pressing a stage button changes the current local action prompt. Pressing another stage button while choosing a spy target aborts the spy selection. Popups and modals may appear above the map area, but they should not cover the player bar.
 
 ## Gameplay Connections
 
@@ -92,10 +108,12 @@ When the spy button is active:
 
 - only opponent territories are selectable
 - any opponent territory may be selected because the gameplay graph is connected
-- selecting a territory opens a compact confirmation sheet
+- selecting a territory opens the shared compact bottom `ConfirmSheet`
 - the sheet shows the territory name and the capture probability
 - X cancels
 - check confirms and rolls the spy attempt
+- while the confirmation sheet is open, the map is frozen, manual pan/zoom controls are hidden, and troop/action sections are hidden
+- spy targeting is canceled through the confirmation sheet X, not by tapping the already-selected target
 
 The capture probability is based on the shortest gameplay-connection distance from the target territory to the nearest territory owned by the current player:
 
@@ -134,7 +152,8 @@ If the spy is not captured:
 - reveal any captured spies imprisoned on the selected opponent territory
 - reveal total troop counts, but not breakdowns, for territories adjacent to the selected territory that are owned by that same opponent
 - show those adjacent totals through the normal white map troop counters
-- replace the bottom turn buttons with a dismiss button
+- show the selected opponent territory through the troop section in `info` mode, using the same exact-count UI that own territories use
+- replace the bottom action buttons with a dismiss button
 
 The player may inspect the spy information for as long as they want. Pressing dismiss clears all spy intel and returns to the turn controls.
 
@@ -223,6 +242,8 @@ Reinforcement placement uses the same compact two-row allocation controls as ini
 
 - troops that existed before the reinforcement action started cannot be removed
 - only troops added during the current reinforcement action can be removed while reinforcing
+- the troop section is hidden until the active player selects an owned territory
+- pressing the selected territory again unselects it and hides the troop section
 
 The placement controls still show all four troop slots, including the leader slot. The add-row leader count is always `0` and disabled because reinforcements never create a new leader. The selected-territory row still shows the territory's total troops, including troops that existed before reinforcements. Minus buttons are enabled only for troop types that include troops added during the current reinforcement action.
 

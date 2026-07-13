@@ -160,8 +160,9 @@ async function runSourceChecks() {
   }
   assert(appSource.includes("SyncHostTransport") && appSource.includes("SyncJoinTransport"), "App wires the QR sync transport.");
   assert(appSource.includes("pauseSyncGame"), "App has sync pause semantics.");
-  assert(appSource.includes("syncDraftNoticeFromOwnershipChange"), "App creates local sync draft notices from ownership changes.");
-  assert(appSource.includes("onCloseRef") && appSource.includes("resultKey"), "Draft result auto-dismiss is stable across parent re-renders.");
+  assert(!appSource.includes("syncDraftNoticeFromOwnershipChange") && !appSource.includes("PickResultDialog"), "Draft result notifications are completely removed.");
+  assert(!gameTypesSource.includes("resultTerritoryId") && !gameTypesSource.includes("resultPlayerId"), "Draft state does not store stale result popup fields.");
+  assert(appSource.includes("type ActiveOverlay") && appSource.includes('type: "confirm"') && appSource.includes('type: "pause"'), "App uses a single overlay model for game-stage popups.");
   assert(appSource.includes('className="troop-icon-button turn-spy-button"') && appSource.includes("turn-spy-spacer") && !appSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling and keeps a spacer when lost.");
   assert(stylesSource.includes('.turn-spy-button[data-selected="true"]') && stylesSource.includes(".turn-spy-spacer"), "Turn spy selected and missing states have dedicated styling.");
   assert(appSource.includes("syncSnapshotForViewer") && appSource.includes("hostTransportRef.current?.sendToPeer(player.id") && appSource.includes("spyIntel: null") && appSource.includes("reinforcement: null"), "Sync snapshots hide private turn sub-state from passive viewers.");
@@ -180,7 +181,7 @@ async function runSourceChecks() {
   assert(!gameTypesSource.includes("selectedTerritoryId") && !gameStateSource.includes("selectedTerritoryId: null") && !gameStateSource.includes("allocation.selectedTerritoryId"), "Shared allocation state does not store selected visual territory.");
   assert(!syncMessagesSource.includes("draftPending"), "Sync messages do not share pending draft selections.");
   assert(!syncMessagesSource.includes('type: "allocationUpdate";\n      allocation: PlayerAllocation;') || !syncMessagesSource.includes("selectedTerritoryId"), "Allocation sync messages do not include selected territory UI state.");
-  assert(!showDraftPanelSource(appSource).includes("viewerPendingTerritory") && !showDraftPanelSource(appSource).includes("blockingResultTerritory") && !showDraftPanelSource(appSource).includes("noticeTerritory"), "Draft top bar stays visible during confirmation and notifications.");
+  assert(!showDraftPanelSource(appSource).includes("viewerPendingTerritory"), "Draft top bar stays visible during confirmation.");
   assert(appSource.includes("RotateCcw") && appSource.includes("restartPausedGame"), "Pause can restart to setup without closing transports.");
   assert(!appSource.includes('closeLabel="End game"'), "Pause modal does not use a close X to end the game.");
   assert(appSource.includes("closeOnOutsidePress"), "Color dropdowns close on outside press.");
@@ -216,7 +217,7 @@ async function runSourceChecks() {
   assert(gameStateSource.includes("applySyncProfileUpdate") && gameStateSource.includes("applySyncDraftConfirm") && gameStateSource.includes("applySyncPlayerQuit"), "Host command application is centralized in game helpers.");
   assert(gameStateSource.includes("SYNC_HOST_GAME_KEY") && appSource.includes("saveSyncHostGame(nextGame, localPlayerId, revision)") && appSource.includes("readSyncHostGame()"), "Sync host active games persist separately from local games.");
   assert(!gameTypesSource.includes("noticeTerritoryId") && !gameTypesSource.includes("noticePlayerId"), "Shared draft state does not store local notices.");
-  assert(!gameStateSource.includes("timerMs(state.config.pickTimeLimit) ?? 0") && gameStateSource.includes('draft: state.mode === "sync" ? beginDraftTimer'), "Sync draft timers preserve unlimited pick time.");
+  assert(!gameStateSource.includes("timerMs(state.config.pickTimeLimit) ?? 0") && gameStateSource.includes("draft: beginDraftTimer(draft, state.config, now)"), "Draft timers preserve unlimited pick time after confirmed picks.");
   assert(gameStateSource.includes("expandRemovedTroops(removedTroopPool") && gameStateSource.includes('troopType === "leader" ? randomMixtureTroop() : troopType'), "Removed-player leaders are replaced by random regular troops.");
   assert(armyBuildSource.includes("ARMY_ECONOMY") && armyBuildSource.includes("costScale: 5") && armyBuildSource.includes("heavy: 4") && armyBuildSource.includes("cavalry: 5") && armyBuildSource.includes("elite: 6"), "Army economy keeps tunable fixed-point costs together.");
   assert(armyBuildSource.includes("remainingCostUnits >= minimumCost") && armyBuildSource.includes("mixtureError"), "Army builds use budget-maximal closest-ratio candidates.");
@@ -852,8 +853,10 @@ async function runLocalDraftChecks(page) {
   assert(selectedFill && selectedFill !== "#ffffff", "Pending territory is brightened without becoming pure white.");
   await capture(page, "06-local-draft-confirm-mobile.png");
   await clickMapBackground(page);
+  assert((await confirmDialog.count()) === 1, "Confirm sheet freezes map background taps.");
+  await confirmDialog.getByRole("button", { name: "Cancel pick" }).click();
   await confirmDialog.waitFor({ state: "detached" });
-  assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 0, "Tapping the map background cancels the pending pick.");
+  assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 0, "Cancel button clears the pending pick.");
   assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Return-to-map control returns after confirm cancellation.");
   assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Auto-focus control returns after confirm cancellation.");
 
@@ -875,31 +878,22 @@ async function runLocalDraftChecks(page) {
   await page.waitForFunction(() => document.querySelector(".map-svg")?.getAttribute("data-map-animating") === "false");
   assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Auto-focus still selects the pending territory.");
 
+  await confirmDialog.getByRole("button", { name: "Cancel pick" }).click();
+  await confirmDialog.waitFor({ state: "detached" });
   await clickTerritory(page, "bree");
   await confirmDialog.getByRole("heading", { name: "Bree" }).waitFor();
-  const replacedConfirmBox = await confirmDialog.boundingBox();
   await page.getByRole("button", { name: "Confirm pick" }).click();
-  const resultDialog = page.getByRole("status");
-  await resultDialog.waitFor();
-  const resultBox = await resultDialog.boundingBox();
-  await capture(page, "07-local-draft-result-mobile.png");
-  assert((await page.locator(".game-top-bar").count()) === 1, "Draft top bar stays visible during draft notification.");
-  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 0, "Draft result sheet hides the return-to-map control.");
-  assert((await page.getByRole("button", { name: "Disable automatic focus" }).count()) === 0, "Draft result sheet hides the auto-focus control.");
-  assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.width - resultBox.width) < 1, "Result sheet matches confirm sheet width.");
-  assert(replacedConfirmBox && resultBox && Math.abs(replacedConfirmBox.height - resultBox.height) < 1, "Result sheet matches confirm sheet height.");
-  assert((await resultDialog.getByRole("button", { name: "Next player" }).count()) === 0, "Result modal has no next button.");
-  assert((await resultDialog.locator(".territory-preview-shape").count()) === 0, "Result sheet has no territory preview.");
+  await confirmDialog.waitFor({ state: "detached" });
+  await capture(page, "07-local-draft-after-confirm-mobile.png");
+  assert((await page.getByRole("status").count()) === 0, "Draft confirm does not show a result notification.");
   await page.getByText("0 / 21").waitFor();
-  await waitForViewBox(page, homeViewport);
-  assertViewBoxEquals(await viewBox(page), homeViewport, "Local result dismissal returns to the home viewport.");
-  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Return-to-map control returns after draft notification.");
-  assert((await page.getByRole("button", { name: "Disable automatic focus" }).count()) === 1, "Auto-focus control returns after draft notification.");
+  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Return-to-map control returns immediately after draft confirmation.");
+  assert((await page.getByRole("button", { name: "Disable automatic focus" }).count()) === 1, "Auto-focus control returns immediately after draft confirmation.");
 
   await clickTerritory(page, "shire");
   await page.getByRole("dialog", { name: "Confirm territory" }).waitFor();
   await page.getByRole("button", { name: "Confirm pick" }).click();
-  await page.locator(".pick-result-scrim").click();
+  await page.getByRole("dialog", { name: "Confirm territory" }).waitFor({ state: "detached" });
   await page.getByText("1 / 21").waitFor();
 
   await page.getByRole("button", { name: "Pause draft" }).click();
@@ -919,6 +913,8 @@ async function runLocalDraftChecks(page) {
   await page.getByText("40 territories remain.").waitFor();
   await page.getByRole("button", { name: "Resume" }).click();
   await page.getByText("1 / 21").waitFor();
+  await page.getByRole("button", { name: "Return to map view" }).click();
+  await waitForViewBox(page, homeViewport);
 
   const box = await page.locator(".map-svg").boundingBox();
   assert(box, "Map SVG has a bounding box.");
@@ -1116,10 +1112,13 @@ async function runMobileMapInteractionChecks(page) {
   await page.getByRole("button", { name: "Return to map view" }).click();
   await waitForViewBox(page, homeViewport);
 
-  // Territory selection can redirect an active focus animation.
+  // Confirm sheets freeze map selection until the sheet is dismissed.
   await page.getByRole("button", { name: "Enable automatic focus" }).click();
   await clickTerritory(page, "shire");
   await page.waitForFunction(() => document.querySelector(".map-svg")?.getAttribute("data-map-animating") === "true");
+  await page.getByRole("dialog", { name: "Confirm territory" }).getByRole("heading", { name: "Shire" }).waitFor();
+  await page.getByRole("dialog", { name: "Confirm territory" }).getByRole("button", { name: "Cancel pick" }).click();
+  await page.getByRole("dialog", { name: "Confirm territory" }).waitFor({ state: "detached" });
   await clickTerritory(page, "bree");
   await page.getByRole("dialog", { name: "Confirm territory" }).getByRole("heading", { name: "Bree" }).waitFor();
   await page.waitForFunction(() => document.querySelector(".map-svg")?.getAttribute("data-map-animating") === "false");
@@ -1205,10 +1204,8 @@ async function runRandomAllocationChecks(page) {
   await clickTerritory(page, opponentTerritoryId);
   await page.getByRole("dialog", { name: "Confirm spy" }).waitFor();
   await capture(page, "15-spy-confirm-mobile.png");
-  assert((await page.locator(".turn-action-panel").count()) === 1, "Turn action bar remains visible during spy confirmation.");
-  const spyDialogBox = await page.getByRole("dialog", { name: "Confirm spy" }).boundingBox();
-  const spyActionBox = await page.locator(".turn-action-panel").boundingBox();
-  assert(spyDialogBox && spyActionBox && spyDialogBox.y + spyDialogBox.height <= spyActionBox.y + 1, "Spy confirmation does not overlap the turn action bar.");
+  assert((await page.locator(".game-top-bar").count()) === 1, "Player bar remains visible during spy confirmation.");
+  assert((await page.locator(".turn-action-panel").count()) === 0, "Turn action bar hides during spy confirmation.");
   assert((await page.getByRole("dialog", { name: "Confirm spy" }).getByText("% captured").count()) === 1, "Spy confirmation shows capture probability.");
   await page.getByRole("button", { name: "Cancel spy" }).click();
   await page.getByRole("button", { name: "Reinforcements" }).click();
@@ -1640,6 +1637,7 @@ function readOnlyVisibilityGameState(territoryIds) {
     config: {
       draftStyle: "snake",
       pickTimeLimit: 0,
+      allocationStyle: "manual",
       troopAllocationTimeLimit: 0,
     },
     draft: {
@@ -1650,8 +1648,6 @@ function readOnlyVisibilityGameState(territoryIds) {
         territoryId,
         territoryId === "shire" ? "viewer" : "opponent",
       ])),
-      resultTerritoryId: null,
-      resultPlayerId: null,
       timerRemainingMs: null,
       timerEndsAt: null,
     },
@@ -1827,13 +1823,25 @@ async function runSyncReadyPageChecks(browser) {
   await finishAllocationTurn(joiner, "red");
   await host.getByRole("button", { name: "Start game" }).waitFor({ timeout: 15000 });
   await host.getByRole("button", { name: "Start game" }).click();
-  await host.waitForSelector(".turn-action-panel", { timeout: 15000 });
-  await joiner.waitForSelector(".game-map-panel", { timeout: 15000 });
-  await capture(host, "17b-sync-active-turn-mobile.png");
-  await capture(joiner, "17c-sync-passive-turn-mobile.png");
-  assert((await host.getByRole("button", { name: "Spy" }).count()) === 1, "Active sync turn player sees turn controls.");
-  assert((await joiner.locator(".turn-action-panel").count()) === 0, "Passive sync turn player does not see turn controls.");
-  assert((await joiner.locator(".game-map-panel .troop-icon-count").count()) === 0, "Passive sync turn player does not see private action breakdowns.");
+  for (let index = 0; index < 4; index += 1) {
+    await host.waitForTimeout(250);
+    await dismissQueuedNotifications(host);
+    await dismissQueuedNotifications(joiner);
+    if ((await host.locator(".turn-action-panel").count()) > 0 || (await joiner.locator(".turn-action-panel").count()) > 0) {
+      break;
+    }
+  }
+  const activeTurnPage = await Promise.race([
+    host.waitForSelector(".turn-action-panel", { timeout: 15000 }).then(() => host),
+    joiner.waitForSelector(".turn-action-panel", { timeout: 15000 }).then(() => joiner),
+  ]);
+  const passiveTurnPage = activeTurnPage === host ? joiner : host;
+  await passiveTurnPage.waitForSelector(".game-map-panel", { timeout: 15000 });
+  await capture(activeTurnPage, "17b-sync-active-turn-mobile.png");
+  await capture(passiveTurnPage, "17c-sync-passive-turn-mobile.png");
+  assert((await activeTurnPage.getByRole("button", { name: "Spy" }).count()) === 1, "Active sync turn player sees turn controls.");
+  assert((await passiveTurnPage.locator(".turn-action-panel").count()) === 0, "Passive sync turn player does not see turn controls.");
+  assert((await passiveTurnPage.locator(".game-map-panel .troop-icon-count").count()) === 0, "Passive sync turn player does not see private action breakdowns.");
 
   await host.close();
   await joiner.close();
