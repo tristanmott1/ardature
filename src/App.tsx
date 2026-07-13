@@ -2180,6 +2180,15 @@ function HomePanel({ onStartLocal, onStartSync }: { onStartLocal: () => void; on
   );
 }
 
+function PlayerIdentity({ color, name }: { color: PlayerColor | null; name: string }) {
+  return (
+    <>
+      <span className="player-dot" style={{ background: colorCss(color) }} />
+      <strong>{name}</strong>
+    </>
+  );
+}
+
 function SyncEntryPanel({
   color,
   message,
@@ -2213,8 +2222,7 @@ function SyncEntryPanel({
         <div className="recovery-slot-list">
           {recoverySlots.map((slot) => (
             <button className="secondary recovery-slot-button wide-button" type="button" key={slot.id} onClick={() => onChooseRecoveryPlayer(slot)}>
-              <span className="player-dot" style={{ background: colorCss(slot.color) }} />
-              <strong>{slot.name}</strong>
+              <PlayerIdentity color={slot.color} name={slot.name} />
             </button>
           ))}
         </div>
@@ -2929,8 +2937,7 @@ function ReadyColumn({ players, title }: { players: GamePlayer[]; title: string 
       <div className="ready-player-list">
         {players.map((player) => (
           <article className="ready-player-row" key={player.id}>
-            <span className="player-dot" style={{ background: colorCss(player.color) }} />
-            <strong>{player.name}</strong>
+            <PlayerIdentity color={player.color} name={player.name} />
           </article>
         ))}
       </div>
@@ -3069,8 +3076,7 @@ function PausePanel({
         <div className="player-list paused-list">
           {players.map((player) => (
             <article className="player-row compact-row" data-player-status={player.connectionStatus} key={player.id}>
-              <span className="player-dot" style={{ background: colorCss(player.color) }} />
-              <strong>{player.name}</strong>
+              <PlayerIdentity color={player.color} name={player.name} />
               <span className="connection-label" aria-hidden={mode !== "sync"}>
                 {mode === "sync" ? player.connectionStatus : ""}
               </span>
