@@ -208,7 +208,7 @@ button:focus-visible,
   gap: 8px;
 }
 
-.game-layout > .game-top-bar {
+.game-layout > .player-bar {
   position: relative;
   z-index: 21;
   flex: none;
@@ -216,7 +216,7 @@ button:focus-visible,
   box-shadow: 0 3px 14px rgba(24, 24, 27, 0.1);
 }
 
-.game-top-bar {
+.player-bar {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) auto;
   gap: 10px;
@@ -231,18 +231,18 @@ button:focus-visible,
   background: var(--bar-color);
 }
 
-.game-top-bar[data-tone="dark"] {
+.player-bar[data-tone="dark"] {
   color: #ffffff;
 }
 
-.game-top-button {
+.player-bar-button {
   width: 36px;
   min-height: 36px;
   color: currentColor;
   background: rgba(255, 255, 255, 0.18);
 }
 
-.game-top-player {
+.player-bar-player {
   display: grid;
   justify-items: start;
   min-width: 0;
@@ -252,15 +252,15 @@ button:focus-visible,
   text-align: left;
 }
 
-.game-top-player:disabled {
+.player-bar-player:disabled {
   opacity: 1;
 }
 
-.game-top-player:not(:disabled):active {
+.player-bar-player:not(:disabled):active {
   transform: scale(0.99);
 }
 
-.game-top-player strong {
+.player-bar-player strong {
   overflow: hidden;
   max-width: 100%;
   font-size: 1.08rem;
@@ -270,7 +270,7 @@ button:focus-visible,
   white-space: nowrap;
 }
 
-.game-top-player span {
+.player-bar-player span {
   overflow: hidden;
   max-width: 100%;
   font-size: 0.76rem;
@@ -280,14 +280,14 @@ button:focus-visible,
   white-space: nowrap;
 }
 
-.game-top-tools {
+.player-bar-tools {
   display: flex;
   gap: 8px;
   align-items: center;
   justify-content: end;
 }
 
-.game-top-timer {
+.player-bar-timer {
   border-color: rgba(255, 255, 255, 0.24);
   color: currentColor;
   background: rgba(255, 255, 255, 0.18);
@@ -514,8 +514,14 @@ select {
   white-space: nowrap;
 }
 
+.player-row.compact-row > .connection-label {
+  grid-column: 3;
+  justify-self: end;
+}
+
 .player-row.compact-row > .icon-button,
 .player-row.compact-row > .icon-button-spacer {
+  grid-column: 4;
   justify-self: end;
 }
 

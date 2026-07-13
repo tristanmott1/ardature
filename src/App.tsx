@@ -389,7 +389,7 @@ function App() {
   const pausedDraftPlayer = game.phase === "paused" && game.draft && !game.allocation
     ? activePlayer({ ...game, phase: "draft" })
     : null;
-  const gameTopBarPlayer = game.phase === "draft"
+  const playerBarPlayer = game.phase === "draft"
     ? active
     : game.phase === "allocation" || game.phase === "allocationHandoff"
       ? allocationPlayer
@@ -406,11 +406,11 @@ function App() {
             : game.phase === "paused"
               ? pausedDraftPlayer
               : null;
-  const gameTopBarIsDraft = game.phase === "draft" || (game.phase === "paused" && Boolean(game.draft) && !game.allocation);
-  const gameTopBarProgress = gameTopBarIsDraft && gameTopBarPlayer
-    ? draftProgressForPlayer(game, gameTopBarPlayer.id)
+  const playerBarIsDraft = game.phase === "draft" || (game.phase === "paused" && Boolean(game.draft) && !game.allocation);
+  const playerBarProgress = playerBarIsDraft && playerBarPlayer
+    ? draftProgressForPlayer(game, playerBarPlayer.id)
     : null;
-  const showGameTopBar = game.phase !== "home" && game.phase !== "setup" && Boolean(gameTopBarPlayer);
+  const showPlayerBar = game.phase !== "home" && game.phase !== "setup" && Boolean(playerBarPlayer);
   const showGameStageLayout = game.phase !== "home" && game.phase !== "setup";
   const canUseMapCameraControls = game.phase !== "home" && game.phase !== "setup" && !hasActiveOverlay && !showAllocationWaitingSection;
 
@@ -1857,16 +1857,16 @@ function App() {
       data-app-phase={game.phase}
       data-sync-role={syncRole ?? "none"}
     >
-      {showGameTopBar ? (
-        <GameTopBar
-          detail={gameTopBarProgress ? `${gameTopBarProgress.drafted} / ${gameTopBarProgress.total}` : null}
+      {showPlayerBar ? (
+        <PlayerBar
+          detail={playerBarProgress ? `${playerBarProgress.drafted} / ${playerBarProgress.total}` : null}
           onExit={returnHome}
           onPause={game.phase !== "paused" && (game.mode === "local" || syncRole === "host") ? pauseDraft : undefined}
           onTitlePress={game.phase === "gameMap" && game.mode === "local" ? cycleGameMapViewer : undefined}
           pauseLabel={game.phase === "draft" ? "Pause draft" : game.phase === "gameMap" || game.phase === "turn" ? "Pause map" : "Pause allocation"}
-          player={gameTopBarPlayer}
+          player={playerBarPlayer}
           timerRemaining={timerRemaining}
-          title={gameTopBarPlayer?.name ?? "Game"}
+          title={playerBarPlayer?.name ?? "Game"}
         />
       ) : null}
 
@@ -2604,7 +2604,7 @@ function ReinforcementPanel({
   );
 }
 
-function GameTopBar({
+function PlayerBar({
   detail,
   onExit,
   onPause,
@@ -2626,12 +2626,12 @@ function GameTopBar({
   const light = isLightColor(player?.color ?? null);
 
   return (
-    <div className="game-top-bar" data-tone={light ? "light" : "dark"} style={{ "--bar-color": colorCss(player?.color ?? null) } as CSSProperties}>
-      <button className="icon-button game-top-button" type="button" onClick={onExit} aria-label="End game">
+    <div className="player-bar" data-tone={light ? "light" : "dark"} style={{ "--bar-color": colorCss(player?.color ?? null) } as CSSProperties}>
+      <button className="icon-button player-bar-button" type="button" onClick={onExit} aria-label="End game">
         <X size={18} />
       </button>
       <button
-        className="game-top-player"
+        className="player-bar-player"
         type="button"
         onClick={onTitlePress}
         disabled={!onTitlePress}
@@ -2640,10 +2640,10 @@ function GameTopBar({
         <strong>{title}</strong>
         {detail ? <span>{detail}</span> : null}
       </button>
-      <div className="game-top-tools">
-        {timerRemaining ? <span className="timer-chip game-top-timer">{Math.ceil(timerRemaining / 1000)}s</span> : null}
+      <div className="player-bar-tools">
+        {timerRemaining ? <span className="timer-chip player-bar-timer">{Math.ceil(timerRemaining / 1000)}s</span> : null}
         {onPause ? (
-          <button className="icon-button game-top-button" type="button" onClick={onPause} aria-label={pauseLabel ?? "Pause"}>
+          <button className="icon-button player-bar-button" type="button" onClick={onPause} aria-label={pauseLabel ?? "Pause"}>
             <Pause size={18} />
           </button>
         ) : null}

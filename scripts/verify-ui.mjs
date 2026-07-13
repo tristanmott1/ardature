@@ -1,4 +1,4 @@
-﻿import { chromium } from "playwright";
+import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -181,7 +181,7 @@ async function runSourceChecks() {
   assert(!gameTypesSource.includes("selectedTerritoryId") && !gameStateSource.includes("selectedTerritoryId: null") && !gameStateSource.includes("allocation.selectedTerritoryId"), "Shared allocation state does not store selected visual territory.");
   assert(!syncMessagesSource.includes("draftPending"), "Sync messages do not share pending draft selections.");
   assert(!syncMessagesSource.includes('type: "allocationUpdate";\n      allocation: PlayerAllocation;') || !syncMessagesSource.includes("selectedTerritoryId"), "Allocation sync messages do not include selected territory UI state.");
-  assert(appSource.includes('const showGameTopBar = game.phase !== "home" && game.phase !== "setup"') && appSource.includes('const showGameStageLayout = game.phase !== "home" && game.phase !== "setup"'), "Game-stage layout and top bar are not gated by overlay-specific draft state.");
+  assert(appSource.includes('const showPlayerBar = game.phase !== "home" && game.phase !== "setup"') && appSource.includes('const showGameStageLayout = game.phase !== "home" && game.phase !== "setup"'), "Game-stage layout and player bar are not gated by overlay-specific draft state.");
   assert(appSource.includes("RotateCcw") && appSource.includes("restartPausedGame"), "Pause can restart to setup without closing transports.");
   assert(!appSource.includes('closeLabel="End game"'), "Pause modal does not use a close X to end the game.");
   assert(appSource.includes("closeOnOutsidePress"), "Color dropdowns close on outside press.");
@@ -238,7 +238,7 @@ async function runSourceChecks() {
   assert(gameStateSource.includes('value === "allocationWaiting" ? "allocation"'), "Old allocationWaiting saves normalize to allocation.");
   assert(appSource.includes('game.mode === "sync" && game.phase === "allocation" && localAllocationReady'), "Ready page is derived from this device's ready state.");
   assert(appSource.includes("function ReadyColumn") && appSource.includes('title="Ready"') && appSource.includes('title="Waiting"'), "Allocation ready page uses ready and waiting columns.");
-  assert(appSource.includes("showGameTopBar") && appSource.includes("timerRemaining={timerRemaining}"), "A persistent game top bar keeps relevant timers visible.");
+  assert(appSource.includes("showPlayerBar") && appSource.includes("timerRemaining={timerRemaining}"), "A persistent player bar keeps relevant timers visible.");
   assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
   assert(appSource.includes("data-qr-text") && appSource.includes("handlePaste"), "QR scanner supports paste-driven verification.");
   assert(appSource.includes("canAdvance={syncRole === \"host\"") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
@@ -259,7 +259,7 @@ async function runSourceChecks() {
   assert(!territoryFillSource.includes('state.status === "selected" ? "#ffffff"'), "Selected territory fill is not hard-coded to white.");
   assert(troopMarkerSource.includes("data-troop-marker"), "Troop markers expose territory ids for visibility verification.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
-  assert(appSource.includes("function GameTopBar") && appSource.includes("showGameTopBar") && appSource.includes("allocation-waiting-panel"), "Game stages use the shared persistent game top bar.");
+  assert(appSource.includes("function PlayerBar") && appSource.includes("showPlayerBar") && appSource.includes("allocation-waiting-panel"), "Game stages use the shared persistent player bar.");
   assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
   assert(appSource.includes("TroopIconCount") && appSource.includes("troopIconSrc"), "Allocation UI uses troop image icons.");
@@ -544,7 +544,7 @@ async function assertBelow(page, upperLocator, lowerLocator, message) {
   assert(upper && lower && lower.y >= upper.y + upper.height - 1, message);
 }
 
-async function assertTopBarFullWidth(page, selector, message) {
+async function assertPlayerBarFullWidth(page, selector, message) {
   const bar = await page.locator(selector).boundingBox();
   const viewport = page.viewportSize();
 
@@ -566,15 +566,15 @@ async function assertCompactPlayerRowsAligned(page, selector, message) {
     const status = row.querySelector(".connection-label")?.getBoundingClientRect();
     const action = row.querySelector(".icon-button, .icon-button-spacer")?.getBoundingClientRect();
 
-    return dot && name && status && action
+    return dot && name && action
       ? {
           actionRight: action.right,
           actionLeft: action.left,
           dotRight: dot.right,
           nameLeft: name.left,
           rowRight: row.getBoundingClientRect().right,
-          statusLeft: status.left,
-          statusRight: status.right,
+          statusLeft: status?.left ?? null,
+          statusRight: status?.right ?? null,
         }
       : null;
   }));
@@ -583,14 +583,18 @@ async function assertCompactPlayerRowsAligned(page, selector, message) {
   assert(completeRows.length >= 2, `${message}: expected at least two complete rows.`);
   for (const row of completeRows) {
     assert(row.nameLeft >= row.dotRight + 4, `${message}: names sit immediately to the right of colors.`);
-    assert(row.statusRight <= row.actionLeft - 4, `${message}: statuses sit to the left of the action slot.`);
+    if (row.statusRight !== null) {
+      assert(row.statusRight <= row.actionLeft - 4, `${message}: statuses sit to the left of the action slot.`);
+    }
     assert(row.actionRight >= row.rowRight - 8, `${message}: action slots sit on the far right.`);
   }
 
   const nameLefts = completeRows.map((row) => row.nameLeft);
-  const statusRights = completeRows.map((row) => row.statusRight);
+  const statusRights = completeRows.map((row) => row.statusRight).filter((right) => right !== null);
   assert(Math.max(...nameLefts) - Math.min(...nameLefts) < 1, `${message}: names are left-aligned.`);
-  assert(Math.max(...statusRights) - Math.min(...statusRights) < 1, `${message}: statuses are right-aligned.`);
+  if (statusRights.length > 1) {
+    assert(Math.max(...statusRights) - Math.min(...statusRights) < 1, `${message}: statuses are right-aligned.`);
+  }
 }
 
 async function assertReadyColumnHeadersLeftAligned(page) {
@@ -802,18 +806,18 @@ async function runLocalDraftChecks(page) {
   assertViewBoxEquals(await viewBox(page), homeViewport, "Initial draft viewBox uses the home viewport.");
   assert((await page.locator("[data-territory-fill]").count()) === 42, "Map renders 42 territory fill groups.");
   assert((await page.locator("[data-territory-hit]").count()) === 42, "Draft renders 42 hit targets.");
-  const controlsBox = await page.locator(".game-top-bar").boundingBox();
+  const controlsBox = await page.locator(".player-bar").boundingBox();
   const mapBox = await page.locator(".map-shell").boundingBox();
-  assert(controlsBox && mapBox && mapBox.y >= controlsBox.y + controlsBox.height - 1, "Draft controls sit above the map.");
-  assert((await page.locator(".game-top-bar").count()) === 1, "Draft uses the shared game top bar.");
-  assert((await page.locator(".game-top-bar .player-dot").count()) === 0, "Game top bar does not use player dots.");
-  const topBarBox = await page.locator(".game-top-bar").boundingBox();
-  const endButtonBox = await page.locator(".game-top-bar").getByRole("button", { name: "End game" }).boundingBox();
-  const pauseButtonBox = await page.locator(".game-top-bar").getByRole("button", { name: "Pause draft" }).boundingBox();
-  assert(topBarBox && endButtonBox && pauseButtonBox && endButtonBox.x < topBarBox.x + topBarBox.width * 0.2, "Game top bar keeps X on the left.");
-  assert(topBarBox && pauseButtonBox && pauseButtonBox.x + pauseButtonBox.width > topBarBox.x + topBarBox.width * 0.8, "Game top bar keeps pause on the right.");
+  assert(controlsBox && mapBox && mapBox.y >= controlsBox.y + controlsBox.height - 1, "Draft player bar sits above the map.");
+  assert((await page.locator(".player-bar").count()) === 1, "Draft uses the shared player bar.");
+  assert((await page.locator(".player-bar .player-dot").count()) === 0, "Player bar does not use player dots.");
+  const playerBarBox = await page.locator(".player-bar").boundingBox();
+  const endButtonBox = await page.locator(".player-bar").getByRole("button", { name: "End game" }).boundingBox();
+  const pauseButtonBox = await page.locator(".player-bar").getByRole("button", { name: "Pause draft" }).boundingBox();
+  assert(playerBarBox && endButtonBox && pauseButtonBox && endButtonBox.x < playerBarBox.x + playerBarBox.width * 0.2, "Player bar keeps X on the left.");
+  assert(playerBarBox && pauseButtonBox && pauseButtonBox.x + pauseButtonBox.width > playerBarBox.x + playerBarBox.width * 0.8, "Player bar keeps pause on the right.");
   await page.getByText("0 / 21").waitFor();
-  assert((await page.getByText("42 left").count()) === 0, "Draft controls show active-player progress instead of territories left.");
+  assert((await page.getByText("42 left").count()) === 0, "Draft player bar shows active-player progress instead of territories left.");
   assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Map shows the return-to-map control.");
   assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Auto-focus defaults to off.");
   assert(
@@ -833,7 +837,7 @@ async function runLocalDraftChecks(page) {
   const viewport = page.viewportSize();
   assert(confirmBox && viewport && confirmBox.y > viewport.height * 0.55, "Confirm sheet appears at the bottom.");
   assert(confirmBox && viewport && confirmBox.width > 280 && confirmBox.width <= viewport.width - 32, "Confirm sheet uses the wider bottom-sheet layout.");
-  assert((await page.locator(".game-top-bar").count()) === 1, "Draft top bar stays visible during territory confirmation.");
+  assert((await page.locator(".player-bar").count()) === 1, "Draft player bar stays visible during territory confirmation.");
   assertViewBoxEquals(await viewBox(page), parseViewBox(beforeDefaultSelection), "Default-off auto-focus leaves the viewBox unchanged.");
   assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 0, "Confirm sheet hides the return-to-map control.");
   assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 0, "Confirm sheet hides the auto-focus control.");
@@ -858,7 +862,7 @@ async function runLocalDraftChecks(page) {
   await page.waitForSelector("[data-background-piece]");
   await page.getByRole("dialog", { name: "Paused" }).waitFor();
   await capture(page, "06b-local-refresh-pause-mobile.png");
-  assert((await page.locator(".game-top-bar").count()) === 1, "Local refresh restores into pause while keeping the player bar visible.");
+  assert((await page.locator(".player-bar").count()) === 1, "Local refresh restores into pause while keeping the player bar visible.");
   await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Resume" }).click();
   await page.getByText("0 / 21").waitFor();
   assert((await page.getByRole("button", { name: "Disable automatic focus" }).count()) === 1, "Auto-focus enabled state persists after reload.");
@@ -890,7 +894,8 @@ async function runLocalDraftChecks(page) {
   await page.getByRole("button", { name: "Pause draft" }).click();
   await page.getByRole("dialog", { name: "Paused" }).waitFor();
   await capture(page, "08-local-pause-mobile.png");
-  assert((await page.locator(".game-top-bar").count()) === 1, "Pause keeps the game top bar visible.");
+  assert((await page.locator(".player-bar").count()) === 1, "Pause keeps the player bar visible.");
+  await assertCompactPlayerRowsAligned(page, ".pause-modal .player-row.compact-row", "Local pause player rows align names and actions");
   const pauseBox = await page.getByRole("dialog", { name: "Paused" }).boundingBox();
   const pauseViewport = page.viewportSize();
   assert(pauseBox && pauseViewport && Math.abs((pauseBox.x + pauseBox.width / 2) - (pauseViewport.width / 2)) < 1, "Pause modal is centered horizontally.");
@@ -1129,7 +1134,7 @@ async function runRandomAllocationChecks(page) {
   await page.getByRole("button", { name: "Start game" }).click();
   await page.waitForSelector('.app-shell[data-app-phase="allocationHandoff"]');
   await capture(page, "10-allocation-handoff-mobile.png");
-  assert((await page.locator(".game-top-bar").count()) === 1, "Allocation handoff shows the next player's top bar.");
+  assert((await page.locator(".player-bar").count()) === 1, "Allocation handoff shows the next player in the player bar.");
   assert((await page.getByRole("dialog", { name: "Allocation handoff" }).getByRole("button", { name: "Begin allocation" }).count()) === 1, "Allocation handoff popup is only the continue arrow.");
   assert((await page.locator('[data-territory-fill][data-territory-skin="background"]').count()) < 42, "Random draft colors territories.");
   await page.getByRole("button", { name: "Begin allocation" }).click();
@@ -1147,7 +1152,7 @@ async function runRandomAllocationChecks(page) {
   await clickTerritory(page, ownedTerritoryId);
   await page.waitForSelector(".allocation-target");
   await capture(page, "12-allocation-territory-mobile.png");
-  assert((await page.locator(".game-top-bar").count()) === 1, "Allocation uses the shared game top bar.");
+  assert((await page.locator(".player-bar").count()) === 1, "Allocation uses the shared player bar.");
   assert((await page.locator(".allocation-target span").count()) === 0, "Allocation target does not repeat the territory troop total.");
   assert((await page.locator(".troop-action-row").count()) === 2, "Territory allocation has add and remove rows.");
   assert((await page.locator(".troop-action-row").nth(0).locator(".troop-icon-button").count()) === 4, "Add row has four troop icon buttons.");
@@ -1178,7 +1183,7 @@ async function runRandomAllocationChecks(page) {
   await finishAllocationTurn(page, "red");
   await page.waitForSelector('.app-shell[data-app-phase="turnHandoff"]');
   await capture(page, "13-turn-handoff-mobile.png");
-  assert((await page.locator(".game-top-bar").count()) === 1, "Turn handoff shows the next player's top bar.");
+  assert((await page.locator(".player-bar").count()) === 1, "Turn handoff shows the next player in the player bar.");
   assert((await page.getByRole("dialog", { name: "Turn handoff" }).getByRole("button", { name: "Begin turn" }).count()) === 1, "Turn handoff popup is only the continue arrow.");
   await page.getByRole("button", { name: "Begin turn" }).click();
   await dismissQueuedNotifications(page);
@@ -1195,7 +1200,7 @@ async function runRandomAllocationChecks(page) {
   await clickTerritory(page, opponentTerritoryId);
   await page.getByRole("dialog", { name: "Confirm spy" }).waitFor();
   await capture(page, "15-spy-confirm-mobile.png");
-  assert((await page.locator(".game-top-bar").count()) === 1, "Player bar remains visible during spy confirmation.");
+  assert((await page.locator(".player-bar").count()) === 1, "Player bar remains visible during spy confirmation.");
   assert((await page.locator(".turn-action-panel").count()) === 0, "Turn action bar hides during spy confirmation.");
   assert((await page.getByRole("dialog", { name: "Confirm spy" }).getByText("% captured").count()) === 1, "Spy confirmation shows capture probability.");
   await page.getByRole("button", { name: "Cancel spy" }).click();
@@ -1799,9 +1804,9 @@ async function runSyncReadyPageChecks(browser) {
   await finishAllocationTurn(host, "green");
   await host.waitForSelector(".allocation-waiting-panel .ready-columns");
   await capture(host, "16-sync-ready-page-mobile.png");
-  assert((await host.locator(".game-top-bar").count()) === 1, "Sync ready page uses the top game bar.");
-  await assertTopBarFullWidth(host, ".game-top-bar", "Sync ready page top bar spans the screen.");
-  assert((await host.locator(".game-top-player span").count()) === 0, "Sync ready top bar shows name only.");
+  assert((await host.locator(".player-bar").count()) === 1, "Sync ready page uses the player bar.");
+  await assertPlayerBarFullWidth(host, ".player-bar", "Sync ready page player bar spans the screen.");
+  assert((await host.locator(".player-bar-player span").count()) === 0, "Sync ready player bar shows name only.");
   assert((await host.locator(".ready-column").count()) === 2, "Sync ready page has two columns.");
   await assertReadyColumnHeadersLeftAligned(host);
   assert((await host.locator(".ready-player-row .connection-label").count()) === 0, "Sync ready rows do not include row-level status.");
