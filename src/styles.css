@@ -506,19 +506,32 @@ select {
 
 .player-row.compact-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) 96px 38px;
+  grid-template-columns: minmax(0, 1fr) 96px 38px;
 }
 
-.player-row.compact-row > strong {
-  justify-self: start;
+.player-identity {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.player-identity > strong {
+  min-width: 0;
   overflow: hidden;
-  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.player-row.compact-row > .player-identity {
+  justify-self: start;
+  width: 100%;
+  overflow: hidden;
+  text-align: left;
+}
+
 .player-row.compact-row > .connection-label {
-  grid-column: 3;
+  grid-column: 2;
   justify-self: end;
   width: 100%;
   text-align: right;
@@ -526,7 +539,7 @@ select {
 
 .player-row.compact-row > .icon-button,
 .player-row.compact-row > .icon-button-spacer {
-  grid-column: 4;
+  grid-column: 3;
   justify-self: end;
 }
 
@@ -1276,7 +1289,7 @@ select {
   }
 
   .player-row.compact-row {
-    grid-template-columns: auto minmax(0, 1fr) 88px 34px;
+    grid-template-columns: minmax(0, 1fr) 88px 34px;
   }
 
   .player-row input {

@@ -91,6 +91,26 @@ export type ReinforcementState = {
   territories: Record<string, TroopCounts>;
 };
 
+export type TurnCommand =
+  | {
+      type: "confirmSpy";
+      territoryId: string;
+    }
+  | {
+      type: "dismissSpy";
+    }
+  | {
+      type: "dismissNotification";
+      notificationId: string;
+    }
+  | {
+      type: "commitReinforcements";
+      reinforcement: ReinforcementState;
+    }
+  | {
+      type: "fortify";
+    };
+
 export type GameNotification =
   | {
       id: string;

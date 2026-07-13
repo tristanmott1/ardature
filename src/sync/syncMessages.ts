@@ -1,4 +1,4 @@
-import type { GameState, PlayerAllocation, PlayerColor, ReinforcementState, TroopCounts } from "../game/gameTypes";
+import type { GameState, PlayerAllocation, PlayerColor, ReinforcementState, TroopCounts, TurnCommand } from "../game/gameTypes";
 
 export type ArdatureSyncMessage =
   | {
@@ -35,26 +35,6 @@ export type ArdatureSyncMessage =
 
 const PLAYER_COLORS = ["green", "blue", "yellow", "red", "purple", "black"];
 const TROOP_TYPES = ["heavy", "cavalry", "elite", "leader"] as const;
-
-export type TurnCommand =
-  | {
-      type: "confirmSpy";
-      territoryId: string;
-    }
-  | {
-      type: "dismissSpy";
-    }
-  | {
-      type: "dismissNotification";
-      notificationId: string;
-    }
-  | {
-      type: "commitReinforcements";
-      reinforcement: ReinforcementState;
-    }
-  | {
-      type: "fortify";
-    };
 
 export function isArdatureSyncMessage(value: unknown): value is ArdatureSyncMessage {
   if (!value || typeof value !== "object") {

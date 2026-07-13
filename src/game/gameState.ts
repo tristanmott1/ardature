@@ -21,6 +21,7 @@ import type {
   TroopAllocationTimeLimit,
   TroopCounts,
   TroopType,
+  TurnCommand,
   TurnStage,
   TurnState,
 } from "./gameTypes";
@@ -963,6 +964,26 @@ export function applySyncDraftConfirm(state: GameState, playerId: string, territ
   }
 
   return confirmTerritoryPick(state, territoryId, now);
+}
+
+export function applySyncTurnCommand(state: GameState, playerId: string, command: TurnCommand): GameState {
+  if (command.type === "confirmSpy") {
+    return confirmSpyAttempt(startSpySelection(state, playerId), playerId, command.territoryId);
+  }
+
+  if (command.type === "dismissSpy") {
+    return dismissSpyIntel(state, playerId);
+  }
+
+  if (command.type === "dismissNotification") {
+    return dismissNotification(state, playerId, command.notificationId);
+  }
+
+  if (command.type === "commitReinforcements") {
+    return commitReinforcements(state, playerId, command.reinforcement);
+  }
+
+  return finishTurnWithFortify(cancelSpySelection(state), playerId);
 }
 
 export function applySyncPlayerQuit(state: GameState, playerId: string): GameState {

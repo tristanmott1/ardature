@@ -36,6 +36,7 @@ import {
   applySyncPlayerConnectionStatus,
   applySyncPlayerQuit,
   applySyncProfileUpdate,
+  applySyncTurnCommand,
   armyCountsForMarker,
   beginAllocationTurn,
   beginAllocationTimer,
@@ -49,7 +50,6 @@ import {
   capturedSpiesOnTerritory,
   clearLocalGame,
   clearSyncHostGame,
-  commitReinforcements,
   completeTimedOutSyncAllocations,
   confirmSpyAttempt,
   confirmTerritoryPick,
@@ -115,6 +115,7 @@ import type {
   TroopCounts,
   TroopAllocationTimeLimit,
   TroopType,
+  TurnCommand,
 } from "./game/gameTypes";
 import {
   gameConfigFromPreferences,
@@ -129,7 +130,7 @@ import { generatedMapConnections } from "./map/generated/mapConnections";
 import { MapView } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import type { GeneratedTerritoryData } from "./map/mapTypes";
-import { isArdatureSyncMessage, type ArdatureSyncMessage, type TurnCommand } from "./sync/syncMessages";
+import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
 import {
   SyncHostTransport,
   SyncJoinTransport,
@@ -1206,26 +1207,6 @@ function App() {
     setSyncMessage(status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting" : "Disconnected");
   }, []);
 
-  function applySyncTurnCommand(current: GameState, playerId: string, command: TurnCommand) {
-    if (command.type === "confirmSpy") {
-      return confirmSpyAttempt(startSpySelection(current, playerId), playerId, command.territoryId);
-    }
-
-    if (command.type === "dismissSpy") {
-      return dismissSpyIntel(current, playerId);
-    }
-
-    if (command.type === "dismissNotification") {
-      return dismissNotification(current, playerId, command.notificationId);
-    }
-
-    if (command.type === "commitReinforcements") {
-      return commitReinforcements(current, playerId, command.reinforcement);
-    }
-
-    return finishTurnWithFortify(cancelSpySelection(current), playerId);
-  }
-
   function addPlayer() {
     if (!draftName.trim() || game.players.length >= 6) {
       return;
@@ -2237,10 +2218,10 @@ function HomePanel({ onStartLocal, onStartSync }: { onStartLocal: () => void; on
 
 function PlayerIdentity({ color, name }: { color: PlayerColor | null; name: string }) {
   return (
-    <>
+    <span className="player-identity">
       <span className="player-dot" style={{ background: colorCss(color) }} />
       <strong>{name}</strong>
-    </>
+    </span>
   );
 }
 
