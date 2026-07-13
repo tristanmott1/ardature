@@ -254,6 +254,8 @@ Prefer compact controls:
 - small status icons or chips for host, connected, disconnected, locked, active picker, and timer state
 - confirmation dialogs for destructive actions that remove players, quit sync games, or end local games
 
+Shared form controls live in `src/ui/FormControls.tsx`: `PanelHeader`, `ColorSelect`, `ConfigSelectSection`, and `SelectField`. Setup/configuration screens should import these primitives instead of defining local select fields, color dropdowns, or panel headers.
+
 ## Map Rendering Model
 
 The app renders the map as one shared SVG coordinate system. This avoids gaps and coordinate drift while still letting the app treat each territory as an interactive component. The camera is the SVG `viewBox`, not a transformed map group, so every layer remains in generated map coordinates.

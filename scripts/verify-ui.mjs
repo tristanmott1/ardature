@@ -78,15 +78,17 @@ async function stopServer(processHandle) {
 }
 
 async function launchBrowser() {
+  const args = ["--disable-features=WebRtcHideLocalIpsWithMdns"];
+
   for (const executablePath of chromePaths) {
     try {
-      return await chromium.launch({ executablePath, headless: true });
+      return await chromium.launch({ args, executablePath, headless: true });
     } catch {
       // Try the next locally installed browser path.
     }
   }
 
-  return chromium.launch({ headless: true });
+  return chromium.launch({ args, headless: true });
 }
 
 async function runSourceChecks() {
@@ -116,6 +118,8 @@ async function runSourceChecks() {
   const syncMessagesSource = await readFile(new URL("../src/sync/syncMessages.ts", import.meta.url), "utf8");
   const qrCodeUiSource = await readFile(new URL("../src/sync/QrCodeUi.tsx", import.meta.url), "utf8");
   const syncTransportSource = await readFile(new URL("../src/sync/syncTransport.ts", import.meta.url), "utf8");
+  const verifySource = await readFile(new URL("../scripts/verify-ui.mjs", import.meta.url), "utf8");
+  const formControlsSource = await readFile(new URL("../src/ui/FormControls.tsx", import.meta.url), "utf8");
   const overlaysSource = await readFile(new URL("../src/ui/Overlays.tsx", import.meta.url), "utf8");
   const playerChromeSource = await readFile(new URL("../src/ui/PlayerChrome.tsx", import.meta.url), "utf8");
   const appArchitectureDocs = await readFile(new URL("../docs/app-architecture.md", import.meta.url), "utf8");
@@ -199,7 +203,7 @@ async function runSourceChecks() {
   assert(gameViewSource.includes("type TroopSectionMode") && gameViewSource.includes("function troopSectionModeForGame") && gameViewSource.includes('troopSection !== "allocationWaiting"') && !appSource.includes("showAllocationTroopSection"), "Overlay policy derives one troop-section mode, map freezing, and camera controls from one layout projection.");
   assert(appSource.includes("RotateCcw") && appSource.includes("restartPausedGame"), "Pause can restart to setup without closing transports.");
   assert(!appSource.includes('closeLabel="End game"'), "Pause modal does not use a close X to end the game.");
-  assert(appSource.includes("closeOnOutsidePress"), "Color dropdowns close on outside press.");
+  assert(formControlsSource.includes("closeOnOutsidePress"), "Color dropdowns close on outside press.");
   assert(stylesSource.includes(".sync-entry-panel") && stylesSource.includes("padding-bottom: 112px"), "Sync entry reserves color menu space.");
   assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".modal-scrim"), "Map camera controls stack below modal popups.");
   assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".draft-sheet-scrim"), "Map camera controls stack below draft sheets.");
@@ -223,6 +227,7 @@ async function runSourceChecks() {
   assert(syncTransportSource.includes("ardature-sync-recovery-offer") && syncTransportSource.includes("ardature-sync-recovery-answer"), "Sync transport has distinct recovery payload kinds.");
   assert(syncTransportSource.includes("ARR:") && syncTransportSource.includes("ARY:"), "Sync transport has distinct compact recovery QR prefixes.");
   assert(syncTransportSource.includes("hostColor: PlayerColor") && syncTransportSource.includes("playerColor: PlayerColor") && syncTransportSource.includes("playerColor: player.color") && appSource.includes("color: answer.hostColor") && appSource.includes("color: joinedPlayer.color"), "Sync QR setup identity always pairs player names with colors before rendering.");
+  assert(verifySource.includes("WebRtcHideLocalIpsWithMdns"), "UI verification disables mDNS-only WebRTC candidates for local headless sync handshakes.");
   assert(appSource.includes("Stop reconnecting") && appSource.includes("<Icon size={24} />"), "Joiner reconnecting UI offers a local stop option.");
   assert(appSource.includes('connectionStatus === "disconnected"') && appSource.includes("createRecoveryOffer(disconnectedSyncPlayers)"), "Host recovery QR slots are filtered from host disconnected state.");
   assert(appSource.includes("hostTransportRef.current = new SyncHostTransport") && appSource.includes("restoredSyncHost"), "Restored sync hosts rebuild transport for recovery QR generation.");
@@ -286,7 +291,7 @@ async function runSourceChecks() {
   assert(appSource.includes('from "./ui/PlayerChrome"') && playerChromeSource.includes("function PlayerIdentity") && (playerChromeSource.match(/className=\"player-dot\"/g) ?? []).length === 1 && !appSource.includes("function PlayerIdentity"), "Read-only player identity rows share one imported dot/name component.");
   assert(playerChromeSource.includes("function PlayerBar") && gameViewSource.includes("showPlayerBar") && appSource.includes("allocation-waiting-panel") && !appSource.includes("function PlayerBar"), "Game stages use the shared persistent player bar.");
   assert(gameViewSource.includes("function playerBarPlayerForGame") && gameViewSource.includes("function playerBarDraftProgress") && appSource.includes("const playerBarPlayer = playerBarPlayerForGame") && !appSource.includes("const playerBarIsDraft ="), "Persistent player-bar identity and progress use named helpers.");
-  assert(appSource.includes("function ConfigSelectSection") && (appSource.match(/className=\"config-section\"/g) ?? []).length === 1 && (appSource.match(/className=\"config-select-row\"/g) ?? []).length === 1, "Setup configuration sections share one section wrapper.");
+  assert(appSource.includes('from "./ui/FormControls"') && formControlsSource.includes("function ConfigSelectSection") && formControlsSource.includes("function SelectField") && formControlsSource.includes("function ColorSelect") && formControlsSource.includes("function PanelHeader") && !appSource.includes("function ConfigSelectSection"), "Setup form controls share imported form primitives.");
   assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
   assert(appSource.includes("TroopIconCount") && troopIconsSource.includes("troopIconSrc") && troopIconsSource.includes("function TroopIconImage"), "Allocation UI uses troop image icons.");
