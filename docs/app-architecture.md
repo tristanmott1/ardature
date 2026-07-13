@@ -187,7 +187,7 @@ Sync allocation waiting is not a troop-section mode. It is a status panel in the
 
 Pure game-stage projection rules live in `src/game/gameView.ts`. `App.tsx` should use that module for active overlay priority, selected territory priority, map press mode, player-bar identity/progress, notification visibility, sync snapshot redaction, and section layout. The app shell should wire state and events; it should not grow duplicate phase-condition clusters for those rules.
 
-Game-stage section UI lives in `src/ui/GameSections.tsx`: allocation placement, reinforcement placement, allocation waiting columns, read-only troop information, and the turn action bar. `App.tsx` chooses which section slot to render and passes callbacks/data into these section components; it should not define section panels inline.
+Game-stage section UI lives in `src/ui/GameSections.tsx`. The public troop surface is one `TroopSection` component with internal modes for initial allocation placement, reinforcement placement, and read-only troop information. Allocation waiting columns and the turn action bar remain separate section components because they are not troop-section modes. `App.tsx` chooses which section slot to render and passes callbacks/data into these section components; it should not define section panels inline or reach for separate allocation/reinforcement/map-info panels.
 
 Pre-game panel UI lives in `src/ui/SetupPanels.tsx`: home mode selection, sync entry/recovery slot selection, and local/sync setup configuration. Setup form primitives remain in `src/ui/FormControls.tsx`. `App.tsx` owns setup state changes and sync commands, but it should not define home/setup panel markup inline.
 

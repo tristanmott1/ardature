@@ -107,7 +107,7 @@ import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMess
 import { formatQrHandshakeError } from "./sync/syncErrors";
 import { QrScanner } from "./sync/QrCodeUi";
 import { ArmyBuildModal } from "./ui/ArmyBuildModal";
-import { AllocationPanel, AllocationWaitingPanel, GameMapPanel, ReinforcementPanel, TurnActionPanel } from "./ui/GameSections";
+import { AllocationWaitingPanel, TroopSection, TurnActionPanel } from "./ui/GameSections";
 import { ConfirmSheet, DecisionDialog, HandoffPanel, NotificationDialog } from "./ui/Overlays";
 import { PausePanel } from "./ui/PausePanel";
 import { PlayerBar } from "./ui/PlayerChrome";
@@ -814,19 +814,12 @@ function App() {
     }
 
     const localPlayer = { ...createPlayer(name), color: syncColor };
-    const joinTransport = new SyncJoinTransport({
-      onClosed: resetAppToHome,
-      onMessage: handleJoinerMessage,
-      onOpen: () => {
-        setSyncSession("connected");
-        setSyncMessage("Connected");
-        joinTransportRef.current?.send({
-          type: "profileUpdate",
-          name: localPlayer.name,
-          color: localPlayer.color,
-        });
-      },
-      onStatus: handleJoinerConnectionStatus,
+    const joinTransport = createJoinTransport(() => {
+      joinTransportRef.current?.send({
+        type: "profileUpdate",
+        name: localPlayer.name,
+        color: localPlayer.color,
+      });
     });
 
     setSyncCameraMode(null);
@@ -835,36 +828,17 @@ function App() {
     try {
       const answer = await joinTransport.createAnswer(value, localPlayer);
 
-      endSyncTransports();
-      joinTransportRef.current = joinTransport;
-      clearLocalGame();
-      setSyncRole("joiner");
-      setSyncSession("connecting");
-      setLocalPlayerId(localPlayer.id);
-      lastSnapshotRevisionRef.current = 0;
-      lastSentAllocationRef.current = "";
-      setSyncAnswerText(answer.answerText);
-      setSyncRecoveryOfferText("");
-      setSyncRecoverySlots([]);
-      setSyncQrText("");
-      setSyncEntryOpen(false);
-      setGame({
-        ...createInitialGameState(),
-        phase: "setup",
-        mode: "sync",
-        players: [
-          {
-            id: answer.hostPlayerId,
-            name: answer.hostName,
-            color: answer.hostColor,
-            nameLocked: true,
-            colorLocked: true,
-            connectionStatus: "connected",
-          },
-          localPlayer,
-        ],
-      });
-      setSyncMessage("Show this answer to the host");
+      startJoinerAnswerSession(joinTransport, localPlayer.id, answer.answerText, [
+        {
+          id: answer.hostPlayerId,
+          name: answer.hostName,
+          color: answer.hostColor,
+          nameLocked: true,
+          colorLocked: true,
+          connectionStatus: "connected",
+        },
+        localPlayer,
+      ]);
     } catch (error) {
       joinTransport.close();
       setSyncMessage(formatQrHandshakeError(error));
@@ -872,62 +846,71 @@ function App() {
   }
 
   async function chooseRecoveryPlayer(slot: SyncRecoveryPlayerSlot) {
-    const joinTransport = new SyncJoinTransport({
-      onClosed: resetAppToHome,
-      onMessage: handleJoinerMessage,
-      onOpen: () => {
-        setSyncSession("connected");
-        setSyncMessage("Connected");
-      },
-      onStatus: handleJoinerConnectionStatus,
-    });
+    const joinTransport = createJoinTransport();
 
     setSyncSession("connecting");
     setSyncMessage("Creating recovery answer");
     try {
       const answer = await joinTransport.createRecoveryAnswer(syncRecoveryOfferText, slot);
 
-      endSyncTransports();
-      joinTransportRef.current = joinTransport;
-      clearLocalGame();
-      setSyncRole("joiner");
-      setSyncSession("connecting");
-      setLocalPlayerId(slot.id);
-      lastSnapshotRevisionRef.current = 0;
-      lastSentAllocationRef.current = "";
-      setSyncAnswerText(answer.answerText);
-      setSyncQrText("");
-      setSyncRecoveryOfferText("");
-      setSyncRecoverySlots([]);
-      setSyncEntryOpen(false);
-      setGame({
-        ...createInitialGameState(),
-        phase: "setup",
-        mode: "sync",
-        players: [
-          {
-            id: answer.hostPlayerId,
-            name: answer.hostName,
-            color: answer.hostColor,
-            nameLocked: true,
-            colorLocked: true,
-            connectionStatus: "connected",
-          },
-          {
-            id: slot.id,
-            name: slot.name,
-            color: slot.color,
-            nameLocked: true,
-            colorLocked: true,
-            connectionStatus: "connected",
-          },
-        ],
-      });
-      setSyncMessage("Show this answer to the host");
+      startJoinerAnswerSession(joinTransport, slot.id, answer.answerText, [
+        {
+          id: answer.hostPlayerId,
+          name: answer.hostName,
+          color: answer.hostColor,
+          nameLocked: true,
+          colorLocked: true,
+          connectionStatus: "connected",
+        },
+        {
+          id: slot.id,
+          name: slot.name,
+          color: slot.color,
+          nameLocked: true,
+          colorLocked: true,
+          connectionStatus: "connected",
+        },
+      ]);
     } catch (error) {
       joinTransport.close();
       setSyncMessage(formatQrHandshakeError(error));
     }
+  }
+
+  function createJoinTransport(onOpen?: () => void) {
+    return new SyncJoinTransport({
+      onClosed: resetAppToHome,
+      onMessage: handleJoinerMessage,
+      onOpen: () => {
+        setSyncSession("connected");
+        setSyncMessage("Connected");
+        onOpen?.();
+      },
+      onStatus: handleJoinerConnectionStatus,
+    });
+  }
+
+  function startJoinerAnswerSession(joinTransport: SyncJoinTransport, playerId: string, answerText: string, players: GamePlayer[]) {
+    endSyncTransports();
+    joinTransportRef.current = joinTransport;
+    clearLocalGame();
+    setSyncRole("joiner");
+    setSyncSession("connecting");
+    setLocalPlayerId(playerId);
+    lastSnapshotRevisionRef.current = 0;
+    lastSentAllocationRef.current = "";
+    setSyncAnswerText(answerText);
+    setSyncQrText("");
+    setSyncRecoveryOfferText("");
+    setSyncRecoverySlots([]);
+    setSyncEntryOpen(false);
+    setGame({
+      ...createInitialGameState(),
+      phase: "setup",
+      mode: "sync",
+      players,
+    });
+    setSyncMessage("Show this answer to the host");
   }
 
   const handleHostMessage = useCallback((playerId: string, rawMessage: SyncWireMessage) => {
@@ -1818,24 +1801,26 @@ function App() {
       case "allocation":
         if (layout.troopSection.source === "reinforcement") {
           return turnActionPlayer && turnReinforcement ? (
-            <ReinforcementPanel
+            <TroopSection
               allocation={game.allocation}
               canFinish={Boolean(turnPlayerId && reinforcementComplete(game, turnPlayerId))}
+              capturedSpies={reinforcementCapturedSpies}
+              mode="reinforcement"
               onAdjustTroop={adjustSelectedReinforcementTroop}
               onFinish={finishCurrentReinforcements}
               player={turnActionPlayer}
               players={game.players}
               reinforcement={turnReinforcement}
-              capturedSpies={reinforcementCapturedSpies}
               selectedTerritory={turnSelectedTerritory}
             />
           ) : null;
         }
 
         return allocationPlayer ? (
-          <AllocationPanel
+          <TroopSection
             allocation={game.allocation}
             canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
+            mode="initialAllocation"
             onAdjustTroop={adjustSelectedTroop}
             onFinish={finishCurrentAllocation}
             ownership={ownership}
@@ -1846,8 +1831,9 @@ function App() {
       case "info":
         if (layout.troopSection.source === "turn") {
           return (
-            <GameMapPanel
+            <TroopSection
               capturedSpies={turnMapInspection.capturedSpies}
+              mode="info"
               players={game.players}
               selectedTerritory={turnMapInspection.selectedTerritory}
               troopBreakdown={turnMapInspection.troopBreakdown}
@@ -1858,8 +1844,9 @@ function App() {
         }
 
         return (
-          <GameMapPanel
+          <TroopSection
             capturedSpies={gameMapInspection.capturedSpies}
+            mode="info"
             players={game.players}
             selectedTerritory={gameMapInspection.selectedTerritory}
             troopBreakdown={gameMapInspection.troopBreakdown}

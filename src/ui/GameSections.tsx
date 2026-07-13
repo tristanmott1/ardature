@@ -21,7 +21,51 @@ const EMPTY_TROOPS: TroopCounts = {
   leader: 0,
 };
 
-export function AllocationPanel({
+type TroopSectionProps =
+  | {
+      allocation: GameState["allocation"];
+      canFinish: boolean;
+      mode: "initialAllocation";
+      onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
+      onFinish: () => void;
+      ownership: TerritoryOwnerMap;
+      player: GamePlayer;
+      selectedTerritoryId: string | null;
+    }
+  | {
+      allocation: GameState["allocation"];
+      canFinish: boolean;
+      capturedSpies: CapturedSpyView[];
+      mode: "reinforcement";
+      onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
+      onFinish: () => void;
+      player: GamePlayer;
+      players: GamePlayer[];
+      reinforcement: ReinforcementState;
+      selectedTerritory: GeneratedTerritoryData | null;
+    }
+  | {
+      capturedSpies: CapturedSpyView[];
+      mode: "info";
+      players: GamePlayer[];
+      selectedTerritory: GeneratedTerritoryData | null;
+      troopBreakdown: TroopCounts | null;
+      troopPlayerId?: string | null;
+      viewerId: string | null;
+    };
+
+export function TroopSection(props: TroopSectionProps) {
+  switch (props.mode) {
+    case "initialAllocation":
+      return <InitialAllocationTroopSection {...props} />;
+    case "reinforcement":
+      return <ReinforcementTroopSection {...props} />;
+    case "info":
+      return <InfoTroopSection {...props} />;
+  }
+}
+
+function InitialAllocationTroopSection({
   allocation,
   canFinish,
   onAdjustTroop,
@@ -29,15 +73,7 @@ export function AllocationPanel({
   ownership,
   player,
   selectedTerritoryId,
-}: {
-  allocation: GameState["allocation"];
-  canFinish: boolean;
-  onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
-  onFinish: () => void;
-  ownership: TerritoryOwnerMap;
-  player: GamePlayer;
-  selectedTerritoryId: string | null;
-}) {
+}: Extract<TroopSectionProps, { mode: "initialAllocation" }>) {
   const playerAllocation = allocation?.playerAllocations[player.id] ?? null;
 
   return (
@@ -121,7 +157,7 @@ export function TurnActionPanel({
   );
 }
 
-export function ReinforcementPanel({
+function ReinforcementTroopSection({
   allocation,
   canFinish,
   capturedSpies,
@@ -131,17 +167,7 @@ export function ReinforcementPanel({
   players,
   reinforcement,
   selectedTerritory,
-}: {
-  allocation: GameState["allocation"];
-  canFinish: boolean;
-  capturedSpies: CapturedSpyView[];
-  onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
-  onFinish: () => void;
-  player: GamePlayer;
-  players: GamePlayer[];
-  reinforcement: ReinforcementState;
-  selectedTerritory: GeneratedTerritoryData | null;
-}) {
+}: Extract<TroopSectionProps, { mode: "reinforcement" }>) {
   const selectedReinforcementTroops = selectedTerritory ? reinforcement.territories[selectedTerritory.id] ?? EMPTY_TROOPS : null;
   const selectedTroops = selectedTerritory
     ? addTroops(territoryTroops(allocation, selectedTerritory.id), selectedReinforcementTroops ?? EMPTY_TROOPS)
@@ -206,21 +232,14 @@ export function AllocationWaitingPanel({
   );
 }
 
-export function GameMapPanel({
+function InfoTroopSection({
   capturedSpies,
   players,
   selectedTerritory,
   troopBreakdown,
   troopPlayerId,
   viewerId,
-}: {
-  capturedSpies: CapturedSpyView[];
-  players: GamePlayer[];
-  selectedTerritory: GeneratedTerritoryData | null;
-  troopBreakdown: TroopCounts | null;
-  troopPlayerId?: string | null;
-  viewerId: string | null;
-}) {
+}: Extract<TroopSectionProps, { mode: "info" }>) {
   const troopPlayer = players.find((player) => player.id === (troopPlayerId ?? viewerId)) ?? players[0] ?? null;
 
   return (
