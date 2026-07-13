@@ -333,7 +333,7 @@ async function runSourceChecks() {
   assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
   assert(qrCodeUiSource.includes("data-qr-text") && qrCodeUiSource.includes("handlePaste") && (setupPanelsSource.includes("QrPanel") || pausePanelSource.includes("QrPanel")) && appSource.includes("QrScanner"), "QR UI is centralized and scanner supports paste-driven verification.");
   assert(!appSource.includes("QRCode.toString") && !appSource.includes("function QrScanner") && !appSource.includes("function QrPanel"), "App imports QR UI instead of defining scanner/rendering internals.");
-  assert(!pausePanelSource.includes('<div className="qr-placeholder"'), "Pause recovery never renders a blank QR placeholder without QR text.");
+  assert(!qrCodeUiSource.includes("qr-placeholder") && !pausePanelSource.includes("qr-placeholder") && !stylesSource.includes("qr-placeholder"), "QR UI never renders or styles a blank placeholder box.");
   assert(appSource.includes('from "./sync/syncErrors"') && syncErrorsSource.includes("function formatQrHandshakeError") && !appSource.includes("function formatQrHandshakeError"), "Sync QR error text formatting is imported instead of defined inline.");
   assert(appSource.includes("canAdvance={isSyncHost") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");

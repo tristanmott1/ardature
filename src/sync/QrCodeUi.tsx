@@ -46,9 +46,13 @@ export function QrPanel({ text }: { text: string }) {
     };
   }, [text]);
 
+  if (!svg) {
+    return null;
+  }
+
   return (
     <div className="qr-panel">
-      {svg ? <div className="qr-code" role="img" aria-label="QR code" data-qr-text={text} dangerouslySetInnerHTML={{ __html: svg }} /> : <div className="qr-placeholder" />}
+      <div className="qr-code" role="img" aria-label="QR code" data-qr-text={text} dangerouslySetInnerHTML={{ __html: svg }} />
     </div>
   );
 }

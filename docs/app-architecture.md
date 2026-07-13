@@ -207,7 +207,7 @@ Troop rows and captured-spy rows live in `src/ui/TroopControls.tsx`. Allocation,
 
 Army build modal UI and triangle marker math live in `src/ui/ArmyBuildModal.tsx`. `App.tsx` passes the current player, marker, projected troop counts, and submit handler into that component; it should not define triangle geometry or marker conversion inline.
 
-QR display and scanning UI lives in `src/sync/QrCodeUi.tsx`. `App.tsx` decides when sync QR flows are active, but QR SVG generation, camera scanning, paste-driven verification, torch support, and QR decode details stay inside that sync UI module.
+QR display and scanning UI lives in `src/sync/QrCodeUi.tsx`. `App.tsx` decides when sync QR flows are active, but QR SVG generation, camera scanning, paste-driven verification, torch support, and QR decode details stay inside that sync UI module. `QrPanel` renders only an actual QR SVG; it must not render or style a blank placeholder box while SVG generation is pending.
 
 The `Map` section is always the main visual section. It sits below the troop section when one is visible, otherwise below the player bar. It sits above the action section when one is visible, otherwise above the bottom of the screen. Pan, zoom, return-to-map, and auto-focus controls are available whenever no popup, modal, sheet, handoff, pause, scanner, notification, army-build modal, or confirmation dialog covers the map. Active overlays hide the map camera buttons and disable manual pan/zoom until dismissed. Normal section content, including the sync allocation waiting columns, must not create a separate camera-control exception.
 

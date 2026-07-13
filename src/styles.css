@@ -1106,8 +1106,7 @@ select {
   justify-items: center;
 }
 
-.qr-code,
-.qr-placeholder {
+.qr-code {
   width: min(260px, 62vw);
   aspect-ratio: 1;
   overflow: hidden;
