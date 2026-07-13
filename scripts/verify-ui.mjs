@@ -135,6 +135,8 @@ async function runSourceChecks() {
   const troopControlsSource = await readFile(new URL("../src/ui/TroopControls.tsx", import.meta.url), "utf8");
   const appArchitectureDocs = await readFile(new URL("../docs/app-architecture.md", import.meta.url), "utf8");
   const setupDraftDocs = await readFile(new URL("../docs/setup-draft-sync-v1.md", import.meta.url), "utf8");
+  const gameplayTurnsDocs = await readFile(new URL("../docs/gameplay-turns-v1.md", import.meta.url), "utf8");
+  const gameSpecDocs = await readFile(new URL("../GAME_SPEC.md", import.meta.url), "utf8");
   const mapWidth = generatedNumber(mapDataSource, "width");
   const mapHeight = generatedNumber(mapDataSource, "height");
   const sourceWidth = generatedNumber(mapDataSource, "sourceWidth");
@@ -163,8 +165,31 @@ async function runSourceChecks() {
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
   assert(!mapDataSource.includes("Infinity"), "Generated map data has no Infinity values.");
   assert((mapDataSource.match(/id: "/g) ?? []).length === 42, "Generated app data has 42 playable territories.");
-  assert(!/[ÃÂ�]/.test(`${setupPanelsSource}\n${mapDataSource}\n${manifestSource}`), "User-facing app title and territory data contain no mojibake.");
-  assert(setupPanelsSource.includes("Ardatúrë") && manifestSource.includes("Ardatúrë") && mapDataSource.includes('name: "Lórien"') && mapDataSource.includes('name: "Sea of Rhûn"') && mapDataSource.includes('name: "Udûn"') && mapDataSource.includes('name: "Drúwaith Iaur"'), "User-facing names preserve required special characters.");
+  const userFacingNameSources = [
+    indexSource,
+    manifestSource,
+    setupPanelsSource,
+    mapDataSource,
+    notificationTextSource,
+    gameplayTurnsDocs,
+    gameSpecDocs,
+  ].join("\n");
+  const mojibakePattern = new RegExp("[\\u00c3\\u00c2\\ufffd]");
+  assert(!mojibakePattern.test(userFacingNameSources), "User-facing app title, territory data, notifications, and docs contain no mojibake.");
+  assert(!/\b(Rhun|Lorien|Udun|Druwaith)\b/.test(userFacingNameSources), "User-facing names do not use stale unaccented variants.");
+  assert(
+    indexSource.includes("<title>Ardatúrë</title>") &&
+      setupPanelsSource.includes("Ardatúrë") &&
+      manifestSource.includes("Ardatúrë") &&
+      mapDataSource.includes('name: "Lórien"') &&
+      mapDataSource.includes('name: "Sea of Rhûn"') &&
+      mapDataSource.includes('name: "Udûn"') &&
+      mapDataSource.includes('name: "Drúwaith Iaur"') &&
+      notificationTextSource.includes('rhun: "Rhûn"') &&
+      gameplayTurnsDocs.includes("| Rhûn | 4 heavy |") &&
+      gameSpecDocs.includes("| Rhûn | 4 heavy |"),
+    "User-facing names preserve required special characters.",
+  );
   assert(territoryLookupSource.includes("territoryForId") && !appSource.includes("generatedMapData.territories.find") && !gameSectionsSource.includes("generatedMapData.territories.find") && !gameViewSource.includes("new Map<string, GeneratedTerritoryData>"), "Territory lookup uses one shared generated-data helper.");
   assert(mapWidth === sourceWidth * 10 + 3000 && mapHeight === sourceHeight * 10 + 3000, "Generated app data includes the 1500-unit display frame.");
   assert(
@@ -212,6 +237,7 @@ async function runSourceChecks() {
   assert(gameTypesSource.includes('type: "dismissNotification"') && gameTypesSource.includes("notificationId: string") && syncMessagesSource.includes('command.type === "dismissNotification"') && appSource.includes('sendTurnCommand({ type: "dismissNotification", notificationId: currentNotification.id })'), "Sync joiners dismiss queued notifications through the host by notification id.");
   assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && gameTypesSource.includes("minTurnNumber: number") && appSource.includes("visibleNotification") && gameViewSource.includes('game.mode === "local" && game.phase === "turnHandoff"') && gameViewSource.includes("game.turn.turnNumber >= notification.minTurnNumber"), "Queued local notifications wait until after handoff.");
   assert(gameViewSource.includes("[viewerId]: game.notifications[viewerId] ?? []"), "Sync snapshots include only the viewer's notification queue.");
+  assert(gameStateSource.includes("function startTurnReinforcements") && gameStateSource.includes("function fortifyAndFinishTurn") && appSource.includes("startTurnReinforcements(current") && appSource.includes("fortifyAndFinishTurn(current") && !appSource.includes("startReinforcements(cancelSpySelection(current)") && !appSource.includes("finishTurnWithFortify(cancelSpySelection(current)"), "Turn action cleanup is composed in game-state helpers instead of App.");
   assert(!appSource.includes("spyCaptureNoticeFromTurnChange") && !appSource.includes("SpyCaptureNotice"), "Old effect-based spy capture notices are removed.");
   assert(appSource.includes("type MapSelectionState") && appSource.includes("const [mapSelections, setMapSelections]") && appSource.includes("pendingDraftTerritoryId") && appSource.includes("allocationSelectedTerritoryId") && appSource.includes("gameMapSelectedTerritoryId"), "App keeps local map selections in one explicit UI state model.");
   assert(!appSource.includes("setPendingDraftTerritoryId") && !appSource.includes("setAllocationSelectedTerritoryId") && !appSource.includes("setGameMapSelectedTerritoryId") && !appSource.includes("setTurnSelectedTerritoryId") && !appSource.includes("setPendingSpyTerritoryId"), "App does not preserve old per-selection setter wiring.");

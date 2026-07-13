@@ -229,7 +229,7 @@ Owning every territory in a region grants that region's reinforcement bonus duri
 | Rhovanion | 5 elite |
 | Gondor | 5 cavalry |
 | Rohan | 3 cavalry |
-| Rhun | 4 heavy |
+| Rhûn | 4 heavy |
 | Mordor | 3 heavy |
 
 ## Information Visibility
@@ -395,7 +395,7 @@ The active player receives fixed bonus troops for each full region they own at t
 | Rhovanion | 5 elite |
 | Gondor | 5 cavalry |
 | Rohan | 3 cavalry |
-| Rhun | 4 heavy |
+| Rhûn | 4 heavy |
 | Mordor | 3 heavy |
 
 The player does not choose the breakdown of region bonus troops. Region bonus troops are additive fixed troops, using the same fixed-troop pool mechanics as troops inherited from removed players.

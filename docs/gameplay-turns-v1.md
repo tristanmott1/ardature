@@ -216,7 +216,7 @@ A region bonus is awarded only when the player owns every playable territory in 
 | Rhovanion | 5 elite |
 | Gondor | 5 cavalry |
 | Rohan | 3 cavalry |
-| Rhun | 4 heavy |
+| Rhûn | 4 heavy |
 | Mordor | 3 heavy |
 
 The army-build modal shows total reinforcement troops above the triangle, including both controllable troops and fixed region bonus troops. Only the territory-budget troops respond to the triangle marker.

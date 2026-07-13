@@ -447,6 +447,8 @@ Player names and colors travel together in QR answers and host-authored snapshot
 
 During sync gameplay turns, inactive devices render only a read-only/explore-style map from their own viewer perspective. They do not see another player's pending selections, automatic focus, confirmation sheets, provisional reinforcement edits, or successful spy intel. They receive visible updates only when the host broadcasts committed facts, such as finalized reinforcements, future resolved attacks, fortify/end-turn, or player removal. A failed spy is the one defender-facing spy event: the defender receives a local notification that they captured the active player's spy in the target territory.
 
+Turn action helpers in `src/game/gameState.ts` should own composed game-state cleanup. For example, starting reinforcements and ending the turn with fortify both clear transient spy selection inside game-state helpers; `App.tsx` should call those complete actions rather than composing `cancelSpySelection(...)` with another state transition inline.
+
 Spy and region notifications are not local toast effects. They are authoritative per-player queues stored in `GameState`, persisted with active games, and dismissed one at a time. The sync host stores every player's queue, while viewer-specific snapshots include only the receiving player's queue. Local mode shows queued notifications only on the affected player's turn or handoff; sync mode can deliver the affected player's queue after reconnect because the host remains source of truth.
 
 Notification wording lives in `src/game/notificationText.ts`. `App.tsx` renders the active notification overlay, but it should not define notification text formatting inline.

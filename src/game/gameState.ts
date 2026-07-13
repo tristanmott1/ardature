@@ -681,6 +681,10 @@ export function startReinforcements(state: GameState, playerId: string): GameSta
   };
 }
 
+export function startTurnReinforcements(state: GameState, playerId: string): GameState {
+  return startReinforcements(cancelSpySelection(state), playerId);
+}
+
 export function updateReinforcementMarker(state: GameState, playerId: string, marker: ArmyMarker): GameState {
   const reinforcement = state.turn?.reinforcement;
   if (state.phase !== "turn" || !state.turn || state.turn.currentPlayerId !== playerId || state.turn.stage !== "reinforcementBuild" || !reinforcement || reinforcement.buildSubmitted) {
@@ -866,6 +870,10 @@ export function finishTurnWithFortify(state: GameState, playerId: string): GameS
   }
 
   return advanceTurn(state);
+}
+
+export function fortifyAndFinishTurn(state: GameState, playerId: string): GameState {
+  return finishTurnWithFortify(cancelSpySelection(state), playerId);
 }
 
 export function completeTimedOutSyncAllocations(state: GameState): GameState {

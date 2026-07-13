@@ -32,8 +32,8 @@ import {
   dismissNotification,
   dismissSpyIntel,
   emptyOwnedTerritoryCount,
+  fortifyAndFinishTurn,
   finishReinforcements,
-  finishTurnWithFortify,
   finishAllocationForPlayer,
   isSetupValid,
   pauseDraftTimer,
@@ -52,7 +52,7 @@ import {
   advanceAfterDraft,
   startDraft,
   startGameMapAfterAllocation,
-  startReinforcements,
+  startTurnReinforcements,
   startSpySelection,
   submitArmyBuild,
   submitReinforcementBuild,
@@ -1251,7 +1251,7 @@ function App() {
     }
 
     updateMapSelections({ pendingSpyTerritoryId: null });
-    setGame((current) => startReinforcements(cancelSpySelection(current), turnPlayerId));
+    setGame((current) => startTurnReinforcements(current, turnPlayerId));
   }
 
   function changeReinforcementMarker(marker: ArmyMarker) {
@@ -1367,7 +1367,7 @@ function App() {
       return;
     }
 
-    setGame((current) => finishTurnWithFortify(cancelSpySelection(current), turnPlayerId));
+    setGame((current) => fortifyAndFinishTurn(current, turnPlayerId));
   }
 
   function pauseDraft() {

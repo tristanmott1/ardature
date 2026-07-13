@@ -6,7 +6,7 @@ const REGION_NAMES: Record<string, string> = {
   gondor: "Gondor",
   mordor: "Mordor",
   rhovanion: "Rhovanion",
-  rhun: "Rhun",
+  rhun: "Rhûn",
   rohan: "Rohan",
 };
 
