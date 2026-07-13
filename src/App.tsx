@@ -129,7 +129,7 @@ import { generatedMapConnections } from "./map/generated/mapConnections";
 import { MapView } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import type { GeneratedTerritoryData } from "./map/mapTypes";
-import { isArdatureSyncMessage, type TurnCommand } from "./sync/syncMessages";
+import { isArdatureSyncMessage, type ArdatureSyncMessage, type TurnCommand } from "./sync/syncMessages";
 import {
   SyncHostTransport,
   SyncJoinTransport,
@@ -145,6 +145,8 @@ type SyncRole = "host" | "joiner" | null;
 type SyncSessionState = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected" | "hostEnded";
 
 type SyncCameraMode = "hostOffer" | "joinAnswer" | null;
+
+type JoinerSyncCommand = Extract<ArdatureSyncMessage, { type: "profileUpdate" | "draftConfirm" | "allocationUpdate" | "turnCommand" | "quit" }>;
 
 type ActiveOverlay =
   | { type: "syncBlocked" }
@@ -654,7 +656,7 @@ function App() {
     }
 
     lastSentAllocationRef.current = serialized;
-    joinTransportRef.current?.send({ type: "allocationUpdate", allocation });
+    sendJoinerCommand({ type: "allocationUpdate", allocation });
   }, [canSendSyncCommand, game.allocation, isSyncJoiner, localPlayerId]);
 
   useEffect(() => {
@@ -717,7 +719,7 @@ function App() {
       return;
     }
 
-    joinTransportRef.current?.send({ type: "draftConfirm", territoryId: pendingDraftTerritoryId });
+    sendJoinerCommand({ type: "draftConfirm", territoryId: pendingDraftTerritoryId });
     setPendingDraftTerritoryId(null);
   }, [canControlActivePlayer, canSendSyncCommand, game.draft?.timerEndsAt, game.phase, isSyncJoiner, now, pendingDraftTerritoryId]);
 
@@ -1267,7 +1269,7 @@ function App() {
         ...current,
         players: current.players.map((candidate) => candidate.id === playerId ? { ...candidate, ...allowed } : candidate),
       }));
-      joinTransportRef.current?.send({
+      sendJoinerCommand({
         type: "profileUpdate",
         name: allowed.name,
         color: allowed.color,
@@ -1409,6 +1411,19 @@ function App() {
         });
   }
 
+  function sendJoinerCommand(command: JoinerSyncCommand) {
+    if (!isSyncJoiner || !canSendSyncCommand) {
+      return false;
+    }
+
+    joinTransportRef.current?.send(command);
+    return true;
+  }
+
+  function sendTurnCommand(command: TurnCommand) {
+    return sendJoinerCommand({ type: "turnCommand", command });
+  }
+
   function pressTerritory(territoryId: string) {
     switch (mapPressMode) {
       case "allocation":
@@ -1449,12 +1464,9 @@ function App() {
     }
 
     if (isSyncJoiner) {
-      if (!canSendSyncCommand) {
-        return;
+      if (sendJoinerCommand({ type: "draftConfirm", territoryId: pendingDraftTerritoryId })) {
+        setPendingDraftTerritoryId(null);
       }
-
-      joinTransportRef.current?.send({ type: "draftConfirm", territoryId: pendingDraftTerritoryId });
-      setPendingDraftTerritoryId(null);
       return;
     }
 
@@ -1584,7 +1596,7 @@ function App() {
     setTurnSelectedTerritoryId(null);
 
     if (isSyncJoiner) {
-      joinTransportRef.current?.send({ type: "turnCommand", command: { type: "commitReinforcements", reinforcement } });
+      sendTurnCommand({ type: "commitReinforcements", reinforcement });
       setGame((current) => finishReinforcements(current, turnPlayerId));
       return;
     }
@@ -1615,7 +1627,7 @@ function App() {
     setPendingSpyTerritoryId(null);
 
     if (isSyncJoiner) {
-      joinTransportRef.current?.send({ type: "turnCommand", command: { type: "confirmSpy", territoryId } });
+      sendTurnCommand({ type: "confirmSpy", territoryId });
       return;
     }
 
@@ -1633,7 +1645,7 @@ function App() {
     }
 
     if (isSyncJoiner) {
-      joinTransportRef.current?.send({ type: "turnCommand", command: { type: "dismissSpy" } });
+      sendTurnCommand({ type: "dismissSpy" });
     }
 
     setGame((current) => dismissSpyIntel(current, turnPlayerId));
@@ -1645,7 +1657,7 @@ function App() {
     }
 
     if (isSyncJoiner) {
-      joinTransportRef.current?.send({ type: "turnCommand", command: { type: "dismissNotification", notificationId: currentNotification.id } });
+      sendTurnCommand({ type: "dismissNotification", notificationId: currentNotification.id });
     }
 
     setGame((current) => dismissNotification(current, currentNotificationPlayerId, currentNotification.id));
@@ -1660,7 +1672,7 @@ function App() {
     clearTurnSelections();
 
     if (isSyncJoiner) {
-      joinTransportRef.current?.send({ type: "turnCommand", command: { type: "fortify" } });
+      sendTurnCommand({ type: "fortify" });
       return;
     }
 
@@ -1823,7 +1835,7 @@ function App() {
     }
 
     if (isSyncJoiner) {
-      joinTransportRef.current?.send({ type: "quit" });
+      sendJoinerCommand({ type: "quit" });
     }
 
     resetAppToHome();
