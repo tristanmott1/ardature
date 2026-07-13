@@ -191,6 +191,8 @@ Game-stage section UI lives in `src/ui/GameSections.tsx`: allocation placement, 
 
 Pre-game panel UI lives in `src/ui/SetupPanels.tsx`: home mode selection, sync entry/recovery slot selection, and local/sync setup configuration. Setup form primitives remain in `src/ui/FormControls.tsx`. `App.tsx` owns setup state changes and sync commands, but it should not define home/setup panel markup inline.
 
+Small setup helpers that are not app wiring live in `src/game/setupUtils.ts`, such as first-available color selection and list reordering. Sync QR error text formatting lives in `src/sync/syncErrors.ts`. `App.tsx` should call these helpers rather than defining one-off utility functions at the bottom of the file.
+
 Troop and spy icon rendering lives in `src/game/troopIcons.tsx`. Screens should reuse `TroopIconCount`, `TroopIconImage`, `troopIconSrc`, `spyIconSrc`, and `troopName` instead of defining their own troop asset paths, labels, or side mappings.
 
 Troop rows and captured-spy rows live in `src/ui/TroopControls.tsx`. Allocation, reinforcement, army build, and map-inspection screens should import `TroopPlacementRows`, `TroopCountRow`, and `CapturedSpyRow` instead of defining local add/remove row markup or captured-spy layouts.

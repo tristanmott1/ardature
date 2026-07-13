@@ -101,6 +101,7 @@ async function runSourceChecks() {
   const gameViewSource = await readFile(new URL("../src/game/gameView.ts", import.meta.url), "utf8");
   const notificationTextSource = await readFile(new URL("../src/game/notificationText.ts", import.meta.url), "utf8");
   const playerColorsSource = await readFile(new URL("../src/game/playerColors.ts", import.meta.url), "utf8");
+  const setupUtilsSource = await readFile(new URL("../src/game/setupUtils.ts", import.meta.url), "utf8");
   const troopIconsSource = await readFile(new URL("../src/game/troopIcons.tsx", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapConnectionsSource = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
@@ -119,6 +120,7 @@ async function runSourceChecks() {
   const blueTerritoryPreviewSource = await readFile(new URL("../maps/previews/territories-blue.svg", import.meta.url), "utf8");
   const syncMessagesSource = await readFile(new URL("../src/sync/syncMessages.ts", import.meta.url), "utf8");
   const qrCodeUiSource = await readFile(new URL("../src/sync/QrCodeUi.tsx", import.meta.url), "utf8");
+  const syncErrorsSource = await readFile(new URL("../src/sync/syncErrors.ts", import.meta.url), "utf8");
   const syncTransportSource = await readFile(new URL("../src/sync/syncTransport.ts", import.meta.url), "utf8");
   const verifySource = await readFile(new URL("../scripts/verify-ui.mjs", import.meta.url), "utf8");
   const formControlsSource = await readFile(new URL("../src/ui/FormControls.tsx", import.meta.url), "utf8");
@@ -196,6 +198,7 @@ async function runSourceChecks() {
   assert(gameStateSource.includes("applyRegionControlChanges") && gameStateSource.includes('type: "regionGained"') && gameStateSource.includes('type: "regionLost"'), "Region notifications come from authoritative control transitions.");
   assert(gameStateSource.includes('type: "spyLost"') && gameStateSource.includes('type: "spyCaptured"') && appSource.includes("NotificationDialog") && !appSource.includes("GameNotificationDialog"), "Spy capture notifications use the queued blocking notification flow.");
   assert(appSource.includes('from "./game/notificationText"') && notificationTextSource.includes("function notificationMessage") && !appSource.includes("function notificationMessage"), "Notification text formatting is imported instead of defined inline.");
+  assert(appSource.includes('from "./game/setupUtils"') && setupUtilsSource.includes("function firstAvailableColor") && setupUtilsSource.includes("function moveItem") && !appSource.includes("function firstAvailableColor") && !appSource.includes("function moveItem"), "Setup list helpers are imported instead of defined inline.");
   assert(gameTypesSource.includes('status: "available" | "captured" | "dead"') && gameTypesSource.includes("custodianPlayerId: string | null") && !gameTypesSource.includes("capturedTerritoryId: string | null"), "Spy state stores explicit status, territory, and custodian.");
   assert(gameStateSource.includes("capturedSpiesOnTerritory") && gameStateSource.includes("restoreCapturedSpies") && gameStateSource.includes("custodianPlayerId: territoryOwnerId"), "Captured spies are selected by territory and custody follows ownership changes.");
   assert(gameSectionsSource.includes("CapturedSpyRow") && troopControlsSource.includes("function CapturedSpyRow") && troopIconsSource.includes('captured ? "-captured" : ""') && troopIconsSource.includes("ownerColor={player.color}"), "Captured spies and troop icons use owner-colored circular icon rendering.");
@@ -280,6 +283,7 @@ async function runSourceChecks() {
   assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
   assert(qrCodeUiSource.includes("data-qr-text") && qrCodeUiSource.includes("handlePaste") && (setupPanelsSource.includes("QrPanel") || pausePanelSource.includes("QrPanel")) && appSource.includes("QrScanner"), "QR UI is centralized and scanner supports paste-driven verification.");
   assert(!appSource.includes("QRCode.toString") && !appSource.includes("function QrScanner") && !appSource.includes("function QrPanel"), "App imports QR UI instead of defining scanner/rendering internals.");
+  assert(appSource.includes('from "./sync/syncErrors"') && syncErrorsSource.includes("function formatQrHandshakeError") && !appSource.includes("function formatQrHandshakeError"), "Sync QR error text formatting is imported instead of defined inline.");
   assert(appSource.includes("canAdvance={isSyncHost") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
   assert(syncTransportSource.includes("isAnswer && fields.length === 6") && syncTransportSource.includes("isRecoveryAnswer && fields.length === 6") && syncTransportSource.includes("playerColor: playerColor as PlayerColor"), "Compact sync QR answers carry validated player colors.");

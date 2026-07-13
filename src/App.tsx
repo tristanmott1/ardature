@@ -1,7 +1,6 @@
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LOCAL_GAME_KEY,
-  PLAYER_COLORS,
   applySyncDraftConfirm,
   adjustReinforcementTroop,
   adjustTerritoryTroop,
@@ -82,6 +81,7 @@ import {
   saveSyncProfilePreference,
   syncProfileFromPreferences,
 } from "./game/setupPreferences";
+import { firstAvailableColor, moveItem } from "./game/setupUtils";
 import { notificationMessage } from "./game/notificationText";
 import {
   activeOverlayForState,
@@ -104,6 +104,7 @@ import { generatedMapData } from "./map/generated/mapData";
 import { MapView } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
+import { formatQrHandshakeError } from "./sync/syncErrors";
 import { QrScanner } from "./sync/QrCodeUi";
 import { ArmyBuildModal } from "./ui/ArmyBuildModal";
 import { AllocationPanel, AllocationWaitingPanel, GameMapPanel, ReinforcementPanel, TurnActionPanel } from "./ui/GameSections";
@@ -2039,28 +2040,6 @@ function App() {
       {activeOverlayElement}
     </main>
   );
-}
-
-function formatQrHandshakeError(error: unknown) {
-  const message = error instanceof Error ? error.message : "the handshake failed.";
-
-  if (message.startsWith("this ")) {
-    return `QR found, but ${message}`;
-  }
-
-  return `QR found, but the handshake failed. ${message}`;
-}
-
-function firstAvailableColor(players: GamePlayer[]) {
-  const usedColors = new Set(players.map((player) => player.color).filter(Boolean));
-  return PLAYER_COLORS.find((color) => !usedColors.has(color)) ?? null;
-}
-
-function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
-  const nextItems = [...items];
-  const [item] = nextItems.splice(fromIndex, 1);
-  nextItems.splice(toIndex, 0, item);
-  return nextItems;
 }
 
 export default App;
