@@ -177,6 +177,22 @@ type MapSelectionContext = {
   turnSelectedTerritoryId: string | null;
 };
 
+type TerritoryInspection = {
+  capturedSpies: CapturedSpyView[];
+  selectedTerritory: GeneratedTerritoryData | null;
+  troopBreakdown: TroopCounts | null;
+  troopPlayerId: string | null;
+};
+
+type TerritoryInspectionContext = {
+  game: GameState;
+  ownership: TerritoryOwnerMap;
+  revealedTerritory?: GeneratedTerritoryData | null;
+  selectedTerritory: GeneratedTerritoryData | null;
+  selectedTerritoryId: string | null;
+  viewerId: string | null;
+};
+
 function firstActiveOverlay(...overlays: Array<ActiveOverlay | null>): ActiveOverlay | null {
   for (const overlay of overlays) {
     if (overlay) {
@@ -319,7 +335,6 @@ function App() {
   const gameMapSelectedTerritory = gameMapSelectedTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === gameMapSelectedTerritoryId) ?? null
     : null;
-  const gameMapSelectedOwnTerritory = Boolean(gameMapSelectedTerritoryId && turnViewerId && ownership[gameMapSelectedTerritoryId] === turnViewerId);
   const gameMapViewer = game.players.find((player) => player.id === turnViewerId) ?? game.players[0] ?? null;
   const turnActionPlayer = currentTurnPlayer;
   const turnReinforcement = game.turn?.reinforcement ?? null;
@@ -337,23 +352,21 @@ function App() {
   const spyCapturePercent = pendingSpyTerritoryId && turnPlayerId ? spyCaptureProbability(game, turnPlayerId, pendingSpyTerritoryId) : null;
   const currentNotificationPlayerId = notificationPlayerId(game, syncRole, localPlayerId, turnViewerId);
   const currentNotification = visibleNotification(game, currentNotificationPlayerId, syncJoinerBlocked);
-  const turnMapSelectedTerritory = spyIntelTerritory ?? gameMapSelectedTerritory;
-  const turnMapTroopBreakdown = spyIntelTerritory
-    ? territoryTroops(game.allocation, spyIntelTerritory.id)
-    : gameMapSelectedTerritoryId && gameMapSelectedOwnTerritory
-      ? territoryTroops(game.allocation, gameMapSelectedTerritoryId)
-      : null;
-  const turnMapTroopPlayerId = spyIntelTerritory
-    ? ownership[spyIntelTerritory.id]
-    : turnViewerId;
-  const gameMapCapturedSpies = gameMapSelectedTerritoryId && gameMapSelectedOwnTerritory
-    ? capturedSpiesOnTerritory(game, gameMapSelectedTerritoryId)
-    : [];
-  const turnMapCapturedSpies = spyIntelTerritory
-    ? capturedSpiesOnTerritory(game, spyIntelTerritory.id)
-    : gameMapSelectedTerritoryId && gameMapSelectedOwnTerritory
-      ? capturedSpiesOnTerritory(game, gameMapSelectedTerritoryId)
-      : [];
+  const gameMapInspection = territoryInspectionForViewer({
+    game,
+    ownership,
+    selectedTerritory: gameMapSelectedTerritory,
+    selectedTerritoryId: gameMapSelectedTerritoryId,
+    viewerId: turnViewerId,
+  });
+  const turnMapInspection = territoryInspectionForViewer({
+    game,
+    ownership,
+    revealedTerritory: spyIntelTerritory,
+    selectedTerritory: gameMapSelectedTerritory,
+    selectedTerritoryId: gameMapSelectedTerritoryId,
+    viewerId: turnViewerId,
+  });
   const reinforcementCapturedSpies = turnSelectedTerritory ? capturedSpiesOnTerritory(game, turnSelectedTerritory.id) : [];
   const viewerPendingTerritory = pendingDraftTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === pendingDraftTerritoryId) ?? null
@@ -395,14 +408,14 @@ function App() {
   const showAllocationTroopSection = showTroopSection && canShowAllocationSection;
   const showAllocationWaitingSection = showTroopSection && game.mode === "sync" && game.phase === "allocation" && localAllocationReady;
   const hideMapCameraControls = hasActiveOverlay || showAllocationWaitingSection;
-  const showGameMapInfoSection = showTroopSection && game.phase === "gameMap" && Boolean(gameMapSelectedTerritory);
+  const showGameMapInfoSection = showTroopSection && game.phase === "gameMap" && Boolean(gameMapInspection.selectedTerritory);
   const showTurnActionSection = showActionSection && game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer);
   const showReinforcementTroopSection = showTroopSection && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace";
   const showTurnInfoSection = game.phase === "turn" &&
     game.turn?.stage !== "reinforcementBuild" &&
     game.turn?.stage !== "reinforcementPlace" &&
     game.turn?.stage !== "spyTarget" &&
-    Boolean(turnMapSelectedTerritory) &&
+    Boolean(turnMapInspection.selectedTerritory) &&
     showTroopSection;
   const playerBarPlayer = playerBarPlayerForGame({
     activeDraftPlayer: active,
@@ -1993,10 +2006,11 @@ function App() {
     if (showGameMapInfoSection) {
       return (
         <GameMapPanel
-          capturedSpies={gameMapCapturedSpies}
+          capturedSpies={gameMapInspection.capturedSpies}
           players={game.players}
-          selectedTerritory={gameMapSelectedTerritory}
-          troopBreakdown={gameMapSelectedTerritoryId && gameMapSelectedOwnTerritory ? territoryTroops(game.allocation, gameMapSelectedTerritoryId) : null}
+          selectedTerritory={gameMapInspection.selectedTerritory}
+          troopBreakdown={gameMapInspection.troopBreakdown}
+          troopPlayerId={gameMapInspection.troopPlayerId}
           viewerId={gameMapViewerId}
         />
       );
@@ -2032,11 +2046,11 @@ function App() {
     if (showTurnInfoSection) {
       return (
         <GameMapPanel
-          capturedSpies={turnMapCapturedSpies}
+          capturedSpies={turnMapInspection.capturedSpies}
           players={game.players}
-          selectedTerritory={turnMapSelectedTerritory}
-          troopBreakdown={turnMapTroopBreakdown}
-          troopPlayerId={turnMapTroopPlayerId}
+          selectedTerritory={turnMapInspection.selectedTerritory}
+          troopBreakdown={turnMapInspection.troopBreakdown}
+          troopPlayerId={turnMapInspection.troopPlayerId}
           viewerId={turnViewerId}
         />
       );
@@ -3673,6 +3687,40 @@ function selectedTerritoryForMap({
   }
 
   return gameMapSelectedTerritoryId;
+}
+
+function territoryInspectionForViewer({
+  game,
+  ownership,
+  revealedTerritory,
+  selectedTerritory,
+  selectedTerritoryId,
+  viewerId,
+}: TerritoryInspectionContext): TerritoryInspection {
+  if (revealedTerritory) {
+    return {
+      capturedSpies: capturedSpiesOnTerritory(game, revealedTerritory.id),
+      selectedTerritory: revealedTerritory,
+      troopBreakdown: territoryTroops(game.allocation, revealedTerritory.id),
+      troopPlayerId: ownership[revealedTerritory.id] ?? null,
+    };
+  }
+
+  if (!selectedTerritory || !selectedTerritoryId || !viewerId || ownership[selectedTerritoryId] !== viewerId) {
+    return {
+      capturedSpies: [],
+      selectedTerritory,
+      troopBreakdown: null,
+      troopPlayerId: viewerId,
+    };
+  }
+
+  return {
+    capturedSpies: capturedSpiesOnTerritory(game, selectedTerritoryId),
+    selectedTerritory,
+    troopBreakdown: territoryTroops(game.allocation, selectedTerritoryId),
+    troopPlayerId: viewerId,
+  };
 }
 
 function playerBarTimerRemaining(game: GameState, now: number) {
