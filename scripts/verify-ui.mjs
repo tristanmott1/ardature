@@ -180,6 +180,7 @@ async function runSourceChecks() {
   assert(appSource.includes("[viewerId]: game.notifications[viewerId] ?? []"), "Sync snapshots include only the viewer's notification queue.");
   assert(!appSource.includes("spyCaptureNoticeFromTurnChange") && !appSource.includes("SpyCaptureNotice"), "Old effect-based spy capture notices are removed.");
   assert(appSource.includes("pendingDraftTerritoryId") && appSource.includes("allocationSelectedTerritoryId") && appSource.includes("gameMapSelectedTerritoryId"), "App keeps map selections in local UI state.");
+  assert(appSource.includes("function selectedTerritoryForMap") && appSource.includes("const viewerSelectedTerritoryId = selectedTerritoryForMap") && appSource.includes('game.turn?.stage === "spyIntel"'), "Map selected-territory priority is centralized in one helper.");
   assert(!gameTypesSource.includes("pendingTerritoryId") && !gameStateSource.includes("pendingTerritoryId"), "Shared draft state does not store pending visual selection.");
   assert(!gameTypesSource.includes("selectedTerritoryId") && !gameStateSource.includes("selectedTerritoryId: null") && !gameStateSource.includes("allocation.selectedTerritoryId"), "Shared allocation state does not store selected visual territory.");
   assert(!syncMessagesSource.includes("draftPending"), "Sync messages do not share pending draft selections.");

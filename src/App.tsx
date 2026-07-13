@@ -165,6 +165,18 @@ type PlayerBarContext = {
   pausedReturnPhase: AppPhase | null;
 };
 
+type MapSelectionContext = {
+  allocationPlayerId: string | null;
+  allocationSelectedTerritoryId: string | null;
+  canControlActivePlayer: boolean;
+  canControlTurnPlayer: boolean;
+  game: GameState;
+  gameMapSelectedTerritoryId: string | null;
+  pendingDraftTerritoryId: string | null;
+  pendingSpyTerritoryId: string | null;
+  turnSelectedTerritoryId: string | null;
+};
+
 function firstActiveOverlay(...overlays: Array<ActiveOverlay | null>): ActiveOverlay | null {
   for (const overlay of overlays) {
     if (overlay) {
@@ -279,17 +291,17 @@ function App() {
   const canControlActivePlayer = game.mode === "local" || (game.mode === "sync" && canSendSyncCommand && active?.id === localPlayerId);
   const canControlTurnPlayer = game.mode === "local" || (game.mode === "sync" && canSendSyncCommand && game.turn?.currentPlayerId === localPlayerId);
   const turnPlayerId = game.turn?.currentPlayerId ?? null;
-  const viewerSelectedTerritoryId = game.phase === "draft"
-    ? canControlActivePlayer ? pendingDraftTerritoryId : null
-    : game.phase === "allocation" && allocationPlayerId
-      ? allocationSelectedTerritoryId
-      : game.phase === "turn" && canControlTurnPlayer && (game.turn?.stage === "reinforcementPlace" || game.turn?.stage === "spyTarget" || game.turn?.stage === "spyIntel")
-        ? game.turn.stage === "spyIntel"
-          ? game.turn.spyIntel?.targetTerritoryId ?? null
-          : pendingSpyTerritoryId ?? turnSelectedTerritoryId
-      : game.phase === "gameMap" || game.phase === "turn"
-        ? gameMapSelectedTerritoryId
-        : null;
+  const viewerSelectedTerritoryId = selectedTerritoryForMap({
+    allocationPlayerId,
+    allocationSelectedTerritoryId,
+    canControlActivePlayer,
+    canControlTurnPlayer,
+    game,
+    gameMapSelectedTerritoryId,
+    pendingDraftTerritoryId,
+    pendingSpyTerritoryId,
+    turnSelectedTerritoryId,
+  });
   const territoryStates = useMemo(
     () => createTerritoryStates(game.players, ownership, viewerSelectedTerritoryId),
     [game.players, ownership, viewerSelectedTerritoryId],
@@ -3623,6 +3635,44 @@ function createTroopMarkers(game: GameState, allocationPlayerId: string | null, 
         : null;
     })
     .filter((marker): marker is NonNullable<typeof marker> => Boolean(marker));
+}
+
+function selectedTerritoryForMap({
+  allocationPlayerId,
+  allocationSelectedTerritoryId,
+  canControlActivePlayer,
+  canControlTurnPlayer,
+  game,
+  gameMapSelectedTerritoryId,
+  pendingDraftTerritoryId,
+  pendingSpyTerritoryId,
+  turnSelectedTerritoryId,
+}: MapSelectionContext) {
+  if (game.phase === "draft") {
+    return canControlActivePlayer ? pendingDraftTerritoryId : null;
+  }
+
+  if (game.phase === "allocation") {
+    return allocationPlayerId ? allocationSelectedTerritoryId : null;
+  }
+
+  if (game.phase !== "turn") {
+    return game.phase === "gameMap" ? gameMapSelectedTerritoryId : null;
+  }
+
+  if (!canControlTurnPlayer) {
+    return gameMapSelectedTerritoryId;
+  }
+
+  if (game.turn?.stage === "spyIntel") {
+    return game.turn.spyIntel?.targetTerritoryId ?? null;
+  }
+
+  if (game.turn?.stage === "reinforcementPlace" || game.turn?.stage === "spyTarget") {
+    return pendingSpyTerritoryId ?? turnSelectedTerritoryId;
+  }
+
+  return gameMapSelectedTerritoryId;
 }
 
 function playerBarTimerRemaining(game: GameState, now: number) {
