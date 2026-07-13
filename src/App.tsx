@@ -337,13 +337,7 @@ function App() {
   const viewerPendingTerritory = pendingDraftTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === pendingDraftTerritoryId) ?? null
     : null;
-  const timerRemaining = game.phase === "draft" && game.draft?.timerEndsAt
-    ? Math.max(0, game.draft.timerEndsAt - now)
-    : game.phase === "allocation" && game.allocation?.timerEndsAt
-      ? Math.max(0, game.allocation.timerEndsAt - now)
-      : game.phase === "allocation" || game.phase === "allocationHandoff" || (game.phase === "paused" && Boolean(game.allocation))
-        ? game.allocation?.timerRemainingMs ?? null
-        : game.draft?.timerRemainingMs ?? null;
+  const timerRemaining = playerBarTimerRemaining(game, now);
   const canControlSetup = game.mode === "local" || syncRole === "host";
   const canDraftOnMap = !syncJoinerBlocked &&
     game.phase === "draft" &&
@@ -3635,6 +3629,22 @@ function createTroopMarkers(game: GameState, allocationPlayerId: string | null, 
         : null;
     })
     .filter((marker): marker is NonNullable<typeof marker> => Boolean(marker));
+}
+
+function playerBarTimerRemaining(game: GameState, now: number) {
+  if (game.phase === "draft" && game.draft?.timerEndsAt) {
+    return Math.max(0, game.draft.timerEndsAt - now);
+  }
+
+  if (game.phase === "allocation" && game.allocation?.timerEndsAt) {
+    return Math.max(0, game.allocation.timerEndsAt - now);
+  }
+
+  if (game.phase === "allocation" || game.phase === "allocationHandoff" || (game.phase === "paused" && Boolean(game.allocation))) {
+    return game.allocation?.timerRemainingMs ?? null;
+  }
+
+  return game.draft?.timerRemainingMs ?? null;
 }
 
 function territoryTroopTotalWithTurnPreview(game: GameState, territoryId: string) {

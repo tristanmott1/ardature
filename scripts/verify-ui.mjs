@@ -242,7 +242,7 @@ async function runSourceChecks() {
   assert(gameStateSource.includes('value === "allocationWaiting" ? "allocation"'), "Old allocationWaiting saves normalize to allocation.");
   assert(appSource.includes('game.mode === "sync" && game.phase === "allocation" && localAllocationReady'), "Ready page is derived from this device's ready state.");
   assert(appSource.includes("function ReadyColumn") && appSource.includes('title="Ready"') && appSource.includes('title="Waiting"'), "Allocation ready page uses ready and waiting columns.");
-  assert(appSource.includes("showPlayerBar") && appSource.includes("timerRemaining={timerRemaining}"), "A persistent player bar keeps relevant timers visible.");
+  assert(appSource.includes("const timerRemaining = playerBarTimerRemaining(game, now)") && appSource.includes("timerRemaining={timerRemaining}"), "A persistent player bar keeps relevant timers visible through one timer helper.");
   assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
   assert(appSource.includes("data-qr-text") && appSource.includes("handlePaste"), "QR scanner supports paste-driven verification.");
   assert(appSource.includes("canAdvance={syncRole === \"host\"") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
