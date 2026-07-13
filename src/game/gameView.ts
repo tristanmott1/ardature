@@ -94,6 +94,19 @@ type MapPressModeContext = {
   syncJoinerBlocked: boolean;
 };
 
+type ActiveOverlayContext = {
+  canShowDraftConfirm: boolean;
+  game: GameState;
+  hasCurrentNotification: boolean;
+  hasSpyConfirm: boolean;
+  isEndGamePromptOpen: boolean;
+  isRestartGamePromptOpen: boolean;
+  needsAllocationArmyBuild: boolean;
+  needsReinforcementArmyBuild: boolean;
+  syncCameraMode: boolean;
+  syncJoinerBlocked: boolean;
+};
+
 type GameStageLayoutContext = {
   activeOverlay: ActiveOverlay | null;
   canControlTurnPlayer: boolean;
@@ -107,7 +120,35 @@ type GameStageLayoutContext = {
   turnMapInspection: TerritoryInspection;
 };
 
-export function firstActiveOverlay(...overlays: Array<ActiveOverlay | null>): ActiveOverlay | null {
+export function activeOverlayForState({
+  canShowDraftConfirm,
+  game,
+  hasCurrentNotification,
+  hasSpyConfirm,
+  isEndGamePromptOpen,
+  isRestartGamePromptOpen,
+  needsAllocationArmyBuild,
+  needsReinforcementArmyBuild,
+  syncCameraMode,
+  syncJoinerBlocked,
+}: ActiveOverlayContext): ActiveOverlay | null {
+  return firstActiveOverlay(
+    syncJoinerBlocked ? { type: "syncBlocked" } : null,
+    syncCameraMode ? { type: "scanner" } : null,
+    isEndGamePromptOpen ? { type: "decision", decision: "exit" } : null,
+    isRestartGamePromptOpen ? { type: "decision", decision: "restart" } : null,
+    game.phase === "paused" ? { type: "pause" } : null,
+    game.phase === "allocationHandoff" ? { type: "handoff", handoff: "allocation" } : null,
+    game.phase === "turnHandoff" ? { type: "handoff", handoff: "turn" } : null,
+    needsAllocationArmyBuild ? { type: "armyBuild", build: "allocation" } : null,
+    needsReinforcementArmyBuild ? { type: "armyBuild", build: "reinforcement" } : null,
+    hasCurrentNotification ? { type: "notification" } : null,
+    hasSpyConfirm ? { type: "confirm", confirm: "spy" } : null,
+    canShowDraftConfirm ? { type: "confirm", confirm: "draft" } : null,
+  );
+}
+
+function firstActiveOverlay(...overlays: Array<ActiveOverlay | null>): ActiveOverlay | null {
   for (const overlay of overlays) {
     if (overlay) {
       return overlay;

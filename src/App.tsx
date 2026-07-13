@@ -113,8 +113,8 @@ import {
   syncProfileFromPreferences,
 } from "./game/setupPreferences";
 import {
+  activeOverlayForState,
   createTroopMarkers,
-  firstActiveOverlay,
   gameStageLayoutForState,
   mapPressModeForGame,
   notificationPlayerId,
@@ -325,21 +325,19 @@ function App() {
   const canShowAllocationSection = Boolean(canUseAllocationPhase && allocationBuildSubmitted && allocationSelectedTerritoryId);
   const canShowReinforcementSection = Boolean(game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace" && turnSelectedTerritory);
   const needsAllocationArmyBuild = Boolean(canUseAllocationPhase && allocationPlayer && !allocationBuildSubmitted);
-  const needsReinforcementArmyBuild = game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementBuild";
-  const activeOverlay = firstActiveOverlay(
-    syncJoinerBlocked ? { type: "syncBlocked" } : null,
-    syncCameraMode ? { type: "scanner" } : null,
-    isEndGamePromptOpen ? { type: "decision", decision: "exit" } : null,
-    isRestartGamePromptOpen ? { type: "decision", decision: "restart" } : null,
-    game.phase === "paused" ? { type: "pause" } : null,
-    game.phase === "allocationHandoff" ? { type: "handoff", handoff: "allocation" } : null,
-    game.phase === "turnHandoff" ? { type: "handoff", handoff: "turn" } : null,
-    needsAllocationArmyBuild ? { type: "armyBuild", build: "allocation" } : null,
-    needsReinforcementArmyBuild ? { type: "armyBuild", build: "reinforcement" } : null,
-    currentNotification ? { type: "notification" } : null,
-    spyTargetTerritory && spyCapturePercent !== null ? { type: "confirm", confirm: "spy" } : null,
-    canShowConfirm ? { type: "confirm", confirm: "draft" } : null,
-  );
+  const needsReinforcementArmyBuild = Boolean(game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementBuild");
+  const activeOverlay = activeOverlayForState({
+    canShowDraftConfirm: canShowConfirm,
+    game,
+    hasCurrentNotification: Boolean(currentNotification),
+    hasSpyConfirm: Boolean(spyTargetTerritory && spyCapturePercent !== null),
+    isEndGamePromptOpen,
+    isRestartGamePromptOpen,
+    needsAllocationArmyBuild,
+    needsReinforcementArmyBuild,
+    syncCameraMode: Boolean(syncCameraMode),
+    syncJoinerBlocked,
+  });
   const playerBarPlayer = playerBarPlayerForGame({
     activeDraftPlayer: active,
     allocationPlayer,

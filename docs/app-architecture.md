@@ -185,7 +185,7 @@ In code, the troop section should stay driven by one explicit section mode. It m
 
 Sync allocation waiting is not a troop-section mode. It is a status panel in the same upper game-stage slot below the player bar: ready/waiting columns are visible, troop rows are absent, map camera controls are hidden, and the map remains inert as a waiting surface.
 
-Pure game-stage projection rules live in `src/game/gameView.ts`. `App.tsx` should use that module for selected territory priority, map press mode, player-bar identity/progress, notification visibility, sync snapshot redaction, and section layout. The app shell should wire state and events; it should not grow duplicate phase-condition clusters for those rules.
+Pure game-stage projection rules live in `src/game/gameView.ts`. `App.tsx` should use that module for active overlay priority, selected territory priority, map press mode, player-bar identity/progress, notification visibility, sync snapshot redaction, and section layout. The app shell should wire state and events; it should not grow duplicate phase-condition clusters for those rules.
 
 Troop and spy icon rendering lives in `src/game/troopIcons.tsx`. Screens should reuse `TroopIconCount`, `TroopIconImage`, `troopIconSrc`, `spyIconSrc`, and `troopName` instead of defining their own troop asset paths, labels, or side mappings.
 
