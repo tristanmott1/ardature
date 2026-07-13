@@ -96,6 +96,7 @@ async function runSourceChecks() {
   const gameStateSource = await readFile(new URL("../src/game/gameState.ts", import.meta.url), "utf8");
   const gameTypesSource = await readFile(new URL("../src/game/gameTypes.ts", import.meta.url), "utf8");
   const gameViewSource = await readFile(new URL("../src/game/gameView.ts", import.meta.url), "utf8");
+  const troopIconsSource = await readFile(new URL("../src/game/troopIcons.tsx", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapConnectionsSource = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
   const hitTargetSource = await readFile(new URL("../src/map/components/HitTargetLayer.tsx", import.meta.url), "utf8");
@@ -175,7 +176,7 @@ async function runSourceChecks() {
   assert(gameStateSource.includes('type: "spyLost"') && gameStateSource.includes('type: "spyCaptured"') && appSource.includes("GameNotificationDialog"), "Spy capture notifications use the queued blocking notification flow.");
   assert(gameTypesSource.includes('status: "available" | "captured" | "dead"') && gameTypesSource.includes("custodianPlayerId: string | null") && !gameTypesSource.includes("capturedTerritoryId: string | null"), "Spy state stores explicit status, territory, and custodian.");
   assert(gameStateSource.includes("capturedSpiesOnTerritory") && gameStateSource.includes("restoreCapturedSpies") && gameStateSource.includes("custodianPlayerId: territoryOwnerId"), "Captured spies are selected by territory and custody follows ownership changes.");
-  assert(appSource.includes("CapturedSpyRow") && appSource.includes('captured ? "-captured" : ""') && appSource.includes("ownerColor={player.color}"), "Captured spies and troop icons use owner-colored circular icon rendering.");
+  assert(appSource.includes("CapturedSpyRow") && troopIconsSource.includes('captured ? "-captured" : ""') && troopIconsSource.includes("ownerColor={player.color}"), "Captured spies and troop icons use owner-colored circular icon rendering.");
   assert(gameTypesSource.includes('type: "dismissNotification"') && gameTypesSource.includes("notificationId: string") && syncMessagesSource.includes('command.type === "dismissNotification"') && appSource.includes('sendTurnCommand({ type: "dismissNotification", notificationId: currentNotification.id })'), "Sync joiners dismiss queued notifications through the host by notification id.");
   assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && gameTypesSource.includes("minTurnNumber: number") && appSource.includes("visibleNotification") && gameViewSource.includes('game.mode === "local" && game.phase === "turnHandoff"') && gameViewSource.includes("game.turn.turnNumber >= notification.minTurnNumber"), "Queued local notifications wait until after handoff.");
   assert(gameViewSource.includes("[viewerId]: game.notifications[viewerId] ?? []"), "Sync snapshots include only the viewer's notification queue.");
@@ -278,7 +279,8 @@ async function runSourceChecks() {
   assert(appSource.includes("function ConfigSelectSection") && (appSource.match(/className=\"config-section\"/g) ?? []).length === 1 && (appSource.match(/className=\"config-select-row\"/g) ?? []).length === 1, "Setup configuration sections share one section wrapper.");
   assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
-  assert(appSource.includes("TroopIconCount") && appSource.includes("troopIconSrc"), "Allocation UI uses troop image icons.");
+  assert(appSource.includes("TroopIconCount") && troopIconsSource.includes("troopIconSrc") && troopIconsSource.includes("function TroopIconImage"), "Allocation UI uses troop image icons.");
+  assert(!appSource.includes("function TroopIconCount") && !appSource.includes("const TROOP_ICON_BY_SIDE") && !appSource.includes("function troopIconSrc"), "App imports troop icon primitives instead of defining duplicate troop asset mappings.");
   assert(stylesSource.includes("box-sizing: border-box") && stylesSource.includes("border: var(--icon-ring-width, 4px) solid var(--owner-color") && stylesSource.includes("background: #ffffff") && !stylesSource.includes("padding: 2px;"), "Troop icons use one border-box owner ring with a white interior and no padding gap.");
   assert(appSource.includes("const iconRingWidth = 4") && appSource.includes("stroke: colorCss(player.color)") && appSource.includes('fill: "#ffffff"'), "Army triangle icons match the shared owner-ring geometry.");
   assert(!appSource.includes("TroopBadge") && !appSource.includes("troopLabel"), "Old letter troop badge components are removed.");
