@@ -60,6 +60,13 @@ export type UpperGameSectionMode =
 
 export type ActionSectionMode = "turn" | null;
 
+export type OverlayBehavior = {
+  freezesMap: boolean;
+  hidesActionSection: boolean;
+  hidesCameraControls: boolean;
+  hidesUpperSection: boolean;
+};
+
 export type GameStageLayout = {
   actionSection: ActionSectionMode;
   canUseMapCameraControls: boolean;
@@ -256,6 +263,24 @@ function firstActiveOverlay(...overlays: Array<ActiveOverlay | null>): ActiveOve
   }
 
   return null;
+}
+
+export function overlayBehaviorForOverlay(activeOverlay: ActiveOverlay | null): OverlayBehavior {
+  if (!activeOverlay) {
+    return {
+      freezesMap: false,
+      hidesActionSection: false,
+      hidesCameraControls: false,
+      hidesUpperSection: false,
+    };
+  }
+
+  return {
+    freezesMap: true,
+    hidesActionSection: true,
+    hidesCameraControls: true,
+    hidesUpperSection: true,
+  };
 }
 
 export function gameViewContextForState({
@@ -549,10 +574,9 @@ export function gameStageLayoutForState({
   turnMapInspection,
   turnSelectedTerritoryId,
 }: GameStageLayoutContext): GameStageLayout {
-  const hasActiveOverlay = Boolean(activeOverlay);
+  const overlayBehavior = overlayBehaviorForOverlay(activeOverlay);
   const isGameStage = game.phase !== "home" && game.phase !== "setup";
-  const hideSections = hasActiveOverlay;
-  const upperSection = hideSections
+  const upperSection = overlayBehavior.hidesUpperSection
     ? null
     : upperSectionModeForGame({
         canControlTurnPlayer,
@@ -565,12 +589,12 @@ export function gameStageLayoutForState({
         turnMapInspection,
         turnSelectedTerritoryId,
       });
-  const actionSection = !hideSections && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer ? "turn" : null;
+  const actionSection = !overlayBehavior.hidesActionSection && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer ? "turn" : null;
 
   return {
     actionSection,
-    canUseMapCameraControls: isGameStage && !hideSections,
-    freezeMapGestures: hasActiveOverlay,
+    canUseMapCameraControls: isGameStage && !overlayBehavior.hidesCameraControls,
+    freezeMapGestures: overlayBehavior.freezesMap,
     showGameStageLayout: isGameStage,
     showPlayerBar: isGameStage && Boolean(playerBarPlayer),
     upperSection,
