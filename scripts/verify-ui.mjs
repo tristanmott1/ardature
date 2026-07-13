@@ -191,6 +191,7 @@ async function runSourceChecks() {
   assert(appSource.includes('from "./ui/PausePanel"') && pausePanelSource.includes("function PausePanel") && !appSource.includes("function PausePanel"), "Pause overlay UI is imported instead of defined inline.");
   assert(appSource.includes('from "./ui/SyncSessionBlocker"') && syncSessionBlockerSource.includes("function SyncSessionBlocker") && !appSource.includes("function SyncSessionBlocker"), "Sync blocked overlay UI is imported instead of defined inline.");
   assert(appSource.includes('from "./ui/GameSections"') && appSource.includes("TroopSection") && gameSectionsSource.includes("function TroopSection") && gameSectionsSource.includes("function TurnActionPanel") && !appSource.includes("AllocationPanel") && !appSource.includes("ReinforcementPanel") && !appSource.includes("GameMapPanel"), "Game-stage troop UI is rendered through one imported TroopSection.");
+  assert(!gameSectionsSource.includes("allocation-panel") && !gameSectionsSource.includes("reinforcement-panel") && !gameSectionsSource.includes("game-map-panel") && !stylesSource.includes(".game-map-panel"), "Troop section DOM classes use troop-section modes instead of old phase-panel names.");
   assert(appSource.includes("function renderTroopSection()") && appSource.includes("function renderActionSection()") && appSource.includes("{troopSectionElement}") && appSource.includes("{actionSectionElement}"), "App renders game-stage sections through explicit section slots.");
   assert(!troopControlsSource.includes("Select a territory"), "Allocation troop controls do not render a placeholder sliver when no territory is selected.");
   assert(gameSectionsSource.includes('className="troop-icon-button turn-spy-button"') && gameSectionsSource.includes("turn-spy-spacer") && !gameSectionsSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling and keeps a spacer when lost.");
@@ -1278,22 +1279,22 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".army-build-modal .troop-count-bubble").last().textContent())?.trim() === "0", "Reinforcement leader slot shows zero.");
   await page.getByRole("button", { name: "Confirm army" }).click();
   await page.waitForSelector(".army-build-modal", { state: "detached" });
-  assert((await page.locator(".reinforcement-panel").count()) === 0, "Reinforcement troop section is hidden before selecting a territory.");
+  assert((await page.locator(".troop-section-reinforcement").count()) === 0, "Reinforcement troop section is hidden before selecting a territory.");
   const reinforcementTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="yellow"]').first().getAttribute("data-territory-fill");
   assert(reinforcementTerritoryId, "Current player still owns a territory for reinforcements.");
   await clickTerritory(page, reinforcementTerritoryId);
-  await page.waitForSelector(".reinforcement-panel .allocation-target");
+  await page.waitForSelector(".troop-section-reinforcement .allocation-target");
   await capture(page, "17-reinforcement-placement-mobile.png");
-  assert((await page.locator(".reinforcement-panel .troop-action-row").count()) === 2, "Reinforcement placement has add and remove rows.");
-  assert((await page.locator(".reinforcement-panel .troop-action-row").nth(0).locator(".troop-icon-button").count()) === 4, "Reinforcement add row keeps all four troop icon slots.");
-  assert(await page.locator(".reinforcement-panel .troop-action-row").nth(0).getByRole("button", { name: "Add leader" }).isDisabled(), "Reinforcement leader add slot is shown as zero and disabled.");
-  const reinforcementBottomCounts = (await page.locator(".reinforcement-panel .troop-action-row").nth(1).locator(".troop-count-bubble").allTextContents()).map(Number);
+  assert((await page.locator(".troop-section-reinforcement .troop-action-row").count()) === 2, "Reinforcement placement has add and remove rows.");
+  assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(0).locator(".troop-icon-button").count()) === 4, "Reinforcement add row keeps all four troop icon slots.");
+  assert(await page.locator(".troop-section-reinforcement .troop-action-row").nth(0).getByRole("button", { name: "Add leader" }).isDisabled(), "Reinforcement leader add slot is shown as zero and disabled.");
+  const reinforcementBottomCounts = (await page.locator(".troop-section-reinforcement .troop-action-row").nth(1).locator(".troop-count-bubble").allTextContents()).map(Number);
   assert(reinforcementBottomCounts.reduce((sum, count) => sum + count, 0) > 0, "Reinforcement remove row shows existing territory troops.");
-  assert((await page.locator(".reinforcement-panel .troop-action-row").nth(1).locator(".troop-icon-button:not(:disabled)").count()) === 0, "Existing troops shown during reinforcement cannot be removed.");
+  assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(1).locator(".troop-icon-button:not(:disabled)").count()) === 0, "Existing troops shown during reinforcement cannot be removed.");
   await clickTerritory(page, reinforcementTerritoryId);
-  assert((await page.locator(".reinforcement-panel").count()) === 0, "Pressing the selected reinforcement territory again hides the troop section.");
+  assert((await page.locator(".troop-section-reinforcement").count()) === 0, "Pressing the selected reinforcement territory again hides the troop section.");
   await clickTerritory(page, reinforcementTerritoryId);
-  await page.waitForSelector(".reinforcement-panel .allocation-target");
+  await page.waitForSelector(".troop-section-reinforcement .allocation-target");
   await finishReinforcementPlacement(page);
   await page.waitForSelector(".turn-action-panel");
   await capture(page, "18-turn-actions-mobile.png");
@@ -1361,30 +1362,30 @@ async function runReadOnlyVisibilityChecks(page) {
   assert((await page.locator('[data-troop-marker="minhiriath"]').count()) === 1, "Read-only map shows Minhiriath as a connected opponent troop total.");
   assert((await page.locator('[data-troop-marker="nurn"]').count()) === 0, "Read-only map hides distant opponent troop total.");
   await clickTerritory(page, "shire");
-  assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Read-only map shows own territory breakdown.");
+  assert((await page.locator(".troop-section-info .troop-icon-count").count()) === 4, "Read-only map shows own territory breakdown.");
   await clickTerritory(page, "shire");
-  assert((await page.locator(".game-map-panel").count()) === 0, "Pressing the selected read-only territory again hides the troop section.");
+  assert((await page.locator(".troop-section-info").count()) === 0, "Pressing the selected read-only territory again hides the troop section.");
   await clickTerritory(page, "bree");
-  assert((await page.locator(".game-map-panel .selected-territory-name").getByText("Bree").count()) === 1, "Read-only map shows connected opponent territory name.");
+  assert((await page.locator(".troop-section-info .selected-territory-name").getByText("Bree").count()) === 1, "Read-only map shows connected opponent territory name.");
   await assertUnknownTroopRow(page, "Read-only map shows connected opponent troop icons as unknown.");
   await clickTerritory(page, "nurn");
-  assert((await page.locator(".game-map-panel .selected-territory-name").getByText("Nurn").count()) === 1, "Read-only map shows distant opponent territory name.");
+  assert((await page.locator(".troop-section-info .selected-territory-name").getByText("Nurn").count()) === 1, "Read-only map shows distant opponent territory name.");
   await assertUnknownTroopRow(page, "Read-only map shows distant opponent troop icons as unknown.");
   await clickTerritory(page, "nurn");
-  assert((await page.locator(".game-map-panel").count()) === 0, "Pressing the selected opponent territory again hides the troop section.");
+  assert((await page.locator(".troop-section-info").count()) === 0, "Pressing the selected opponent territory again hides the troop section.");
   await page.getByRole("button", { name: "Change viewer" }).click();
   assert((await page.locator('[data-troop-marker="nurn"]').count()) === 1, "Cycling local viewer shows that player's own distant territory total.");
   await clickTerritory(page, "nurn");
-  assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Cycling local viewer reveals that player's own distant breakdown.");
+  assert((await page.locator(".troop-section-info .troop-icon-count").count()) === 4, "Cycling local viewer reveals that player's own distant breakdown.");
 }
 
 async function assertUnknownTroopRow(page, message) {
-  const bubbles = await page.locator(".game-map-panel .troop-count-bubble").evaluateAll((nodes) =>
+  const bubbles = await page.locator(".troop-section-info .troop-count-bubble").evaluateAll((nodes) =>
     nodes.map((node) => (node.textContent ?? "").trim()),
   );
 
   assert(bubbles.length === 4 && bubbles.every((text) => text === "?"), message);
-  assert((await page.locator('.game-map-panel .troop-icon-count[data-muted="true"]').count()) === 4, `${message} Unknown troop icons are muted.`);
+  assert((await page.locator('.troop-section-info .troop-icon-count[data-muted="true"]').count()) === 4, `${message} Unknown troop icons are muted.`);
 }
 
 async function dismissQueuedNotifications(page) {
@@ -1409,22 +1410,22 @@ async function runTurnSpyOutcomeChecks(browser) {
   await success.getByRole("button", { name: "Spy" }).click();
   assert((await success.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Toggling spy off restores the default action instruction.");
   await clickTerritory(success, "shire");
-  assert((await success.locator(".game-map-panel .selected-territory-name").getByText("Shire").count()) === 1, "Toggling spy off returns territory taps to normal inspection.");
-  assert((await success.locator(".game-map-panel .troop-icon-count").count()) === 4, "Normal inspection still shows own troop breakdown after spy is toggled off.");
+  assert((await success.locator(".troop-section-info .selected-territory-name").getByText("Shire").count()) === 1, "Toggling spy off returns territory taps to normal inspection.");
+  assert((await success.locator(".troop-section-info .troop-icon-count").count()) === 4, "Normal inspection still shows own troop breakdown after spy is toggled off.");
   await clickTerritory(success, "shire");
-  assert((await success.locator(".game-map-panel").count()) === 0, "Pressing the selected turn-inspection territory again hides the troop section.");
+  assert((await success.locator(".troop-section-info").count()) === 0, "Pressing the selected turn-inspection territory again hides the troop section.");
   await success.getByRole("button", { name: "Spy" }).click();
   await clickTerritory(success, "bree");
   await success.getByRole("dialog", { name: "Confirm spy" }).getByText("20% captured").waitFor();
   await success.getByRole("button", { name: "Send spy" }).click();
   await success.getByRole("button", { name: "Dismiss" }).waitFor();
   await capture(success, "13c-spy-success-mobile.png");
-  assert((await success.locator(".game-map-panel .selected-territory-name").getByText("Bree").count()) === 1, "Successful spy shows the target territory name.");
-  assert((await success.locator(".game-map-panel .troop-icon-count").count()) === 4, "Successful spy shows the target troop breakdown.");
-  assert((await success.locator(".game-map-panel .captured-spy-icon").count()) === 1, "Successful spy shows captured spies imprisoned on the target.");
-  const capturedSpySource = await success.locator(".game-map-panel .captured-spy-icon img").first().getAttribute("src");
+  assert((await success.locator(".troop-section-info .selected-territory-name").getByText("Bree").count()) === 1, "Successful spy shows the target territory name.");
+  assert((await success.locator(".troop-section-info .troop-icon-count").count()) === 4, "Successful spy shows the target troop breakdown.");
+  assert((await success.locator(".troop-section-info .captured-spy-icon").count()) === 1, "Successful spy shows captured spies imprisoned on the target.");
+  const capturedSpySource = await success.locator(".troop-section-info .captured-spy-icon img").first().getAttribute("src");
   assert(capturedSpySource?.includes("-captured.png"), "Captured spy icon uses the captured spy asset.");
-  const spyIconSources = await success.locator(".game-map-panel .troop-icon-count img").evaluateAll((images) =>
+  const spyIconSources = await success.locator(".troop-section-info .troop-icon-count img").evaluateAll((images) =>
     images.map((image) => image.getAttribute("src") ?? ""),
   );
   assert(
@@ -1815,7 +1816,7 @@ function firstEnabledAddButton(page) {
 
 async function finishReinforcementPlacement(page) {
   for (const troopType of ["heavy", "cavalry", "elite"]) {
-    const button = page.locator(".reinforcement-panel .troop-action-row").nth(0).getByRole("button", { name: `Add ${troopType}` });
+    const button = page.locator(".troop-section-reinforcement .troop-action-row").nth(0).getByRole("button", { name: `Add ${troopType}` });
     for (let count = 0; count < 80 && !(await button.isDisabled()); count += 1) {
       await button.click();
     }
@@ -1930,8 +1931,8 @@ async function runSyncReadyPageChecks(browser) {
   await capture(passiveTurnPage, "17c-sync-passive-turn-mobile.png");
   assert((await activeTurnPage.getByRole("button", { name: "Spy" }).count()) === 1, "Active sync turn player sees turn controls.");
   assert((await passiveTurnPage.locator(".turn-action-panel").count()) === 0, "Passive sync turn player does not see turn controls.");
-  assert((await passiveTurnPage.locator(".game-map-panel").count()) === 0, "Passive sync turn player has no empty troop section before selecting a territory.");
-  assert((await passiveTurnPage.locator(".game-map-panel .troop-icon-count").count()) === 0, "Passive sync turn player does not see private action breakdowns.");
+  assert((await passiveTurnPage.locator(".troop-section-info").count()) === 0, "Passive sync turn player has no empty troop section before selecting a territory.");
+  assert((await passiveTurnPage.locator(".troop-section-info .troop-icon-count").count()) === 0, "Passive sync turn player does not see private action breakdowns.");
 
   await host.close();
   await joiner.close();

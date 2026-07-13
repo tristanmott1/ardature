@@ -77,7 +77,7 @@ function InitialAllocationTroopSection({
   const playerAllocation = allocation?.playerAllocations[player.id] ?? null;
 
   return (
-    <section className="game-section-panel allocation-panel">
+    <section className="game-section-panel troop-section troop-section-allocation">
       {playerAllocation?.buildSubmitted && allocation ? (
         <AllocationControls
           allocation={allocation}
@@ -181,7 +181,7 @@ function ReinforcementTroopSection({
   }
 
   return (
-    <section className="game-section-panel allocation-panel reinforcement-panel">
+    <section className="game-section-panel troop-section troop-section-allocation troop-section-reinforcement">
       <div className="allocation-controls">
         <TroopPlacementRows
           canAddType={canAddType}
@@ -243,7 +243,7 @@ function InfoTroopSection({
   const troopPlayer = players.find((player) => player.id === (troopPlayerId ?? viewerId)) ?? players[0] ?? null;
 
   return (
-    <section className="game-section-panel game-map-panel">
+    <section className="game-section-panel troop-section troop-section-info">
       {selectedTerritory ? <strong className="selected-territory-name">{selectedTerritory.name}</strong> : null}
       {selectedTerritory && troopPlayer ? (
         troopBreakdown

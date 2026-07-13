@@ -946,8 +946,8 @@ select {
   z-index: 18;
 }
 
-.game-map-panel > .selected-territory-name,
-.game-map-panel > .troop-count-row {
+.troop-section-info > .selected-territory-name,
+.troop-section-info > .troop-count-row {
   margin: 12px max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left));
 }
 
@@ -1013,7 +1013,7 @@ select {
   height: 24px;
 }
 
-.game-map-panel {
+.troop-section-info {
   display: grid;
   justify-items: stretch;
   row-gap: 16px;
@@ -1027,8 +1027,8 @@ select {
   text-align: center;
 }
 
-.game-map-panel > .troop-count-row,
-.game-map-panel > .captured-spy-row {
+.troop-section-info > .troop-count-row,
+.troop-section-info > .captured-spy-row {
   justify-self: center;
 }
 
