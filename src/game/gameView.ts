@@ -483,6 +483,21 @@ export function sanitizeMapSelections(
   return next;
 }
 
+export function applyMapSelectionUpdates(selections: MapSelectionState, updates: Partial<MapSelectionState>): MapSelectionState {
+  let next = selections;
+
+  for (const [key, value] of Object.entries(updates) as Array<[keyof MapSelectionState, string | null]>) {
+    if (next[key] === value) {
+      continue;
+    }
+
+    next = next === selections ? { ...selections } : next;
+    next[key] = value;
+  }
+
+  return next;
+}
+
 export function mapPressModeForGame({
   activeDraftPlayer,
   allocationBuildSubmitted,

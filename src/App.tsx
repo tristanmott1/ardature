@@ -84,6 +84,7 @@ import {
 import { notificationMessage } from "./game/notificationText";
 import {
   activeOverlayForState,
+  applyMapSelectionUpdates,
   createTroopMarkers,
   gameStageLayoutForState,
   gameViewContextForState,
@@ -306,7 +307,7 @@ function App() {
   useLocalPauseRecovery(game);
 
   function updateMapSelections(updates: Partial<MapSelectionState>) {
-    setMapSelections((current) => ({ ...current, ...updates }));
+    setMapSelections((current) => applyMapSelectionUpdates(current, updates));
   }
 
   useEffect(() => {
