@@ -100,6 +100,7 @@ import {
   territoryInspectionForViewer,
   visibleNotification,
   type ActiveOverlay,
+  type DecisionPrompt,
   type MapSelectionState,
   type MapPressMode,
   type SyncSessionStatus,
@@ -129,7 +130,7 @@ import {
   type SyncWireMessage,
 } from "./sync/syncTransport";
 
-type SyncCameraMode = "hostOffer" | "joinAnswer" | null;
+type SyncScannerMode = "hostOffer" | "joinAnswer" | null;
 
 type JoinerSyncCommand = Extract<ArdatureSyncMessage, { type: "profileUpdate" | "draftConfirm" | "allocationUpdate" | "turnCommand" | "quit" }>;
 
@@ -161,12 +162,11 @@ function App() {
   const [syncAnswerText, setSyncAnswerText] = useState("");
   const [syncRecoveryOfferText, setSyncRecoveryOfferText] = useState("");
   const [syncRecoverySlots, setSyncRecoverySlots] = useState<SyncRecoveryPlayerSlot[]>([]);
-  const [syncCameraMode, setSyncCameraMode] = useState<SyncCameraMode>(null);
+  const [syncScannerMode, setSyncScannerMode] = useState<SyncScannerMode>(null);
   const [syncMessage, setSyncMessage] = useState("");
   const [isAcceptingAnswer, setIsAcceptingAnswer] = useState(false);
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
-  const [isEndGamePromptOpen, setIsEndGamePromptOpen] = useState(false);
-  const [isRestartGamePromptOpen, setIsRestartGamePromptOpen] = useState(false);
+  const [decisionPrompt, setDecisionPrompt] = useState<DecisionPrompt>(null);
   const [pausedReturnPhase, setPausedReturnPhase] = useState<AppPhase | null>(null);
   const [resetCameraKey, setResetCameraKey] = useState(0);
   const [autoFocusEnabled, setAutoFocusEnabled] = useState(() => readMapPreferences().autoFocusEnabled);
@@ -271,12 +271,11 @@ function App() {
     canControlTurnPlayer,
     game,
     hasCurrentNotification: Boolean(currentNotification),
-    isEndGamePromptOpen,
-    isRestartGamePromptOpen,
+    decisionPrompt,
     localAllocationReady,
     pendingDraftTerritoryId,
     pendingSpyTerritoryId,
-    syncCameraMode: Boolean(syncCameraMode),
+    scannerActive: Boolean(syncScannerMode),
     syncJoinerBlocked,
     turnPlayerId,
   });
@@ -665,7 +664,7 @@ function App() {
       return;
     }
 
-    setSyncCameraMode(null);
+    setSyncScannerMode(null);
     setIsAcceptingAnswer(true);
     setSyncMessage("QR found. Accepting answer");
     try {
@@ -731,7 +730,7 @@ function App() {
     const recoveryOffer = parseSyncRecoveryOffer(value);
 
     if (recoveryOffer) {
-      setSyncCameraMode(null);
+      setSyncScannerMode(null);
       setSyncAnswerText("");
       setSyncRecoveryOfferText(value);
       setSyncRecoverySlots(recoveryOffer.disconnectedPlayers);
@@ -755,7 +754,7 @@ function App() {
       });
     });
 
-    setSyncCameraMode(null);
+    setSyncScannerMode(null);
     setSyncSession("connecting");
     setSyncMessage("QR found. Creating answer");
     try {
@@ -1319,7 +1318,7 @@ function App() {
 
   function returnHome() {
     if (game.phase !== "home") {
-      setIsEndGamePromptOpen(true);
+      setDecisionPrompt("exit");
       return;
     }
 
@@ -1343,7 +1342,7 @@ function App() {
       return;
     }
 
-    setIsRestartGamePromptOpen(false);
+    setDecisionPrompt(null);
     setGame((current) => restartPausedGameToSetup(current, isSyncHost));
   }
 
@@ -1362,9 +1361,9 @@ function App() {
     setSyncAnswerText("");
     setSyncRecoveryOfferText("");
     setSyncRecoverySlots([]);
+    setSyncScannerMode(null);
     setSyncMessage("");
-    setIsEndGamePromptOpen(false);
-    setIsRestartGamePromptOpen(false);
+    setDecisionPrompt(null);
     setGame(createInitialGameState());
   }
 
@@ -1462,7 +1461,7 @@ function App() {
           ? (
             <DecisionDialog
               message="End this game and return home?"
-              onCancel={() => setIsEndGamePromptOpen(false)}
+              onCancel={() => setDecisionPrompt(null)}
               onConfirm={endGame}
             />
           )
@@ -1470,7 +1469,7 @@ function App() {
             <DecisionDialog
               confirmLabel="Restart game"
               message="Restart this game and return to setup?"
-              onCancel={() => setIsRestartGamePromptOpen(false)}
+              onCancel={() => setDecisionPrompt(null)}
               onConfirm={restartPausedGame}
             />
           );
@@ -1494,21 +1493,21 @@ function App() {
             localPlayerId={localPlayerId}
             mode={game.mode}
             onRemovePlayer={removePlayer}
-            onRestart={game.mode === "local" || isSyncHost ? () => setIsRestartGamePromptOpen(true) : undefined}
+            onRestart={game.mode === "local" || isSyncHost ? () => setDecisionPrompt("restart") : undefined}
             onResume={resumeCurrentGame}
-            onScanRecoveryAnswer={isSyncHost ? () => setSyncCameraMode("joinAnswer") : undefined}
+            onScanRecoveryAnswer={isSyncHost ? () => setSyncScannerMode("joinAnswer") : undefined}
             players={game.players}
             syncMessage={syncMessage}
             syncQrText={isSyncHost ? syncQrText : ""}
           />
         );
       case "scanner":
-        return syncCameraMode
+        return syncScannerMode
           ? (
             <QrScanner
-              onCancel={() => setSyncCameraMode(null)}
-              onScan={syncCameraMode === "hostOffer" ? scanHostOffer : acceptJoinAnswer}
-              title={syncCameraMode === "hostOffer" ? "Scan host" : "Scan answer"}
+              onCancel={() => setSyncScannerMode(null)}
+              onScan={syncScannerMode === "hostOffer" ? scanHostOffer : acceptJoinAnswer}
+              title={syncScannerMode === "hostOffer" ? "Scan host" : "Scan answer"}
             />
           )
           : null;
@@ -1670,7 +1669,7 @@ function App() {
           onChooseRecoveryPlayer={chooseRecoveryPlayer}
           onHost={beginSyncHost}
           onNameChange={updateSyncName}
-          onScan={() => setSyncCameraMode("hostOffer")}
+          onScan={() => setSyncScannerMode("hostOffer")}
           recoverySlots={syncRecoverySlots}
         />
       ) : null}
@@ -1699,7 +1698,7 @@ function App() {
           syncMessage={syncMessage}
           syncQrText={syncQrText}
           syncRole={syncRole}
-          onScanAnswer={() => setSyncCameraMode("joinAnswer")}
+          onScanAnswer={() => setSyncScannerMode("joinAnswer")}
         />
       ) : null}
 

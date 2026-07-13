@@ -28,6 +28,8 @@ export type ActiveOverlay =
   | { type: "notification" }
   | { type: "confirm"; confirm: "draft" | "spy" };
 
+export type DecisionPrompt = "exit" | "restart" | null;
+
 export type CapturedSpyView = ReturnType<typeof capturedSpiesOnTerritory>[number];
 
 export type TerritoryInspection = {
@@ -166,14 +168,13 @@ type ActiveOverlayContext = {
   allocationPlayerId: string | null;
   canControlActivePlayer: boolean;
   canControlTurnPlayer: boolean;
+  decisionPrompt: DecisionPrompt;
   game: GameState;
   hasCurrentNotification: boolean;
-  isEndGamePromptOpen: boolean;
-  isRestartGamePromptOpen: boolean;
   localAllocationReady: boolean;
   pendingDraftTerritoryId: string | null;
   pendingSpyTerritoryId: string | null;
-  syncCameraMode: boolean;
+  scannerActive: boolean;
   syncJoinerBlocked: boolean;
   turnPlayerId: string | null;
 };
@@ -197,14 +198,13 @@ export function activeOverlayForState({
   allocationPlayerId,
   canControlActivePlayer,
   canControlTurnPlayer,
+  decisionPrompt,
   game,
   hasCurrentNotification,
-  isEndGamePromptOpen,
-  isRestartGamePromptOpen,
   localAllocationReady,
   pendingDraftTerritoryId,
   pendingSpyTerritoryId,
-  syncCameraMode,
+  scannerActive,
   syncJoinerBlocked,
   turnPlayerId,
 }: ActiveOverlayContext): ActiveOverlay | null {
@@ -235,9 +235,8 @@ export function activeOverlayForState({
 
   return firstActiveOverlay(
     syncJoinerBlocked ? { type: "syncBlocked" } : null,
-    syncCameraMode ? { type: "scanner" } : null,
-    isEndGamePromptOpen ? { type: "decision", decision: "exit" } : null,
-    isRestartGamePromptOpen ? { type: "decision", decision: "restart" } : null,
+    scannerActive ? { type: "scanner" } : null,
+    decisionPrompt ? { type: "decision", decision: decisionPrompt } : null,
     game.phase === "paused" ? { type: "pause" } : null,
     game.phase === "allocationHandoff" ? { type: "handoff", handoff: "allocation" } : null,
     game.phase === "turnHandoff" ? { type: "handoff", handoff: "turn" } : null,
