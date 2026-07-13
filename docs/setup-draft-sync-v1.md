@@ -64,6 +64,7 @@ Sync setup behavior:
 
 - The host enters a name and color before hosting; that creates the host player.
 - A joiner enters a name and color before joining.
+- Sync setup identity is atomic: any QR offer, QR answer, snapshot, or lobby row that names a player must also carry that player's color. The app must not render a named sync player with an unknown color and then rely on a later profile update to repair it.
 - Each device remembers its own sync name and color for the next sync entry.
 - Sync hosts reuse the saved shared game configuration defaults.
 - Duplicate colors are allowed in the lobby, but the host cannot start the draft until all remaining players have unique colors.
@@ -173,7 +174,7 @@ Sync host pause is a synchronization reset:
 - Sync pause includes connected, disconnected, and reconnecting player status.
 - Sync host pause always includes a recovery QR and scan button for disconnected-player recovery.
 - Sync non-host pause never includes a QR placeholder or recovery tools. Recovery is coordinated through the host because the host is the source of truth.
-- Pause and recovery rows use a compact aligned rhythm: color dot, left-aligned player name, right-aligned connection status when shown, then the far-right trash/action slot or an empty spacer.
+- Pause and recovery rows use one compact grid in both local and sync mode: color dot, left-aligned player name, fixed status column, and far-right trash/action slot or spacer. Local pause reserves the same empty status column so trash icons line up exactly with sync pause rows.
 - The host can remove players while paused.
 
 In both modes, removing a player during draft clears that player's territories and returns them to the remaining territory pool. If fewer than 2 players remain, the game ends and returns to home.

@@ -96,6 +96,7 @@ async function runSourceChecks() {
   const gameStateSource = await readFile(new URL("../src/game/gameState.ts", import.meta.url), "utf8");
   const gameTypesSource = await readFile(new URL("../src/game/gameTypes.ts", import.meta.url), "utf8");
   const gameViewSource = await readFile(new URL("../src/game/gameView.ts", import.meta.url), "utf8");
+  const playerColorsSource = await readFile(new URL("../src/game/playerColors.ts", import.meta.url), "utf8");
   const troopIconsSource = await readFile(new URL("../src/game/troopIcons.tsx", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapConnectionsSource = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
@@ -219,13 +220,14 @@ async function runSourceChecks() {
   assert(syncTransportSource.includes('event.channel.addEventListener("close", () => this.markReconnecting())') && syncTransportSource.includes("window.setTimeout(() => this.markGone(), this.reconnectGraceMs)"), "Ungraceful closes route through reconnecting before disconnected.");
   assert(syncTransportSource.includes("ardature-sync-recovery-offer") && syncTransportSource.includes("ardature-sync-recovery-answer"), "Sync transport has distinct recovery payload kinds.");
   assert(syncTransportSource.includes("ARR:") && syncTransportSource.includes("ARY:"), "Sync transport has distinct compact recovery QR prefixes.");
+  assert(syncTransportSource.includes("hostColor: PlayerColor") && syncTransportSource.includes("playerColor: PlayerColor") && syncTransportSource.includes("playerColor: player.color") && appSource.includes("color: answer.hostColor") && appSource.includes("color: joinedPlayer.color"), "Sync QR setup identity always pairs player names with colors before rendering.");
   assert(appSource.includes("Stop reconnecting") && appSource.includes("<Icon size={24} />"), "Joiner reconnecting UI offers a local stop option.");
   assert(appSource.includes('connectionStatus === "disconnected"') && appSource.includes("createRecoveryOffer(disconnectedSyncPlayers)"), "Host recovery QR slots are filtered from host disconnected state.");
   assert(appSource.includes("hostTransportRef.current = new SyncHostTransport") && appSource.includes("restoredSyncHost"), "Restored sync hosts rebuild transport for recovery QR generation.");
   assert(appSource.includes('const showRecoveryTools = mode === "sync" && Boolean(onScanRecoveryAnswer)'), "Recovery QR tools render only for the sync host pause modal.");
   assert(appSource.includes("createRecoveryAnswer") && appSource.includes("onChooseRecoveryPlayer"), "Joiners choose a disconnected slot before creating a recovery answer.");
   assert(syncTransportSource.includes("color: PlayerColor;") && syncTransportSource.includes("hostColor: PlayerColor;") && syncTransportSource.includes("RECOVERY_PLAYER_COLORS.includes(slot.color as PlayerColor)"), "Recovery slots require validated player colors.");
-  assert(appSource.includes("host color is required for recovery."), "Recovery answer screens reject missing host colors.");
+  assert(!appSource.includes("host color is required for recovery.") && syncTransportSource.includes("RECOVERY_PLAYER_COLORS.includes(payload.hostColor as PlayerColor)") && syncTransportSource.includes("RECOVERY_PLAYER_COLORS.includes(payload.playerColor as PlayerColor)"), "Malformed QR identity colors are rejected by sync payload validation, not patched in UI.");
   assert(appArchitectureDocs.includes("Recovery slot and answer screens show the disconnected player's frozen color") && setupDraftDocs.includes("Recovery slot and recovery answer screens must show the disconnected player's frozen color"), "Recovery player color visibility is documented.");
   assert(appSource.includes("hostTransportRef.current?.sendToPeer(playerId, { type: \"removed\" })"), "Host sends removed before closing a removed peer.");
   assert(gameStateSource.includes("pauseLocalGameForStorage") && appSource.includes("pagehide") && appSource.includes("beforeunload"), "Local refresh writes a paused active-game snapshot.");
@@ -258,6 +260,7 @@ async function runSourceChecks() {
   assert(!appSource.includes("QRCode.toString") && !appSource.includes("function QrScanner") && !appSource.includes("function QrPanel"), "App imports QR UI instead of defining scanner/rendering internals.");
   assert(appSource.includes("canAdvance={isSyncHost") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
+  assert(syncTransportSource.includes("isAnswer && fields.length === 6") && syncTransportSource.includes("isRecoveryAnswer && fields.length === 6") && syncTransportSource.includes("playerColor: playerColor as PlayerColor"), "Compact sync QR answers carry validated player colors.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
   assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
   assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
@@ -275,7 +278,7 @@ async function runSourceChecks() {
   assert(troopMarkerSource.includes("data-troop-marker"), "Troop markers expose territory ids for visibility verification.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
   assert(appSource.includes('className="connection-label" aria-hidden={mode !== "sync"}') && appSource.includes("canRemove && player.id !== localPlayerId"), "Pause rows keep local and sync action/status slots aligned.");
-  assert(stylesSource.includes(".player-row.compact-row") && stylesSource.includes("grid-template-columns: minmax(0, 1fr) 96px 38px") && stylesSource.includes(".player-row.compact-row > .connection-label") && stylesSource.includes(".player-row.compact-row > .icon-button-spacer"), "Pause rows use fixed name/status/action columns with the action slot on the far right.");
+  assert(stylesSource.includes(".player-row.compact-row") && stylesSource.includes('grid-template-areas: "identity status action"') && stylesSource.includes("grid-template-columns: minmax(0, 1fr) 96px 38px") && stylesSource.includes("grid-area: action"), "Pause rows use fixed name/status/action columns with the action slot on the far right.");
   assert(gameStateSource.includes("removeNonConnectedSyncLobbyPlayers") && gameStateSource.includes('state.phase === "setup" && connectionStatus !== "connected"') && gameStateSource.includes('player.connectionStatus === "connected"'), "Sync setup lobby removes reconnecting/disconnected players instead of preserving recovery slots.");
   assert(appSource.includes("removeNonConnectedSyncLobbyPlayers({") && setupDraftDocs.includes("Restarting from sync pause returns to setup with only currently connected players"), "Sync restart to setup prunes non-connected players and documents that recovery is active-game only.");
   assert(appSource.includes("function PlayerIdentity") && (appSource.match(/className=\"player-dot\"/g) ?? []).length === 1, "Read-only player identity rows share one dot/name component.");
@@ -285,6 +288,7 @@ async function runSourceChecks() {
   assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
   assert(appSource.includes("TroopIconCount") && troopIconsSource.includes("troopIconSrc") && troopIconsSource.includes("function TroopIconImage"), "Allocation UI uses troop image icons.");
+  assert(appSource.includes('from "./game/playerColors"') && troopIconsSource.includes('from "./playerColors"') && playerColorsSource.includes("function colorCss") && playerColorsSource.includes("function colorLabel") && playerColorsSource.includes("function isLightColor"), "Player color display helpers are centralized.");
   assert(!appSource.includes("function TroopIconCount") && !appSource.includes("const TROOP_ICON_BY_SIDE") && !appSource.includes("function troopIconSrc"), "App imports troop icon primitives instead of defining duplicate troop asset mappings.");
   assert(stylesSource.includes("box-sizing: border-box") && stylesSource.includes("border: var(--icon-ring-width, 4px) solid var(--owner-color") && stylesSource.includes("background: #ffffff") && !stylesSource.includes("padding: 2px;"), "Troop icons use one border-box owner ring with a white interior and no padding gap.");
   assert(appSource.includes("const iconRingWidth = 4") && appSource.includes("stroke: colorCss(player.color)") && appSource.includes('fill: "#ffffff"'), "Army triangle icons match the shared owner-ring geometry.");

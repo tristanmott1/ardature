@@ -120,6 +120,7 @@ import {
   saveSyncProfilePreference,
   syncProfileFromPreferences,
 } from "./game/setupPreferences";
+import { colorCss, colorLabel, isLightColor } from "./game/playerColors";
 import {
   createTroopMarkers,
   firstActiveOverlay,
@@ -138,7 +139,7 @@ import {
   type MapPressMode,
   type SyncRole,
 } from "./game/gameView";
-import { isLightColor, spyIconSrc, troopIconSrc, troopName, TroopIconCount, TroopIconImage } from "./game/troopIcons";
+import { spyIconSrc, troopIconSrc, troopName, TroopIconCount, TroopIconImage } from "./game/troopIcons";
 import { generatedMapData } from "./map/generated/mapData";
 import { MapView } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
@@ -513,7 +514,7 @@ function App() {
     }
 
     const hostPlayer = game.players.find((player) => player.id === localPlayerId);
-    if (!hostPlayer) {
+    if (!hostPlayer?.color) {
       return;
     }
 
@@ -857,7 +858,7 @@ function App() {
               {
                 id: joinedPlayer.id,
                 name: joinedPlayer.name,
-                color: null,
+                color: joinedPlayer.color,
                 nameLocked: false,
                 colorLocked: false,
                 connectionStatus: "connected" as const,
@@ -947,7 +948,7 @@ function App() {
           {
             id: answer.hostPlayerId,
             name: answer.hostName,
-            color: null,
+            color: answer.hostColor,
             nameLocked: true,
             colorLocked: true,
             connectionStatus: "connected",
@@ -977,9 +978,6 @@ function App() {
     setSyncMessage("Creating recovery answer");
     try {
       const answer = await joinTransport.createRecoveryAnswer(syncRecoveryOfferText, slot);
-      if (!answer.hostColor) {
-        throw new Error("host color is required for recovery.");
-      }
 
       endSyncTransports();
       joinTransportRef.current = joinTransport;
@@ -3365,42 +3363,6 @@ function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
   const [item] = nextItems.splice(fromIndex, 1);
   nextItems.splice(toIndex, 0, item);
   return nextItems;
-}
-
-function colorLabel(color: PlayerColor) {
-  switch (color) {
-    case "green":
-      return "Green";
-    case "blue":
-      return "Blue";
-    case "yellow":
-      return "Yellow";
-    case "red":
-      return "Red";
-    case "purple":
-      return "Purple";
-    case "black":
-      return "Black";
-  }
-}
-
-function colorCss(color: PlayerColor | null) {
-  switch (color) {
-    case "green":
-      return "#5ca76b";
-    case "blue":
-      return "#5fb7c0";
-    case "yellow":
-      return "#d9c75f";
-    case "red":
-      return "#b3444a";
-    case "purple":
-      return "#8a5fc4";
-    case "black":
-      return "#3f3f3f";
-    default:
-      return "#efe9d9";
-  }
 }
 
 export default App;

@@ -22,6 +22,7 @@ export type SyncOfferPayload = {
   offerId: string;
   hostPlayerId: string;
   hostName: string;
+  hostColor: PlayerColor;
   sdp: RTCSessionDescriptionInit;
 };
 
@@ -32,6 +33,7 @@ export type SyncAnswerPayload = {
   offerId: string;
   playerId: string;
   playerName: string;
+  playerColor: PlayerColor;
   sdp: RTCSessionDescriptionInit;
 };
 
@@ -60,6 +62,7 @@ export type SyncRecoveryAnswerPayload = {
   offerId: string;
   playerId: string;
   playerName: string;
+  playerColor: PlayerColor;
   sdp: RTCSessionDescriptionInit;
 };
 
@@ -262,8 +265,12 @@ function parseCompactPayload(value: string) {
     return null;
   }
 
-  if (isOffer && fields.length === 5) {
-    const [roomId, offerId, hostPlayerId, hostName, sdp] = fields;
+  if (isOffer && fields.length === 6) {
+    const [roomId, offerId, hostPlayerId, hostName, hostColor, sdp] = fields;
+
+    if (!RECOVERY_PLAYER_COLORS.includes(hostColor as PlayerColor)) {
+      return null;
+    }
 
     return {
       kind: "ardature-sync-offer",
@@ -272,12 +279,17 @@ function parseCompactPayload(value: string) {
       offerId,
       hostPlayerId,
       hostName,
+      hostColor: hostColor as PlayerColor,
       sdp: { type: "offer", sdp },
     } satisfies SyncOfferPayload;
   }
 
-  if (isAnswer && fields.length === 5) {
-    const [roomId, offerId, playerId, playerName, sdp] = fields;
+  if (isAnswer && fields.length === 6) {
+    const [roomId, offerId, playerId, playerName, playerColor, sdp] = fields;
+
+    if (!RECOVERY_PLAYER_COLORS.includes(playerColor as PlayerColor)) {
+      return null;
+    }
 
     return {
       kind: "ardature-sync-answer",
@@ -286,6 +298,7 @@ function parseCompactPayload(value: string) {
       offerId,
       playerId,
       playerName,
+      playerColor: playerColor as PlayerColor,
       sdp: { type: "answer", sdp },
     } satisfies SyncAnswerPayload;
   }
@@ -311,8 +324,12 @@ function parseCompactPayload(value: string) {
     } satisfies SyncRecoveryOfferPayload;
   }
 
-  if (isRecoveryAnswer && fields.length === 5) {
-    const [roomId, offerId, playerId, playerName, sdp] = fields;
+  if (isRecoveryAnswer && fields.length === 6) {
+    const [roomId, offerId, playerId, playerName, playerColor, sdp] = fields;
+
+    if (!RECOVERY_PLAYER_COLORS.includes(playerColor as PlayerColor)) {
+      return null;
+    }
 
     return {
       kind: "ardature-sync-recovery-answer",
@@ -321,6 +338,7 @@ function parseCompactPayload(value: string) {
       offerId,
       playerId,
       playerName,
+      playerColor: playerColor as PlayerColor,
       sdp: { type: "answer", sdp },
     } satisfies SyncRecoveryAnswerPayload;
   }
@@ -362,6 +380,7 @@ function encodePayload(value: SyncOfferPayload | SyncAnswerPayload | SyncRecover
       value.offerId,
       value.hostPlayerId,
       value.hostName,
+      value.hostColor,
       typeof value.sdp.sdp === "string" ? value.sdp.sdp : "",
     ]);
   }
@@ -372,6 +391,7 @@ function encodePayload(value: SyncOfferPayload | SyncAnswerPayload | SyncRecover
       value.offerId,
       value.playerId,
       value.playerName,
+      value.playerColor,
       typeof value.sdp.sdp === "string" ? value.sdp.sdp : "",
     ]);
   }
@@ -393,6 +413,7 @@ function encodePayload(value: SyncOfferPayload | SyncAnswerPayload | SyncRecover
     value.offerId,
     value.playerId,
     value.playerName,
+    value.playerColor,
     typeof value.sdp.sdp === "string" ? value.sdp.sdp : "",
   ]);
 }
@@ -407,6 +428,7 @@ function isOfferPayload(value: unknown): value is SyncOfferPayload {
     typeof payload.offerId === "string" &&
     typeof payload.hostPlayerId === "string" &&
     typeof payload.hostName === "string" &&
+    RECOVERY_PLAYER_COLORS.includes(payload.hostColor as PlayerColor) &&
     Boolean(payload.sdp)
   );
 }
@@ -438,6 +460,7 @@ function isRecoveryAnswerPayload(value: unknown): value is SyncRecoveryAnswerPay
     typeof payload.offerId === "string" &&
     typeof payload.playerId === "string" &&
     typeof payload.playerName === "string" &&
+    RECOVERY_PLAYER_COLORS.includes(payload.playerColor as PlayerColor) &&
     Boolean(payload.sdp)
   );
 }
@@ -472,6 +495,7 @@ function isAnswerPayload(value: unknown): value is SyncAnswerPayload {
     typeof payload.offerId === "string" &&
     typeof payload.playerId === "string" &&
     typeof payload.playerName === "string" &&
+    RECOVERY_PLAYER_COLORS.includes(payload.playerColor as PlayerColor) &&
     Boolean(payload.sdp)
   );
 }
@@ -540,7 +564,7 @@ export class SyncHostTransport {
   private peers = new Map<string, HostPeer>();
   private reconnectGraceMs: number;
   private roomId: string;
-  private hostColor: PlayerColor | null;
+  private hostColor: PlayerColor;
   private hostPlayerId: string;
   private hostName: string;
 
@@ -553,7 +577,7 @@ export class SyncHostTransport {
     roomId,
   }: {
     callbacks: SyncTransportCallbacks;
-    hostColor: PlayerColor | null;
+    hostColor: PlayerColor;
     hostName: string;
     hostPlayerId: string;
     reconnectGraceMs?: number;
@@ -577,6 +601,7 @@ export class SyncHostTransport {
       offerId: offer.offerId,
       hostPlayerId: this.hostPlayerId,
       hostName: this.hostName,
+      hostColor: this.hostColor,
       sdp: offer.sdp,
     };
 
@@ -584,10 +609,6 @@ export class SyncHostTransport {
   }
 
   async createRecoveryOffer(disconnectedPlayers: SyncRecoveryPlayerSlot[]) {
-    if (!this.hostColor) {
-      throw new Error("host color is required for recovery.");
-    }
-
     const offer = await this.createPendingOffer();
 
     const payload: SyncRecoveryOfferPayload = {
@@ -751,6 +772,7 @@ export class SyncHostTransport {
     return {
       id: answer.playerId,
       name: answer.playerName,
+      color: answer.playerColor,
     };
   }
 
@@ -882,7 +904,7 @@ export class SyncJoinTransport {
     this.reconnectGraceMs = reconnectGraceMs;
   }
 
-  async createAnswer(value: string, player: { id: string; name: string }) {
+  async createAnswer(value: string, player: { color: PlayerColor; id: string; name: string }) {
     const offer = parseSyncOffer(value);
 
     if (!offer) {
@@ -932,18 +954,20 @@ export class SyncJoinTransport {
       offerId: offer.offerId,
       playerId: player.id,
       playerName: player.name,
+      playerColor: player.color,
       sdp: peerConnection.localDescription?.toJSON() ?? answer,
     };
 
     return {
       answerText: encodePayload(payload),
+      hostColor: offer.hostColor,
       hostName: offer.hostName,
       hostPlayerId: offer.hostPlayerId,
       roomId: offer.roomId,
     };
   }
 
-  async createRecoveryAnswer(value: string, player: { id: string; name: string }) {
+  async createRecoveryAnswer(value: string, player: { color: PlayerColor; id: string; name: string }) {
     const offer = parseSyncRecoveryOffer(value);
 
     if (!offer) {
@@ -955,7 +979,7 @@ export class SyncJoinTransport {
 
   private async createAnswerForOffer(
     offer: SyncOfferPayload | SyncRecoveryOfferPayload,
-    player: { id: string; name: string },
+    player: { color: PlayerColor; id: string; name: string },
     kind: SyncAnswerPayload["kind"] | SyncRecoveryAnswerPayload["kind"],
   ) {
     const peerConnection = createPeerConnection();
@@ -1003,12 +1027,13 @@ export class SyncJoinTransport {
       offerId: offer.offerId,
       playerId: player.id,
       playerName: player.name,
+      playerColor: player.color,
       sdp: peerConnection.localDescription?.toJSON() ?? answer,
     } satisfies SyncAnswerPayload | SyncRecoveryAnswerPayload;
 
     return {
       answerText: encodePayload(payload),
-      hostColor: "hostColor" in offer ? offer.hostColor : null,
+      hostColor: offer.hostColor,
       hostName: offer.hostName,
       hostPlayerId: offer.hostPlayerId,
       roomId: offer.roomId,

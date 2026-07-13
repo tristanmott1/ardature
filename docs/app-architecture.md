@@ -382,6 +382,8 @@ Host-to-joiner game updates are revisioned snapshots:
 
 Joiners ignore stale snapshots. Joiner-to-host messages are intentionally small: `profileUpdate`, `draftConfirm`, `allocationUpdate`, and `quit`. The host validates every payload before it reaches game logic. Joiners can edit their own unlocked name/color during setup, while the host can edit any name/color and lock or unlock those fields. During sync draft, joiners send only confirmed draft picks, not pending selection previews. During sync allocation, joiners send actual allocation updates, not selected-territory UI state. Ready/waiting is derived locally from each player's `ready` flag while the shared phase remains `allocation` until the host starts the map. The host owns the canonical allocation timer and advances only after every remaining player is ready or after timeout random-completion.
 
+Sync setup identity is atomic. QR offers and answers must carry player id, name, and color together. A screen should never render a sync player name with an unknown color and rely on a later profile update to fill the gap.
+
 During sync draft and allocation, graceful quit and ungraceful disconnect are separate:
 
 - Graceful quit removes the player, clears their territories, returns those territories to the draft pool, and pauses the game.
@@ -397,7 +399,7 @@ Connected pause and reconnecting are different UI states:
 - Reconnecting is local-only. The device is not connected to host truth and must show only a simple reconnecting modal over inert stale background.
 - Disconnected is terminal on the joiner device. The joiner returns home and no longer shows the old game.
 
-Connected pause and recovery player rows should stay visually aligned: the color dot comes first, the player name is left-aligned immediately after it, the connection status is right-aligned near the action area, and the trash/action slot or spacer stays at the far right.
+Connected pause and recovery player rows should stay visually aligned in both local and sync mode: the color dot comes first, the player name is left-aligned immediately after it, the sync connection status uses a fixed right-aligned column when present, and the trash/action slot or spacer stays at the far right. Local pause uses the same grid with an empty status slot so the trash icon never shifts compared with sync pause.
 
 The host should always maintain enough authoritative state to resume the game after recovery. Sync should send committed game facts promptly, but not noisy transient UI:
 
@@ -409,6 +411,8 @@ The host should always maintain enough authoritative state to resume the game af
 - Local selected territory, map focus, camera position, open modal, draft pending preview, read-only inspection, spy target preview before confirmation, successful spy intel view state, and provisional reinforcement placement edits: never synced.
 
 This principle should continue through future phases: the host needs the latest committed model needed to resume, while temporary presentation state remains device-local.
+
+Player names and colors travel together in QR answers and host-authored snapshots. UI should not render a known player name with an unknown or guessed color. Shared color helpers live in `src/game/playerColors.ts`; player bars, dots, troop icon owner rings, and setup controls should use those helpers rather than defining separate color mappings.
 
 During sync gameplay turns, inactive devices render only a read-only/explore-style map from their own viewer perspective. They do not see another player's pending selections, automatic focus, confirmation sheets, provisional reinforcement edits, or successful spy intel. They receive visible updates only when the host broadcasts committed facts, such as finalized reinforcements, future resolved attacks, fortify/end-turn, or player removal. A failed spy is the one defender-facing spy event: the defender receives a local notification that they captured the active player's spy in the target territory.
 

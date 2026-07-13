@@ -1,9 +1,6 @@
 import type { CSSProperties } from "react";
 import type { GamePlayer, PlayerColor, TroopType } from "./gameTypes";
-
-export function isLightColor(color: PlayerColor | null) {
-  return color === "green" || color === "blue" || color === "yellow";
-}
+import { colorCss, isLightColor } from "./playerColors";
 
 export function troopIconSrc(color: PlayerColor | null, troopType: TroopType) {
   return `./troops/icons/${TROOP_ICON_BY_SIDE[troopSide(color)][troopType]}.png`;
@@ -51,14 +48,6 @@ export function TroopIconImage({ ownerColor, src }: { ownerColor: PlayerColor | 
 
 function troopSide(color: PlayerColor | null) {
   return isLightColor(color) ? "light" : "dark";
-}
-
-function colorCss(color: PlayerColor | null) {
-  if (!color) {
-    return "#efe9d9";
-  }
-
-  return `var(--player-${color})`;
 }
 
 const TROOP_ICON_BY_SIDE = {

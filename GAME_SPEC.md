@@ -837,6 +837,8 @@ Sync mode has host and join flows.
 
 The user enters their own player name and color before hosting or joining.
 
+Sync setup identity is always `{ id, name, color }`. QR offers, QR answers, snapshots, and lobby rows must carry/display name and color together. The app should never render a named sync player with an unknown color and rely on a later profile update to repair it.
+
 The host:
 
 - Creates a sync room.

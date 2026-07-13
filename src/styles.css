@@ -506,6 +506,8 @@ select {
 
 .player-row.compact-row {
   display: grid;
+  column-gap: 6px;
+  grid-template-areas: "identity status action";
   grid-template-columns: minmax(0, 1fr) 96px 38px;
 }
 
@@ -524,6 +526,7 @@ select {
 }
 
 .player-row.compact-row > .player-identity {
+  grid-area: identity;
   justify-self: start;
   width: 100%;
   overflow: hidden;
@@ -531,7 +534,7 @@ select {
 }
 
 .player-row.compact-row > .connection-label {
-  grid-column: 2;
+  grid-area: status;
   justify-self: end;
   width: 100%;
   text-align: right;
@@ -539,7 +542,7 @@ select {
 
 .player-row.compact-row > .icon-button,
 .player-row.compact-row > .icon-button-spacer {
-  grid-column: 3;
+  grid-area: action;
   justify-self: end;
 }
 
