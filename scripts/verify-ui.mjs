@@ -275,6 +275,7 @@ async function runSourceChecks() {
   assert(!stylesSource.includes(".troop-badge") && !stylesSource.includes(".troop-chip") && !stylesSource.includes(".army-builder"), "Old troop badge styles are removed.");
   assert(!appSource.includes("troop-step-grid") && !appSource.includes("troop-stepper"), "Old troop stepper markup is removed.");
   assert(!stylesSource.includes(".troop-step-grid") && !stylesSource.includes(".troop-stepper"), "Old troop stepper styles are removed.");
+  assert(appSource.includes("function TroopPlacementRows") && (appSource.match(/className=\"troop-action-row\"/g) ?? []).length === 2, "Initial allocation and reinforcement share one troop placement row component.");
   assert(!stylesSource.includes(".army-triangle text"), "Army triangle does not style text labels.");
   assert(!mapViewSource.includes("isImmediatePress") && !mapViewSource.includes("pressImmediately"), "Old immediate territory press workaround is removed.");
   assert(indexSource.includes("./app-icons/icon-192.png") && indexSource.includes("./app-icons/apple-touch-icon.png"), "Index references organized app icons.");

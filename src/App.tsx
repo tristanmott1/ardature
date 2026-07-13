@@ -2589,62 +2589,20 @@ function ReinforcementPanel({
   const remaining = remainingReinforcementTroops(reinforcement);
   const canAddType = (troopType: TroopType) => selectedTroops !== null && remaining[troopType] > 0;
   const canRemoveType = (troopType: TroopType) => Boolean(selectedReinforcementTroops && selectedReinforcementTroops[troopType] > 0);
-  const canAddAny = TROOP_TYPES.some(canAddType);
-  const canRemoveAny = TROOP_TYPES.some(canRemoveType);
 
   return (
     <section className="game-section-panel allocation-panel reinforcement-panel">
       <div className="allocation-controls">
-        {selectedTerritory && selectedTroops ? (
-          <>
-            <div className="troop-action-row">
-              <span className="troop-row-spacer" aria-hidden="true" />
-              <span className="troop-row-affordance" data-muted={canAddAny ? undefined : "true"} aria-hidden="true">
-                <Plus size={17} />
-              </span>
-              <div className="troop-action-icons">
-                {TROOP_TYPES.map((troopType) => (
-                  <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, 1)} disabled={!canAddType(troopType)} aria-label={`Add ${troopType}`}>
-                    <TroopIconCount
-                      count={remaining[troopType]}
-                      label={`${troopName(player.color, troopType)} remaining: ${remaining[troopType]}`}
-                      player={player}
-                      troopType={troopType}
-                    />
-                  </button>
-                ))}
-              </div>
-              <span className="troop-row-spacer" aria-hidden="true" />
-            </div>
-            <div className="allocation-target">
-              <strong>{selectedTerritory.name}</strong>
-            </div>
-            <div className="troop-action-row">
-              <span className="troop-row-spacer" aria-hidden="true" />
-              <span className="troop-row-affordance" data-muted={canRemoveAny ? undefined : "true"} aria-hidden="true">
-                <Minus size={17} />
-              </span>
-              <div className="troop-action-icons">
-                {TROOP_TYPES.map((troopType) => (
-                  <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, -1)} disabled={!canRemoveType(troopType)} aria-label={`Remove ${troopType}`}>
-                    <TroopIconCount
-                      count={selectedTroops[troopType]}
-                      label={`${troopName(player.color, troopType)} added here: ${selectedTroops[troopType]}`}
-                      player={player}
-                      troopType={troopType}
-                    />
-                  </button>
-                ))}
-              </div>
-              <span className="troop-row-spacer" aria-hidden="true" />
-            </div>
-            <CapturedSpyRow players={players} spies={capturedSpies} />
-          </>
-        ) : (
-          <div className="allocation-target">
-            <strong>Select a territory</strong>
-          </div>
-        )}
+        <TroopPlacementRows
+          canAddType={canAddType}
+          canRemoveType={canRemoveType}
+          onAdjustTroop={onAdjustTroop}
+          player={player}
+          remaining={remaining}
+          selectedTroops={selectedTroops}
+          territoryName={selectedTerritory?.name ?? null}
+        />
+        {selectedTerritory && selectedTroops ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
         <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Finish reinforcements">
           <Check size={20} />
         </button>
@@ -2723,64 +2681,97 @@ function AllocationControls({
   const selectedTerritory = generatedMapData.territories.find((territory) => territory.id === selectedTerritoryId);
   const canAddType = (troopType: TroopType) => Boolean(selectedTerritoryId && canAddTroop(allocation, ownership, player.id, selectedTerritoryId, troopType));
   const canRemoveType = (troopType: TroopType) => Boolean(selectedTroops && selectedTroops[troopType] > 0);
-  const canAddAny = TROOP_TYPES.some(canAddType);
-  const canRemoveAny = TROOP_TYPES.some(canRemoveType);
 
   return (
     <div className="allocation-controls">
-      {selectedTerritoryId && selectedTroops ? (
-        <>
-          <div className="troop-action-row">
-            <span className="troop-row-spacer" aria-hidden="true" />
-            <span className="troop-row-affordance" data-muted={canAddAny ? undefined : "true"} aria-hidden="true">
-              <Plus size={17} />
-            </span>
-            <div className="troop-action-icons">
-              {TROOP_TYPES.map((troopType) => (
-                <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, 1)} disabled={!canAddType(troopType)} aria-label={`Add ${troopType}`}>
-                  <TroopIconCount
-                    count={remaining[troopType]}
-                    label={`${troopName(player.color, troopType)} remaining: ${remaining[troopType]}`}
-                    player={player}
-                    troopType={troopType}
-                  />
-                </button>
-              ))}
-            </div>
-            <span className="troop-row-spacer" aria-hidden="true" />
-          </div>
-          <div className="allocation-target">
-            <strong>{selectedTerritory?.name ?? "Select a territory"}</strong>
-          </div>
-          <div className="troop-action-row">
-            <span className="troop-row-spacer" aria-hidden="true" />
-            <span className="troop-row-affordance" data-muted={canRemoveAny ? undefined : "true"} aria-hidden="true">
-              <Minus size={17} />
-            </span>
-            <div className="troop-action-icons">
-              {TROOP_TYPES.map((troopType) => (
-                <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, -1)} disabled={!canRemoveType(troopType)} aria-label={`Remove ${troopType}`}>
-                  <TroopIconCount
-                    count={selectedTroops[troopType]}
-                    label={`${troopName(player.color, troopType)} on territory: ${selectedTroops[troopType]}`}
-                    player={player}
-                    troopType={troopType}
-                  />
-                </button>
-              ))}
-            </div>
-            <span className="troop-row-spacer" aria-hidden="true" />
-          </div>
-        </>
-      ) : (
-        <div className="allocation-target">
-          <strong>Select a territory</strong>
-        </div>
-      )}
+      <TroopPlacementRows
+        canAddType={canAddType}
+        canRemoveType={canRemoveType}
+        onAdjustTroop={onAdjustTroop}
+        player={player}
+        remaining={remaining}
+        selectedTroops={selectedTroops}
+        territoryName={selectedTerritory?.name ?? null}
+      />
       <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Ready">
         <Check size={20} />
       </button>
     </div>
+  );
+}
+
+function TroopPlacementRows({
+  canAddType,
+  canRemoveType,
+  onAdjustTroop,
+  player,
+  remaining,
+  selectedTroops,
+  territoryName,
+}: {
+  canAddType: (troopType: TroopType) => boolean;
+  canRemoveType: (troopType: TroopType) => boolean;
+  onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
+  player: GamePlayer;
+  remaining: TroopCounts;
+  selectedTroops: TroopCounts | null;
+  territoryName: string | null;
+}) {
+  const canAddAny = TROOP_TYPES.some(canAddType);
+  const canRemoveAny = TROOP_TYPES.some(canRemoveType);
+
+  if (!territoryName || !selectedTroops) {
+    return (
+      <div className="allocation-target">
+        <strong>Select a territory</strong>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="troop-action-row">
+        <span className="troop-row-spacer" aria-hidden="true" />
+        <span className="troop-row-affordance" data-muted={canAddAny ? undefined : "true"} aria-hidden="true">
+          <Plus size={17} />
+        </span>
+        <div className="troop-action-icons">
+          {TROOP_TYPES.map((troopType) => (
+            <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, 1)} disabled={!canAddType(troopType)} aria-label={`Add ${troopType}`}>
+              <TroopIconCount
+                count={remaining[troopType]}
+                label={`${troopName(player.color, troopType)} remaining: ${remaining[troopType]}`}
+                player={player}
+                troopType={troopType}
+              />
+            </button>
+          ))}
+        </div>
+        <span className="troop-row-spacer" aria-hidden="true" />
+      </div>
+      <div className="allocation-target">
+        <strong>{territoryName}</strong>
+      </div>
+      <div className="troop-action-row">
+        <span className="troop-row-spacer" aria-hidden="true" />
+        <span className="troop-row-affordance" data-muted={canRemoveAny ? undefined : "true"} aria-hidden="true">
+          <Minus size={17} />
+        </span>
+        <div className="troop-action-icons">
+          {TROOP_TYPES.map((troopType) => (
+            <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, -1)} disabled={!canRemoveType(troopType)} aria-label={`Remove ${troopType}`}>
+              <TroopIconCount
+                count={selectedTroops[troopType]}
+                label={`${troopName(player.color, troopType)} on territory: ${selectedTroops[troopType]}`}
+                player={player}
+                troopType={troopType}
+              />
+            </button>
+          ))}
+        </div>
+        <span className="troop-row-spacer" aria-hidden="true" />
+      </div>
+    </>
   );
 }
 
