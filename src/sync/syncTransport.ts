@@ -38,7 +38,7 @@ export type SyncAnswerPayload = {
 export type SyncRecoveryPlayerSlot = {
   id: string;
   name: string;
-  color: PlayerColor | null;
+  color: PlayerColor;
 };
 
 export type SyncRecoveryOfferPayload = {
@@ -48,6 +48,7 @@ export type SyncRecoveryOfferPayload = {
   offerId: string;
   hostPlayerId: string;
   hostName: string;
+  hostColor: PlayerColor;
   disconnectedPlayers: SyncRecoveryPlayerSlot[];
   sdp: RTCSessionDescriptionInit;
 };
@@ -289,11 +290,11 @@ function parseCompactPayload(value: string) {
     } satisfies SyncAnswerPayload;
   }
 
-  if (isRecoveryOffer && fields.length === 6) {
-    const [roomId, offerId, hostPlayerId, hostName, disconnectedPlayers, sdp] = fields;
+  if (isRecoveryOffer && fields.length === 7) {
+    const [roomId, offerId, hostPlayerId, hostName, hostColor, disconnectedPlayers, sdp] = fields;
     const slots = parseRecoverySlots(disconnectedPlayers);
 
-    if (!slots) {
+    if (!slots || !RECOVERY_PLAYER_COLORS.includes(hostColor as PlayerColor)) {
       return null;
     }
 
@@ -304,6 +305,7 @@ function parseCompactPayload(value: string) {
       offerId,
       hostPlayerId,
       hostName,
+      hostColor: hostColor as PlayerColor,
       disconnectedPlayers: slots,
       sdp: { type: "offer", sdp },
     } satisfies SyncRecoveryOfferPayload;
@@ -380,6 +382,7 @@ function encodePayload(value: SyncOfferPayload | SyncAnswerPayload | SyncRecover
       value.offerId,
       value.hostPlayerId,
       value.hostName,
+      value.hostColor,
       JSON.stringify(value.disconnectedPlayers),
       typeof value.sdp.sdp === "string" ? value.sdp.sdp : "",
     ]);
@@ -418,6 +421,7 @@ function isRecoveryOfferPayload(value: unknown): value is SyncRecoveryOfferPaylo
     typeof payload.offerId === "string" &&
     typeof payload.hostPlayerId === "string" &&
     typeof payload.hostName === "string" &&
+    RECOVERY_PLAYER_COLORS.includes(payload.hostColor as PlayerColor) &&
     Array.isArray(payload.disconnectedPlayers) &&
     payload.disconnectedPlayers.every(isRecoverySlot) &&
     Boolean(payload.sdp)
@@ -444,7 +448,7 @@ function isRecoverySlot(value: unknown): value is SyncRecoveryPlayerSlot {
     typeof slot === "object" &&
     typeof slot.id === "string" &&
     typeof slot.name === "string" &&
-    (slot.color === null || RECOVERY_PLAYER_COLORS.includes(slot.color as PlayerColor));
+    RECOVERY_PLAYER_COLORS.includes(slot.color as PlayerColor);
 }
 
 function parseRecoverySlots(value: string) {
@@ -536,23 +540,27 @@ export class SyncHostTransport {
   private peers = new Map<string, HostPeer>();
   private reconnectGraceMs: number;
   private roomId: string;
+  private hostColor: PlayerColor | null;
   private hostPlayerId: string;
   private hostName: string;
 
   constructor({
     callbacks,
+    hostColor,
     hostName,
     hostPlayerId,
     reconnectGraceMs = DEFAULT_RECONNECT_GRACE_MS,
     roomId,
   }: {
     callbacks: SyncTransportCallbacks;
+    hostColor: PlayerColor | null;
     hostName: string;
     hostPlayerId: string;
     reconnectGraceMs?: number;
     roomId: string;
   }) {
     this.callbacks = callbacks;
+    this.hostColor = hostColor;
     this.hostName = hostName;
     this.hostPlayerId = hostPlayerId;
     this.reconnectGraceMs = reconnectGraceMs;
@@ -576,6 +584,10 @@ export class SyncHostTransport {
   }
 
   async createRecoveryOffer(disconnectedPlayers: SyncRecoveryPlayerSlot[]) {
+    if (!this.hostColor) {
+      throw new Error("host color is required for recovery.");
+    }
+
     const offer = await this.createPendingOffer();
 
     const payload: SyncRecoveryOfferPayload = {
@@ -585,6 +597,7 @@ export class SyncHostTransport {
       offerId: offer.offerId,
       hostPlayerId: this.hostPlayerId,
       hostName: this.hostName,
+      hostColor: this.hostColor,
       disconnectedPlayers,
       sdp: offer.sdp,
     };
@@ -995,6 +1008,7 @@ export class SyncJoinTransport {
 
     return {
       answerText: encodePayload(payload),
+      hostColor: "hostColor" in offer ? offer.hostColor : null,
       hostName: offer.hostName,
       hostPlayerId: offer.hostPlayerId,
       roomId: offer.roomId,

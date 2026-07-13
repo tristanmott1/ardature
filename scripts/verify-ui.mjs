@@ -210,7 +210,8 @@ async function runSourceChecks() {
   assert(appSource.includes("hostTransportRef.current = new SyncHostTransport") && appSource.includes("restoredSyncHost"), "Restored sync hosts rebuild transport for recovery QR generation.");
   assert(appSource.includes('const showRecoveryTools = mode === "sync" && Boolean(onScanRecoveryAnswer)'), "Recovery QR tools render only for the sync host pause modal.");
   assert(appSource.includes("createRecoveryAnswer") && appSource.includes("onChooseRecoveryPlayer"), "Joiners choose a disconnected slot before creating a recovery answer.");
-  assert(syncTransportSource.includes("color: PlayerColor | null") && syncTransportSource.includes("RECOVERY_PLAYER_COLORS"), "Recovery slots carry validated player colors.");
+  assert(syncTransportSource.includes("color: PlayerColor;") && syncTransportSource.includes("hostColor: PlayerColor;") && syncTransportSource.includes("RECOVERY_PLAYER_COLORS.includes(slot.color as PlayerColor)"), "Recovery slots require validated player colors.");
+  assert(appSource.includes("host color is required for recovery."), "Recovery answer screens reject missing host colors.");
   assert(appArchitectureDocs.includes("Recovery slot and answer screens show the disconnected player's frozen color") && setupDraftDocs.includes("Recovery slot and recovery answer screens must show the disconnected player's frozen color"), "Recovery player color visibility is documented.");
   assert(appSource.includes("hostTransportRef.current?.sendToPeer(playerId, { type: \"removed\" })"), "Host sends removed before closing a removed peer.");
   assert(gameStateSource.includes("pauseLocalGameForStorage") && appSource.includes("pagehide") && appSource.includes("beforeunload"), "Local refresh writes a paused active-game snapshot.");
@@ -900,7 +901,7 @@ async function runLocalDraftChecks(page) {
   await capture(page, "09-restart-confirm-mobile.png");
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("dialog", { name: "Paused" }).waitFor();
-  await page.getByText("40 territories remain.").waitFor();
+  assert((await page.getByRole("dialog", { name: "Paused" }).getByText(/territories remain/i).count()) === 0, "Pause modal does not show draft territory progress.");
   await page.getByRole("button", { name: "Resume" }).click();
   await page.getByText("1 / 21").waitFor();
   await page.getByRole("button", { name: "Return to map view" }).click();
@@ -1826,11 +1827,12 @@ async function runSyncReadyPageChecks(browser) {
     joiner.waitForSelector(".turn-action-panel", { timeout: 15000 }).then(() => joiner),
   ]);
   const passiveTurnPage = activeTurnPage === host ? joiner : host;
-  await passiveTurnPage.waitForSelector(".game-map-panel", { timeout: 15000 });
+  await passiveTurnPage.waitForSelector(".map-svg", { timeout: 15000 });
   await capture(activeTurnPage, "17b-sync-active-turn-mobile.png");
   await capture(passiveTurnPage, "17c-sync-passive-turn-mobile.png");
   assert((await activeTurnPage.getByRole("button", { name: "Spy" }).count()) === 1, "Active sync turn player sees turn controls.");
   assert((await passiveTurnPage.locator(".turn-action-panel").count()) === 0, "Passive sync turn player does not see turn controls.");
+  assert((await passiveTurnPage.locator(".game-map-panel").count()) === 0, "Passive sync turn player has no empty troop section before selecting a territory.");
   assert((await passiveTurnPage.locator(".game-map-panel .troop-icon-count").count()) === 0, "Passive sync turn player does not see private action breakdowns.");
 
   await host.close();

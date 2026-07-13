@@ -157,6 +157,7 @@ Local pause is a true pause of the single-device draft:
 - Local pause has no end-game or close button.
 - Local pause has no disconnected or reconnecting state.
 - Local pause has no QR/reconnect controls.
+- Local pause does not show territories remaining or other draft progress inside the pause modal. Draft progress belongs in the persistent player bar before pause, not in pause content.
 - Local players can be removed while paused.
 - Local refresh or close during draft restores into local pause, with the timer stopped and remaining time preserved.
 
@@ -244,7 +245,7 @@ Graceful quit and ungraceful disconnect are different:
 - If the host removes a player, it sends `removed` when possible, then closes that peer. Removed players cannot rejoin.
 - Automatic WebRTC reconnect should behave like Qwixx where possible inside the 10-second reconnecting window.
 - QR recovery is available only from sync host pause. The host recovery QR contains only currently disconnected players. The rejoining device scans from the normal Sync -> Join flow, chooses one disconnected slot, shows a player-specific answer QR, and the host scanner accepts it only if that player is still disconnected.
-- Recovery slot and recovery answer screens must show the disconnected player's frozen color next to the player name, because color is part of the host-authoritative player identity being reclaimed.
+- Recovery slot and recovery answer screens must show the disconnected player's frozen color next to the player name, because color is part of the host-authoritative player identity being reclaimed. Recovery payloads that name a player without a valid color are invalid.
 - Stale recovery answers fail cleanly. If two devices try to reclaim the same player, only the first accepted answer can reconnect.
 - Reconnecting players cannot change the underlying player identity. Names, colors, and locks remain exactly as the host sees them.
 

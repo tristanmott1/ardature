@@ -156,6 +156,16 @@ type ActiveOverlay =
   | { type: "notification" }
   | { type: "confirm"; confirm: "draft" | "spy" };
 
+function firstActiveOverlay(...overlays: Array<ActiveOverlay | null>): ActiveOverlay | null {
+  for (const overlay of overlays) {
+    if (overlay) {
+      return overlay;
+    }
+  }
+
+  return null;
+}
+
 type BarcodeDetectorResult = {
   rawValue: string;
 };
@@ -279,11 +289,11 @@ function App() {
     () => createTroopMarkers(game, allocationPlayerId, gameMapViewerId, turnViewerId),
     [allocationPlayerId, game, gameMapViewerId, turnViewerId],
   );
-  const remainingCount = game.draft ? remainingTerritoryIds(game.draft.ownership).length : generatedMapData.territories.length;
   const disconnectedSyncPlayers = game.mode === "sync"
     ? game.players
-        .filter((player) => player.id !== localPlayerId && player.connectionStatus === "disconnected")
-        .map((player) => ({ color: player.color, id: player.id, name: player.name }))
+        .flatMap((player) => player.id !== localPlayerId && player.connectionStatus === "disconnected" && player.color
+          ? [{ color: player.color, id: player.id, name: player.name }]
+          : [])
     : [];
   const gameMapSelectedTerritory = gameMapSelectedTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === gameMapSelectedTerritoryId) ?? null
@@ -347,45 +357,34 @@ function App() {
   const canShowAllocationSection = game.phase === "allocation" && !localAllocationReady;
   const needsAllocationArmyBuild = Boolean(canShowAllocationSection && allocationPlayer && !allocationBuildSubmitted);
   const needsReinforcementArmyBuild = game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementBuild";
-  const activeOverlay: ActiveOverlay | null = syncJoinerBlocked
-    ? { type: "syncBlocked" }
-    : syncCameraMode
-      ? { type: "scanner" }
-      : isEndGamePromptOpen
-        ? { type: "decision", decision: "exit" }
-        : isRestartGamePromptOpen
-          ? { type: "decision", decision: "restart" }
-          : game.phase === "paused"
-            ? { type: "pause" }
-            : game.phase === "allocationHandoff"
-              ? { type: "handoff", handoff: "allocation" }
-              : game.phase === "turnHandoff"
-                ? { type: "handoff", handoff: "turn" }
-                : needsAllocationArmyBuild
-                  ? { type: "armyBuild", build: "allocation" }
-                  : needsReinforcementArmyBuild
-                    ? { type: "armyBuild", build: "reinforcement" }
-                    : currentNotification
-                      ? { type: "notification" }
-                      : spyTargetTerritory && spyCapturePercent !== null
-                        ? { type: "confirm", confirm: "spy" }
-                        : canShowConfirm
-                          ? { type: "confirm", confirm: "draft" }
-                          : null;
+  const activeOverlay = firstActiveOverlay(
+    syncJoinerBlocked ? { type: "syncBlocked" } : null,
+    syncCameraMode ? { type: "scanner" } : null,
+    isEndGamePromptOpen ? { type: "decision", decision: "exit" } : null,
+    isRestartGamePromptOpen ? { type: "decision", decision: "restart" } : null,
+    game.phase === "paused" ? { type: "pause" } : null,
+    game.phase === "allocationHandoff" ? { type: "handoff", handoff: "allocation" } : null,
+    game.phase === "turnHandoff" ? { type: "handoff", handoff: "turn" } : null,
+    needsAllocationArmyBuild ? { type: "armyBuild", build: "allocation" } : null,
+    needsReinforcementArmyBuild ? { type: "armyBuild", build: "reinforcement" } : null,
+    currentNotification ? { type: "notification" } : null,
+    spyTargetTerritory && spyCapturePercent !== null ? { type: "confirm", confirm: "spy" } : null,
+    canShowConfirm ? { type: "confirm", confirm: "draft" } : null,
+  );
   const hasActiveOverlay = Boolean(activeOverlay);
   const showTroopSection = !hasActiveOverlay;
   const showActionSection = !hasActiveOverlay;
   const mapFrozen = hasActiveOverlay;
-  const showAllocationControls = showTroopSection && canShowAllocationSection;
-  const showAllocationWaiting = showTroopSection && game.mode === "sync" && game.phase === "allocation" && localAllocationReady;
-  const showGameMapControls = showTroopSection && game.phase === "gameMap";
-  const showTurnControls = showActionSection && game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer);
-  const showReinforcementControls = showTroopSection && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace";
-  const showTurnMapControls = game.phase === "turn" &&
+  const showAllocationTroopSection = showTroopSection && canShowAllocationSection;
+  const showAllocationWaitingSection = showTroopSection && game.mode === "sync" && game.phase === "allocation" && localAllocationReady;
+  const showGameMapInfoSection = showTroopSection && game.phase === "gameMap" && Boolean(gameMapSelectedTerritory);
+  const showTurnActionSection = showActionSection && game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer);
+  const showReinforcementTroopSection = showTroopSection && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace";
+  const showTurnInfoSection = game.phase === "turn" &&
     game.turn?.stage !== "reinforcementBuild" &&
     game.turn?.stage !== "reinforcementPlace" &&
     game.turn?.stage !== "spyTarget" &&
-    (Boolean(gameMapSelectedTerritoryId) || !canControlTurnPlayer || game.turn?.stage === "spyIntel") &&
+    Boolean(turnMapSelectedTerritory) &&
     showTroopSection;
   const pausedDraftPlayer = game.phase === "paused" && game.draft && !game.allocation
     ? activePlayer({ ...game, phase: "draft" })
@@ -413,7 +412,7 @@ function App() {
     : null;
   const showGameTopBar = game.phase !== "home" && game.phase !== "setup" && Boolean(gameTopBarPlayer);
   const showGameStageLayout = game.phase !== "home" && game.phase !== "setup";
-  const canUseMapCameraControls = game.phase !== "home" && game.phase !== "setup" && !hasActiveOverlay && !showAllocationWaiting;
+  const canUseMapCameraControls = game.phase !== "home" && game.phase !== "setup" && !hasActiveOverlay && !showAllocationWaitingSection;
 
   useEffect(() => {
     latestGameRef.current = game;
@@ -576,6 +575,7 @@ function App() {
         onPeerClosed: handleHostPeerClosed,
         onPeerStatus: handleHostPeerStatus,
       },
+      hostColor: hostPlayer.color,
       hostName: hostPlayer.name,
       hostPlayerId: hostPlayer.id,
       roomId: crypto.randomUUID(),
@@ -807,6 +807,7 @@ function App() {
         onPeerClosed: handleHostPeerClosed,
         onPeerStatus: handleHostPeerStatus,
       },
+      hostColor: hostPlayer.color,
       hostName: hostPlayer.name,
       hostPlayerId: hostPlayer.id,
       roomId,
@@ -1029,6 +1030,9 @@ function App() {
     setSyncMessage("Creating recovery answer");
     try {
       const answer = await joinTransport.createRecoveryAnswer(syncRecoveryOfferText, slot);
+      if (!answer.hostColor) {
+        throw new Error("host color is required for recovery.");
+      }
 
       endSyncTransports();
       joinTransportRef.current = joinTransport;
@@ -1051,7 +1055,7 @@ function App() {
           {
             id: answer.hostPlayerId,
             name: answer.hostName,
-            color: null,
+            color: answer.hostColor,
             nameLocked: true,
             colorLocked: true,
             connectionStatus: "connected",
@@ -1866,7 +1870,7 @@ function App() {
         />
       ) : null}
 
-      {showAllocationControls && allocationPlayer ? (
+      {showAllocationTroopSection && allocationPlayer ? (
         <AllocationPanel
           allocation={game.allocation}
           canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
@@ -1878,7 +1882,7 @@ function App() {
         />
       ) : null}
 
-      {showGameMapControls ? (
+      {showGameMapInfoSection ? (
         <GameMapPanel
           capturedSpies={gameMapCapturedSpies}
           players={game.players}
@@ -1888,7 +1892,7 @@ function App() {
         />
       ) : null}
 
-      {showAllocationWaiting && allocationPlayer ? (
+      {showAllocationWaitingSection && allocationPlayer ? (
         <AllocationWaitingPanel
           players={game.players}
           allocation={game.allocation}
@@ -1897,7 +1901,7 @@ function App() {
         />
       ) : null}
 
-      {showReinforcementControls && turnActionPlayer && turnReinforcement ? (
+      {showReinforcementTroopSection && turnActionPlayer && turnReinforcement ? (
         <ReinforcementPanel
           allocation={game.allocation}
           canFinish={Boolean(turnPlayerId && reinforcementComplete(game, turnPlayerId))}
@@ -1911,7 +1915,7 @@ function App() {
         />
       ) : null}
 
-      {showTurnMapControls ? (
+      {showTurnInfoSection ? (
         <GameMapPanel
           capturedSpies={turnMapCapturedSpies}
           players={game.players}
@@ -1935,7 +1939,7 @@ function App() {
         troopMarkers={troopMarkers}
       />
 
-      {showTurnControls && turnActionPlayer ? (
+      {showTurnActionSection && turnActionPlayer ? (
         <TurnActionPanel
           canSpy={Boolean(turnPlayerId && (canUseSpy(game, turnPlayerId) || game.turn?.stage === "spyTarget"))}
           onDismissSpy={dismissTurnSpy}
@@ -2027,7 +2031,6 @@ function App() {
           onResume={resumeDraft}
           onScanRecoveryAnswer={game.mode === "sync" && syncRole === "host" ? () => setSyncCameraMode("joinAnswer") : undefined}
           players={game.players}
-          remainingCount={remainingCount}
           syncMessage={syncMessage}
           syncQrText={game.mode === "sync" && syncRole === "host" ? syncQrText : ""}
         />
@@ -2433,7 +2436,7 @@ function AllocationPanel({
   const playerAllocation = allocation?.playerAllocations[player.id] ?? null;
 
   return (
-    <section className="game-controls-panel allocation-panel">
+    <section className="game-section-panel allocation-panel">
       {playerAllocation?.buildSubmitted && allocation ? (
         <AllocationControls
           allocation={allocation}
@@ -2478,7 +2481,7 @@ function TurnActionPanel({
   const spySelected = stage === "spyTarget";
 
   return (
-    <section className="game-controls-panel turn-action-panel">
+    <section className="game-section-panel turn-action-panel">
       {spyMissing ? (
         <span className="turn-spy-button turn-spy-spacer" aria-hidden="true" />
       ) : (
@@ -2541,7 +2544,7 @@ function ReinforcementPanel({
   const canRemoveAny = TROOP_TYPES.some(canRemoveType);
 
   return (
-    <section className="game-controls-panel allocation-panel reinforcement-panel">
+    <section className="game-section-panel allocation-panel reinforcement-panel">
       <div className="allocation-controls">
         {selectedTerritory && selectedTroops ? (
           <>
@@ -2856,7 +2859,7 @@ function AllocationWaitingPanel({
   const waitingPlayers = players.filter((player) => !allocation?.playerAllocations[player.id]?.ready);
 
   return (
-    <section className="game-controls-panel allocation-waiting-panel" role="status">
+    <section className="game-section-panel allocation-waiting-panel" role="status">
       <div className="waiting-panel">
         <div className="ready-columns">
           <ReadyColumn title="Ready" players={readyPlayers} />
@@ -2906,7 +2909,7 @@ function GameMapPanel({
   const troopPlayer = players.find((player) => player.id === (troopPlayerId ?? viewerId)) ?? players[0] ?? null;
 
   return (
-    <section className="game-controls-panel game-map-panel">
+    <section className="game-section-panel game-map-panel">
       {selectedTerritory ? <strong className="selected-territory-name">{selectedTerritory.name}</strong> : null}
       {selectedTerritory && troopBreakdown && troopPlayer ? <TroopCountRow counts={troopBreakdown} player={troopPlayer} /> : null}
       {selectedTerritory ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
@@ -2988,7 +2991,6 @@ function PausePanel({
   onResume,
   onScanRecoveryAnswer,
   players,
-  remainingCount,
   syncMessage,
   syncQrText,
 }: {
@@ -3001,7 +3003,6 @@ function PausePanel({
   onResume: () => void;
   onScanRecoveryAnswer?: () => void;
   players: GamePlayer[];
-  remainingCount: number;
   syncMessage?: string;
   syncQrText?: string;
 }) {
@@ -3018,7 +3019,6 @@ function PausePanel({
             </button>
           ) : null}
         </div>
-        <p className="muted">{remainingCount} territories remain.</p>
         <div className="player-list paused-list">
           {players.map((player) => (
             <article className="player-row compact-row" data-player-status={player.connectionStatus} key={player.id}>

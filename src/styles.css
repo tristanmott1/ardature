@@ -293,7 +293,7 @@ button:focus-visible,
   background: rgba(255, 255, 255, 0.18);
 }
 
-.game-controls-panel {
+.game-section-panel {
   position: relative;
   z-index: 12;
   flex: none;
