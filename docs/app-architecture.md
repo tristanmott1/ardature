@@ -195,6 +195,8 @@ Small setup helpers that are not app wiring live in `src/game/setupUtils.ts`, su
 
 Generated territory lookup helpers live in `src/map/territoryLookup.ts`. Components and game-view projections should use `territoryForId`, `territoryName`, and `territoriesInRegion` instead of repeatedly scanning `generatedMapData.territories`.
 
+App-level lifecycle hooks live in `src/app/`. Local refresh/close recovery is isolated in `useLocalPauseRecovery`, which writes a paused local snapshot for active local game stages. `App.tsx` should install that hook rather than owning pagehide/beforeunload persistence wiring inline.
+
 Troop and spy icon rendering lives in `src/game/troopIcons.tsx`. Screens should reuse `TroopIconCount`, `TroopIconImage`, `troopIconSrc`, `spyIconSrc`, and `troopName` instead of defining their own troop asset paths, labels, or side mappings.
 
 Troop rows and captured-spy rows live in `src/ui/TroopControls.tsx`. Allocation, reinforcement, army build, and map-inspection screens should import `TroopPlacementRows`, `TroopCountRow`, and `CapturedSpyRow` instead of defining local add/remove row markup or captured-spy layouts.

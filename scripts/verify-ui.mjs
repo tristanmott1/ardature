@@ -115,6 +115,7 @@ async function runSourceChecks() {
   const indexSource = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const manifestSource = await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8");
   const serviceWorkerSource = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
+  const localPauseRecoverySource = await readFile(new URL("../src/app/useLocalPauseRecovery.ts", import.meta.url), "utf8");
   const mapExtractorSource = await readFile(new URL("../scripts/extract-map.ps1", import.meta.url), "utf8");
   const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
   const territoryPreviewSource = await readFile(new URL("../maps/previews/territories-background.svg", import.meta.url), "utf8");
@@ -257,7 +258,7 @@ async function runSourceChecks() {
   assert(!appSource.includes("host color is required for recovery.") && syncTransportSource.includes("RECOVERY_PLAYER_COLORS.includes(payload.hostColor as PlayerColor)") && syncTransportSource.includes("RECOVERY_PLAYER_COLORS.includes(payload.playerColor as PlayerColor)"), "Malformed QR identity colors are rejected by sync payload validation, not patched in UI.");
   assert(appArchitectureDocs.includes("Recovery slot and answer screens show the disconnected player's frozen color") && setupDraftDocs.includes("Recovery slot and recovery answer screens must show the disconnected player's frozen color"), "Recovery player color visibility is documented.");
   assert(appSource.includes("hostTransportRef.current?.sendToPeer(playerId, { type: \"removed\" })"), "Host sends removed before closing a removed peer.");
-  assert(gameStateSource.includes("pauseLocalGameForStorage") && appSource.includes("pagehide") && appSource.includes("beforeunload"), "Local refresh writes a paused active-game snapshot.");
+  assert(appSource.includes("useLocalPauseRecovery(game)") && localPauseRecoverySource.includes("pauseLocalGameForStorage") && localPauseRecoverySource.includes("pagehide") && localPauseRecoverySource.includes("beforeunload"), "Local refresh writes a paused active-game snapshot through the app recovery hook.");
   assert(gameStateSource.includes("applySyncProfileUpdate") && gameStateSource.includes("applySyncDraftConfirm") && gameStateSource.includes("applySyncTurnCommand") && gameStateSource.includes("applySyncPlayerQuit"), "Host command application is centralized in game helpers.");
   assert(gameStateSource.includes("SYNC_HOST_GAME_KEY") && appSource.includes("saveSyncHostGame(nextGame, localPlayerId, revision)") && appSource.includes("readSyncHostGame()"), "Sync host active games persist separately from local games.");
   assert(!gameTypesSource.includes("noticeTerritoryId") && !gameTypesSource.includes("noticePlayerId"), "Shared draft state does not store local notices.");
@@ -314,7 +315,7 @@ async function runSourceChecks() {
   assert(gameViewSource.includes("function playerBarPlayerForGame") && gameViewSource.includes("function playerBarDraftProgress") && appSource.includes("const playerBarPlayer = playerBarPlayerForGame") && !appSource.includes("const playerBarIsDraft ="), "Persistent player-bar identity and progress use named helpers.");
   assert(setupPanelsSource.includes('from "./FormControls"') && formControlsSource.includes("function ConfigSelectSection") && formControlsSource.includes("function SelectField") && formControlsSource.includes("function ColorSelect") && formControlsSource.includes("function PanelHeader") && !appSource.includes("function ConfigSelectSection"), "Setup form controls share imported form primitives.");
   assert(appSource.includes('from "./ui/SetupPanels"') && setupPanelsSource.includes("function HomePanel") && setupPanelsSource.includes("function SetupPanel") && setupPanelsSource.includes("function SyncEntryPanel") && !appSource.includes("function HomePanel") && !appSource.includes("function SetupPanel"), "Home, sync entry, and setup panels are imported instead of defined inline.");
-  assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
+  assert(localPauseRecoverySource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
   assert(troopControlsSource.includes("TroopIconCount") && troopIconsSource.includes("troopIconSrc") && troopIconsSource.includes("function TroopIconImage"), "Allocation UI uses troop image icons.");
   assert(troopIconsSource.includes('from "./playerColors"') && formControlsSource.includes('from "../game/playerColors"') && playerColorsSource.includes("function colorCss") && playerColorsSource.includes("function colorLabel") && playerColorsSource.includes("function isLightColor"), "Player color display helpers are centralized.");

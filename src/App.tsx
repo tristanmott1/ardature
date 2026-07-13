@@ -1,6 +1,6 @@
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocalPauseRecovery } from "./app/useLocalPauseRecovery";
 import {
-  LOCAL_GAME_KEY,
   applySyncDraftConfirm,
   adjustReinforcementTroop,
   adjustTerritoryTroop,
@@ -38,7 +38,6 @@ import {
   isSetupValid,
   pauseDraftTimer,
   pauseAllocationTimer,
-  pauseLocalGameForStorage,
   randomCompleteAllocationForPlayer,
   randomPickForActivePlayer,
   pauseSyncGame,
@@ -165,9 +164,6 @@ function App() {
   const hostTransportRef = useRef<SyncHostTransport | null>(null);
   const joinTransportRef = useRef<SyncJoinTransport | null>(null);
   const previousPhaseRef = useRef(game.phase);
-  const latestGameRef = useRef(game);
-  const latestSyncRoleRef = useRef(syncRole);
-  const latestLocalPlayerIdRef = useRef(localPlayerId);
   const lastSentAllocationRef = useRef("");
   const syncRevisionRef = useRef(restoredSyncHost?.revision ?? 0);
   const lastSnapshotRevisionRef = useRef(0);
@@ -303,17 +299,7 @@ function App() {
     turnMapInspection,
   });
 
-  useEffect(() => {
-    latestGameRef.current = game;
-  }, [game]);
-
-  useEffect(() => {
-    latestSyncRoleRef.current = syncRole;
-  }, [syncRole]);
-
-  useEffect(() => {
-    latestLocalPlayerIdRef.current = localPlayerId;
-  }, [localPlayerId]);
+  useLocalPauseRecovery(game);
 
   useEffect(() => {
     const isPausedLocalDraft = game.mode === "local" && game.phase === "paused" && Boolean(game.draft) && !game.allocation;
@@ -392,24 +378,6 @@ function App() {
       saveLocalGame(game);
     }
   }, [game]);
-
-  useEffect(() => {
-    function savePausedLocalGame() {
-      const current = latestGameRef.current;
-
-      if (current.mode === "local" && current.phase !== "home" && current.phase !== "setup" && localStorage.getItem(LOCAL_GAME_KEY)) {
-        saveLocalGame(pauseLocalGameForStorage(current, Date.now()));
-      }
-    }
-
-    window.addEventListener("pagehide", savePausedLocalGame);
-    window.addEventListener("beforeunload", savePausedLocalGame);
-
-    return () => {
-      window.removeEventListener("pagehide", savePausedLocalGame);
-      window.removeEventListener("beforeunload", savePausedLocalGame);
-    };
-  }, []);
 
   useEffect(() => {
     if (game.phase !== "setup") {
