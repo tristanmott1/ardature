@@ -2730,48 +2730,76 @@ function TroopPlacementRows({
 
   return (
     <>
-      <div className="troop-action-row">
-        <span className="troop-row-spacer" aria-hidden="true" />
-        <span className="troop-row-affordance" data-muted={canAddAny ? undefined : "true"} aria-hidden="true">
-          <Plus size={17} />
-        </span>
-        <div className="troop-action-icons">
-          {TROOP_TYPES.map((troopType) => (
-            <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, 1)} disabled={!canAddType(troopType)} aria-label={`Add ${troopType}`}>
-              <TroopIconCount
-                count={remaining[troopType]}
-                label={`${troopName(player.color, troopType)} remaining: ${remaining[troopType]}`}
-                player={player}
-                troopType={troopType}
-              />
-            </button>
-          ))}
-        </div>
-        <span className="troop-row-spacer" aria-hidden="true" />
-      </div>
+      <TroopActionRow
+        actionLabel="Add"
+        canUseAny={canAddAny}
+        canUseType={canAddType}
+        counts={remaining}
+        delta={1}
+        icon={<Plus size={17} />}
+        labelNoun="remaining"
+        onAdjustTroop={onAdjustTroop}
+        player={player}
+      />
       <div className="allocation-target">
         <strong>{territoryName}</strong>
       </div>
-      <div className="troop-action-row">
-        <span className="troop-row-spacer" aria-hidden="true" />
-        <span className="troop-row-affordance" data-muted={canRemoveAny ? undefined : "true"} aria-hidden="true">
-          <Minus size={17} />
-        </span>
-        <div className="troop-action-icons">
-          {TROOP_TYPES.map((troopType) => (
-            <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, -1)} disabled={!canRemoveType(troopType)} aria-label={`Remove ${troopType}`}>
-              <TroopIconCount
-                count={selectedTroops[troopType]}
-                label={`${troopName(player.color, troopType)} on territory: ${selectedTroops[troopType]}`}
-                player={player}
-                troopType={troopType}
-              />
-            </button>
-          ))}
-        </div>
-        <span className="troop-row-spacer" aria-hidden="true" />
-      </div>
+      <TroopActionRow
+        actionLabel="Remove"
+        canUseAny={canRemoveAny}
+        canUseType={canRemoveType}
+        counts={selectedTroops}
+        delta={-1}
+        icon={<Minus size={17} />}
+        labelNoun="on territory"
+        onAdjustTroop={onAdjustTroop}
+        player={player}
+      />
     </>
+  );
+}
+
+function TroopActionRow({
+  actionLabel,
+  canUseAny,
+  canUseType,
+  counts,
+  delta,
+  icon,
+  labelNoun,
+  onAdjustTroop,
+  player,
+}: {
+  actionLabel: "Add" | "Remove";
+  canUseAny: boolean;
+  canUseType: (troopType: TroopType) => boolean;
+  counts: TroopCounts;
+  delta: 1 | -1;
+  icon: ReactNode;
+  labelNoun: string;
+  onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
+  player: GamePlayer;
+}) {
+  return (
+    <div className="troop-action-row">
+      <span className="troop-row-spacer" aria-hidden="true" />
+      <span className="troop-row-affordance" data-muted={canUseAny ? undefined : "true"} aria-hidden="true">
+        {icon}
+      </span>
+      <div className="troop-action-icons">
+        {TROOP_TYPES.map((troopType) => (
+          <button className="troop-icon-button" type="button" key={troopType} onClick={() => onAdjustTroop(troopType, delta)} disabled={!canUseType(troopType)} aria-label={`${actionLabel} ${troopType}`}>
+            <TroopIconCount
+              count={counts[troopType]}
+              label={`${troopName(player.color, troopType)} ${labelNoun}: ${counts[troopType]}`}
+              player={player}
+              troopType={troopType}
+            />
+          </button>
+        ))}
+      </div>
+      <span className="troop-row-spacer" aria-hidden="true" />
+    </div>
   );
 }
 
