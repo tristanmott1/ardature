@@ -434,6 +434,8 @@ During sync gameplay turns, inactive devices render only a read-only/explore-sty
 
 Spy and region notifications are not local toast effects. They are authoritative per-player queues stored in `GameState`, persisted with active games, and dismissed one at a time. The sync host stores every player's queue, while viewer-specific snapshots include only the receiving player's queue. Local mode shows queued notifications only on the affected player's turn or handoff; sync mode can deliver the affected player's queue after reconnect because the host remains source of truth.
 
+Notification wording lives in `src/game/notificationText.ts`. `App.tsx` renders the active notification overlay, but it should not define notification text formatting inline.
+
 Local and sync modes use the same pause icon/button placement during draft. In local mode, the pause button is always visible because the device owns the whole game. In sync mode, only the host sees the pause button.
 
 Local pause preserves current state exactly: running timer time remaining, pending confirmation, army build/allocation progress, or read-only map view. The pause modal does not repeat draft territory progress; persistent game-stage context belongs in the player bar. Local restart from pause returns to local setup/config with the same players and settings. Local refresh/close during an active phase restores into pause and stops timers. Sync pause resets the active pick for consistency across devices: pending confirmations are discarded, the active pick timer restarts on unpause, and host-authored reconnect state is shown when needed. The sync host can confirm a restart from pause, returning everyone to setup without closing transports.

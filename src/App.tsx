@@ -68,7 +68,6 @@ import type {
   AppPhase,
   ArmyMarker,
   GameConfig,
-  GameNotification,
   GamePlayer,
   GameState,
   PlayerColor,
@@ -83,6 +82,7 @@ import {
   saveSyncProfilePreference,
   syncProfileFromPreferences,
 } from "./game/setupPreferences";
+import { notificationMessage } from "./game/notificationText";
 import {
   activeOverlayForState,
   createTroopMarkers,
@@ -2039,35 +2039,6 @@ function App() {
       {activeOverlayElement}
     </main>
   );
-}
-
-const REGION_NAMES: Record<string, string> = {
-  eriador: "Eriador",
-  gondor: "Gondor",
-  mordor: "Mordor",
-  rhovanion: "Rhovanion",
-  rhun: "Rhun",
-  rohan: "Rohan",
-};
-
-function notificationMessage(notification: GameNotification, players: GamePlayer[]) {
-  if (notification.type === "spyLost") {
-    return `Your spy was captured in ${territoryName(notification.territoryId)}`;
-  }
-
-  if (notification.type === "spyCaptured") {
-    const spyOwner = players.find((player) => player.id === notification.spyOwnerId);
-    return `You captured ${spyOwner?.name ?? "someone"}'s spy in ${territoryName(notification.territoryId)}`;
-  }
-
-  const regionName = REGION_NAMES[notification.regionId] ?? notification.regionId;
-  return notification.type === "regionGained"
-    ? `You control ${regionName}`
-    : `You lost ${regionName}`;
-}
-
-function territoryName(territoryId: string) {
-  return generatedMapData.territories.find((territory) => territory.id === territoryId)?.name ?? territoryId;
 }
 
 function formatQrHandshakeError(error: unknown) {

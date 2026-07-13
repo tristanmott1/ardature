@@ -99,6 +99,7 @@ async function runSourceChecks() {
   const gameStateSource = await readFile(new URL("../src/game/gameState.ts", import.meta.url), "utf8");
   const gameTypesSource = await readFile(new URL("../src/game/gameTypes.ts", import.meta.url), "utf8");
   const gameViewSource = await readFile(new URL("../src/game/gameView.ts", import.meta.url), "utf8");
+  const notificationTextSource = await readFile(new URL("../src/game/notificationText.ts", import.meta.url), "utf8");
   const playerColorsSource = await readFile(new URL("../src/game/playerColors.ts", import.meta.url), "utf8");
   const troopIconsSource = await readFile(new URL("../src/game/troopIcons.tsx", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
@@ -194,6 +195,7 @@ async function runSourceChecks() {
   assert(gameTypesSource.includes("GameNotification") && gameTypesSource.includes("notifications: Record<string, GameNotification[]>") && gameTypesSource.includes("regionControl: Record<string, string | null>"), "Game state stores authoritative per-player notification queues and region control.");
   assert(gameStateSource.includes("applyRegionControlChanges") && gameStateSource.includes('type: "regionGained"') && gameStateSource.includes('type: "regionLost"'), "Region notifications come from authoritative control transitions.");
   assert(gameStateSource.includes('type: "spyLost"') && gameStateSource.includes('type: "spyCaptured"') && appSource.includes("NotificationDialog") && !appSource.includes("GameNotificationDialog"), "Spy capture notifications use the queued blocking notification flow.");
+  assert(appSource.includes('from "./game/notificationText"') && notificationTextSource.includes("function notificationMessage") && !appSource.includes("function notificationMessage"), "Notification text formatting is imported instead of defined inline.");
   assert(gameTypesSource.includes('status: "available" | "captured" | "dead"') && gameTypesSource.includes("custodianPlayerId: string | null") && !gameTypesSource.includes("capturedTerritoryId: string | null"), "Spy state stores explicit status, territory, and custodian.");
   assert(gameStateSource.includes("capturedSpiesOnTerritory") && gameStateSource.includes("restoreCapturedSpies") && gameStateSource.includes("custodianPlayerId: territoryOwnerId"), "Captured spies are selected by territory and custody follows ownership changes.");
   assert(gameSectionsSource.includes("CapturedSpyRow") && troopControlsSource.includes("function CapturedSpyRow") && troopIconsSource.includes('captured ? "-captured" : ""') && troopIconsSource.includes("ownerColor={player.color}"), "Captured spies and troop icons use owner-colored circular icon rendering.");
