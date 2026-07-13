@@ -109,15 +109,16 @@ type ActiveOverlayContext = {
 
 type GameStageLayoutContext = {
   activeOverlay: ActiveOverlay | null;
+  allocationBuildSubmitted: boolean;
+  allocationSelectedTerritoryId: string | null;
   canControlTurnPlayer: boolean;
-  canShowAllocationSection: boolean;
-  canShowReinforcementSection: boolean;
   game: GameState;
   gameMapInspection: TerritoryInspection;
   localAllocationReady: boolean;
   playerBarPlayer: GamePlayer | null;
   turnActionPlayer: GamePlayer | null;
   turnMapInspection: TerritoryInspection;
+  turnSelectedTerritoryId: string | null;
 };
 
 export function activeOverlayForState({
@@ -280,15 +281,16 @@ export function mapPressModeForGame({
 
 export function gameStageLayoutForState({
   activeOverlay,
+  allocationBuildSubmitted,
+  allocationSelectedTerritoryId,
   canControlTurnPlayer,
-  canShowAllocationSection,
-  canShowReinforcementSection,
   game,
   gameMapInspection,
   localAllocationReady,
   playerBarPlayer,
   turnActionPlayer,
   turnMapInspection,
+  turnSelectedTerritoryId,
 }: GameStageLayoutContext): GameStageLayout {
   const hasActiveOverlay = Boolean(activeOverlay);
   const isGameStage = game.phase !== "home" && game.phase !== "setup";
@@ -300,12 +302,13 @@ export function gameStageLayoutForState({
     ? null
     : troopSectionModeForGame({
         canControlTurnPlayer,
-        canShowAllocationSection,
-        canShowReinforcementSection,
+        allocationBuildSubmitted,
+        allocationSelectedTerritoryId,
         game,
         gameMapInspection,
         turnActionPlayer,
         turnMapInspection,
+        turnSelectedTerritoryId,
       });
   const actionSection = !hideSections && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer ? "turn" : "none";
 
@@ -491,15 +494,16 @@ export function syncSnapshotForViewer(game: GameState, viewerId: string): GameSt
 }
 
 function troopSectionModeForGame({
+  allocationBuildSubmitted,
+  allocationSelectedTerritoryId,
   canControlTurnPlayer,
-  canShowAllocationSection,
-  canShowReinforcementSection,
   game,
   gameMapInspection,
   turnActionPlayer,
   turnMapInspection,
+  turnSelectedTerritoryId,
 }: Omit<GameStageLayoutContext, "activeOverlay" | "localAllocationReady" | "playerBarPlayer">): TroopSectionMode {
-  if (canShowAllocationSection) {
+  if (game.phase === "allocation" && allocationBuildSubmitted && allocationSelectedTerritoryId) {
     return { type: "allocation", source: "initial" };
   }
 
@@ -511,7 +515,13 @@ function troopSectionModeForGame({
     return null;
   }
 
-  if (canControlTurnPlayer && turnActionPlayer && canShowReinforcementSection) {
+  if (
+    game.phase === "turn" &&
+    canControlTurnPlayer &&
+    turnActionPlayer &&
+    game.turn?.stage === "reinforcementPlace" &&
+    turnSelectedTerritoryId
+  ) {
     return { type: "allocation", source: "reinforcement" };
   }
 

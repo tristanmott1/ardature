@@ -280,8 +280,6 @@ function App() {
   });
   const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
   const canUseAllocationPhase = game.phase === "allocation" && !localAllocationReady;
-  const canShowAllocationSection = Boolean(canUseAllocationPhase && allocationBuildSubmitted && allocationSelectedTerritoryId);
-  const canShowReinforcementSection = Boolean(game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace" && turnSelectedTerritory);
   const needsAllocationArmyBuild = Boolean(canUseAllocationPhase && allocationPlayer && !allocationBuildSubmitted);
   const needsReinforcementArmyBuild = Boolean(game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementBuild");
   const activeOverlay = activeOverlayForState({
@@ -307,15 +305,16 @@ function App() {
   const playerBarProgress = playerBarDraftProgress(game, playerBarPlayer);
   const layout = gameStageLayoutForState({
     activeOverlay,
+    allocationBuildSubmitted,
+    allocationSelectedTerritoryId,
     canControlTurnPlayer,
-    canShowAllocationSection,
-    canShowReinforcementSection,
     game,
     gameMapInspection,
     localAllocationReady,
     playerBarPlayer,
     turnActionPlayer,
     turnMapInspection,
+    turnSelectedTerritoryId,
   });
 
   useLocalPauseRecovery(game);
