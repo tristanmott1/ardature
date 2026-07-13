@@ -39,7 +39,7 @@ export function HomePanel({ onStartLocal, onStartSync }: { onStartLocal: () => v
       <div className="brand-row">
         <img src="./app-icons/icon-192.png" alt="" />
         <div>
-          <h1>ArdatÃºrÃ«</h1>
+          <h1>Ardatúrë</h1>
         </div>
       </div>
       <div className="mode-grid">

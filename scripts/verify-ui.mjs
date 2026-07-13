@@ -163,6 +163,8 @@ async function runSourceChecks() {
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
   assert(!mapDataSource.includes("Infinity"), "Generated map data has no Infinity values.");
   assert((mapDataSource.match(/id: "/g) ?? []).length === 42, "Generated app data has 42 playable territories.");
+  assert(!/[ÃÂ�]/.test(`${setupPanelsSource}\n${mapDataSource}\n${manifestSource}`), "User-facing app title and territory data contain no mojibake.");
+  assert(setupPanelsSource.includes("Ardatúrë") && manifestSource.includes("Ardatúrë") && mapDataSource.includes('name: "Lórien"') && mapDataSource.includes('name: "Sea of Rhûn"') && mapDataSource.includes('name: "Udûn"') && mapDataSource.includes('name: "Drúwaith Iaur"'), "User-facing names preserve required special characters.");
   assert(territoryLookupSource.includes("territoryForId") && !appSource.includes("generatedMapData.territories.find") && !gameSectionsSource.includes("generatedMapData.territories.find") && !gameViewSource.includes("new Map<string, GeneratedTerritoryData>"), "Territory lookup uses one shared generated-data helper.");
   assert(mapWidth === sourceWidth * 10 + 3000 && mapHeight === sourceHeight * 10 + 3000, "Generated app data includes the 1500-unit display frame.");
   assert(
@@ -210,7 +212,7 @@ async function runSourceChecks() {
   assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && gameTypesSource.includes("minTurnNumber: number") && appSource.includes("visibleNotification") && gameViewSource.includes('game.mode === "local" && game.phase === "turnHandoff"') && gameViewSource.includes("game.turn.turnNumber >= notification.minTurnNumber"), "Queued local notifications wait until after handoff.");
   assert(gameViewSource.includes("[viewerId]: game.notifications[viewerId] ?? []"), "Sync snapshots include only the viewer's notification queue.");
   assert(!appSource.includes("spyCaptureNoticeFromTurnChange") && !appSource.includes("SpyCaptureNotice"), "Old effect-based spy capture notices are removed.");
-  assert(appSource.includes("pendingDraftTerritoryId") && appSource.includes("allocationSelectedTerritoryId") && appSource.includes("gameMapSelectedTerritoryId"), "App keeps map selections in local UI state.");
+  assert(appSource.includes("type MapSelectionState") && appSource.includes("const [mapSelections, setMapSelections]") && appSource.includes("function toggleMapSelection") && appSource.includes("pendingDraftTerritoryId") && appSource.includes("allocationSelectedTerritoryId") && appSource.includes("gameMapSelectedTerritoryId"), "App keeps local map selections in one explicit UI state model.");
   assert(appSource.includes("function clearTurnSelections") && appSource.includes("function clearNonDraftMapSelections") && appSource.includes("clearNonDraftMapSelections();"), "Local map selection cleanup uses named helpers instead of repeated setter clusters.");
   assert(gameViewSource.includes("function selectedTerritoryForMap") && appSource.includes("const viewerSelectedTerritoryId = selectedTerritoryForMap") && gameViewSource.includes('game.turn?.stage === "spyIntel"'), "Map selected-territory priority is centralized in one helper.");
   assert(gameViewSource.includes("type MapPressMode") && gameViewSource.includes("function mapPressModeForGame") && appSource.includes("switch (mapPressMode)") && appSource.includes("onTerritoryPress={!layout.freezeMapGestures && mapPressMode ? pressTerritory : undefined}"), "Map territory presses use one explicit mode contract.");
