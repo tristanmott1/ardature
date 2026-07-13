@@ -117,6 +117,7 @@ async function runSourceChecks() {
   const qrCodeUiSource = await readFile(new URL("../src/sync/QrCodeUi.tsx", import.meta.url), "utf8");
   const syncTransportSource = await readFile(new URL("../src/sync/syncTransport.ts", import.meta.url), "utf8");
   const overlaysSource = await readFile(new URL("../src/ui/Overlays.tsx", import.meta.url), "utf8");
+  const playerChromeSource = await readFile(new URL("../src/ui/PlayerChrome.tsx", import.meta.url), "utf8");
   const appArchitectureDocs = await readFile(new URL("../docs/app-architecture.md", import.meta.url), "utf8");
   const setupDraftDocs = await readFile(new URL("../docs/setup-draft-sync-v1.md", import.meta.url), "utf8");
   const mapWidth = generatedNumber(mapDataSource, "width");
@@ -282,8 +283,8 @@ async function runSourceChecks() {
   assert(stylesSource.includes(".player-row.compact-row") && stylesSource.includes('grid-template-areas: "identity status action"') && stylesSource.includes("grid-template-columns: minmax(0, 1fr) 96px 38px") && stylesSource.includes("grid-area: action"), "Pause rows use fixed name/status/action columns with the action slot on the far right.");
   assert(gameStateSource.includes("removeNonConnectedSyncLobbyPlayers") && gameStateSource.includes('state.phase === "setup" && connectionStatus !== "connected"') && gameStateSource.includes('player.connectionStatus === "connected"'), "Sync setup lobby removes reconnecting/disconnected players instead of preserving recovery slots.");
   assert(appSource.includes("removeNonConnectedSyncLobbyPlayers({") && setupDraftDocs.includes("Restarting from sync pause returns to setup with only currently connected players"), "Sync restart to setup prunes non-connected players and documents that recovery is active-game only.");
-  assert(appSource.includes("function PlayerIdentity") && (appSource.match(/className=\"player-dot\"/g) ?? []).length === 1, "Read-only player identity rows share one dot/name component.");
-  assert(appSource.includes("function PlayerBar") && gameViewSource.includes("showPlayerBar") && appSource.includes("allocation-waiting-panel"), "Game stages use the shared persistent player bar.");
+  assert(appSource.includes('from "./ui/PlayerChrome"') && playerChromeSource.includes("function PlayerIdentity") && (playerChromeSource.match(/className=\"player-dot\"/g) ?? []).length === 1 && !appSource.includes("function PlayerIdentity"), "Read-only player identity rows share one imported dot/name component.");
+  assert(playerChromeSource.includes("function PlayerBar") && gameViewSource.includes("showPlayerBar") && appSource.includes("allocation-waiting-panel") && !appSource.includes("function PlayerBar"), "Game stages use the shared persistent player bar.");
   assert(gameViewSource.includes("function playerBarPlayerForGame") && gameViewSource.includes("function playerBarDraftProgress") && appSource.includes("const playerBarPlayer = playerBarPlayerForGame") && !appSource.includes("const playerBarIsDraft ="), "Persistent player-bar identity and progress use named helpers.");
   assert(appSource.includes("function ConfigSelectSection") && (appSource.match(/className=\"config-section\"/g) ?? []).length === 1 && (appSource.match(/className=\"config-select-row\"/g) ?? []).length === 1, "Setup configuration sections share one section wrapper.");
   assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");

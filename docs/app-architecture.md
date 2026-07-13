@@ -170,6 +170,8 @@ From the start of the territory draft through the rest of the game, the app has 
 
 The `PlayerBar` is always present from the start of draft. It is never covered by modals, popups, sheets, or pause UI, and its X/pause controls remain usable whenever those controls are allowed. It uses the color of the player whose turn or draft/allocation step is current. In the sync allocation waiting room and sync passive views, it uses the color/name of the player whose device it is. The left side contains the X button. The player name is prominent near the left; draft may show progress beside the name, such as `3 / 7`. The right side contains the timer when a draft/allocation timer is relevant, and the pause button when pause is available. Timers appear only during draft and troop allocation, including paused remaining time, local handoff upcoming time, and sync waiting-room allocation time. Timers are never shown after troop allocation.
 
+`PlayerBar` and the small dot/name `PlayerIdentity` live in `src/ui/PlayerChrome.tsx`. Game screens should import these shared components instead of defining new player-name rows or local player-bar variants.
+
 The `TroopSection` is optional and appears below the player bar. It has exactly two modes:
 
 - `allocation`: used during initial manual troop allocation and reinforcement placement.

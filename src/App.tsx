@@ -3,7 +3,6 @@ import {
   Check,
   GripVertical,
   Minus,
-  Pause,
   Play,
   Plus,
   RotateCcw,
@@ -119,7 +118,7 @@ import {
   saveSyncProfilePreference,
   syncProfileFromPreferences,
 } from "./game/setupPreferences";
-import { colorCss, colorLabel, isLightColor } from "./game/playerColors";
+import { colorCss, colorLabel } from "./game/playerColors";
 import {
   createTroopMarkers,
   firstActiveOverlay,
@@ -146,6 +145,7 @@ import type { GeneratedTerritoryData } from "./map/mapTypes";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
 import { QrPanel, QrScanner } from "./sync/QrCodeUi";
 import { ConfirmSheet, DecisionDialog, HandoffPanel, ModalActions, ModalIconButton, NotificationDialog } from "./ui/Overlays";
+import { PlayerBar, PlayerIdentity } from "./ui/PlayerChrome";
 import {
   SyncHostTransport,
   SyncJoinTransport,
@@ -2101,15 +2101,6 @@ function HomePanel({ onStartLocal, onStartSync }: { onStartLocal: () => void; on
   );
 }
 
-function PlayerIdentity({ color, name }: { color: PlayerColor | null; name: string }) {
-  return (
-    <span className="player-identity">
-      <span className="player-dot" style={{ background: colorCss(color) }} />
-      <strong>{name}</strong>
-    </span>
-  );
-}
-
 function SyncEntryPanel({
   color,
   message,
@@ -2529,54 +2520,6 @@ function ReinforcementPanel({
         </button>
       </div>
     </section>
-  );
-}
-
-function PlayerBar({
-  detail,
-  onExit,
-  onPause,
-  onTitlePress,
-  pauseLabel,
-  player,
-  timerRemaining,
-  title,
-}: {
-  detail?: string | null;
-  onExit: () => void;
-  onPause?: () => void;
-  onTitlePress?: () => void;
-  pauseLabel?: string;
-  player: GamePlayer | null;
-  timerRemaining?: number | null;
-  title: string;
-}) {
-  const light = isLightColor(player?.color ?? null);
-
-  return (
-    <div className="player-bar" data-tone={light ? "light" : "dark"} style={{ "--bar-color": colorCss(player?.color ?? null) } as CSSProperties}>
-      <button className="icon-button player-bar-button" type="button" onClick={onExit} aria-label="End game">
-        <X size={18} />
-      </button>
-      <button
-        className="player-bar-player"
-        type="button"
-        onClick={onTitlePress}
-        disabled={!onTitlePress}
-        aria-label={onTitlePress ? "Change viewer" : undefined}
-      >
-        <strong>{title}</strong>
-        {detail ? <span>{detail}</span> : null}
-      </button>
-      <div className="player-bar-tools">
-        {timerRemaining ? <span className="timer-chip player-bar-timer">{Math.ceil(timerRemaining / 1000)}s</span> : null}
-        {onPause ? (
-          <button className="icon-button player-bar-button" type="button" onClick={onPause} aria-label={pauseLabel ?? "Pause"}>
-            <Pause size={18} />
-          </button>
-        ) : null}
-      </div>
-    </div>
   );
 }
 
