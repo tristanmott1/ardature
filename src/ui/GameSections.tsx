@@ -182,7 +182,7 @@ function ReinforcementTroopSection({
 
   return (
     <section className="game-section-panel troop-section troop-section-allocation troop-section-reinforcement">
-      <div className="allocation-controls">
+      <div className="troop-placement-controls">
         <TroopPlacementRows
           canAddType={canAddType}
           canRemoveType={canRemoveType}
@@ -283,7 +283,7 @@ function AllocationControls({
   }
 
   return (
-    <div className="allocation-controls">
+    <div className="troop-placement-controls">
       <TroopPlacementRows
         canAddType={canAddType}
         canRemoveType={canRemoveType}

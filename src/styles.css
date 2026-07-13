@@ -714,7 +714,7 @@ select {
   font-weight: 760;
 }
 
-.allocation-controls {
+.troop-placement-controls {
   display: grid;
   gap: 15px;
   padding:
