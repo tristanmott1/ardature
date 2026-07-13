@@ -122,7 +122,7 @@ Manual draft interaction:
 - The active player picks by selecting a remaining territory on the map.
 - Selecting a territory opens a compact bottom confirmation sheet with cancel and confirm controls.
 - The shared player bar remains visible during draft confirmation.
-- While the confirmation sheet is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels the pending pick.
+- While the confirmation sheet is open, the map is frozen. The pending pick is either confirmed with the check button or canceled with the X button.
 - Once confirmed, the territory becomes owned by that player and immediately uses that player's color.
 - The confirmation sheet uses the shared `ConfirmSheet` role documented in `app-architecture.md`.
 - The selected pending territory is highlighted on the map for the active drafting viewer using a brighter version of its current color.
@@ -302,7 +302,7 @@ Reusable map modes for this milestone:
 - Draft active pick: pan, zoom, and selectable remaining territories.
 - Draft inactive player or non-owning sync device: pan and zoom; no valid pick action.
 - On touch devices, a quick one-finger pan may coast briefly after release. Pinch zoom, mouse drag, and wheel input stop normally, and any new map action interrupts the coast immediately.
-- Confirmation sheet: map remains visible but frozen; pending pick is confirmed, canceled by the bottom sheet, canceled by tapping the map background, or replaced by tapping another remaining territory.
+- Confirmation sheet: map remains visible but frozen; pending pick is confirmed or canceled by the bottom sheet.
 - Camera controls hide while setup/configuration panels, popups, bottom sheets, or modals cover the map, including confirmation, pause, scanner, handoff, reconnect, notifications, and decision dialogs.
 - Draft ownership map: pan and zoom; no selection.
 

@@ -49,7 +49,7 @@ export function PlayerBar({
         {detail ? <span>{detail}</span> : null}
       </button>
       <div className="player-bar-tools">
-        {timerRemaining ? <span className="timer-chip player-bar-timer">{Math.ceil(timerRemaining / 1000)}s</span> : null}
+        {timerRemaining !== null && timerRemaining !== undefined ? <span className="timer-chip player-bar-timer">{Math.ceil(timerRemaining / 1000)}s</span> : null}
         {onPause ? (
           <button className="icon-button player-bar-button" type="button" onClick={onPause} aria-label={pauseLabel ?? "Pause"}>
             <Pause size={18} />

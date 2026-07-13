@@ -892,7 +892,7 @@ Draft selection flow:
 3. Confirming assigns the territory immediately and colors it with the owner's player color.
 4. Immediately advance to the next pick.
 
-The confirmation sheet is a compact bottom sheet with the territory name and cancel/confirm controls. The shared player bar remains visible during confirmation. The pending territory itself is highlighted on the map for the active drafting viewer. While confirmation is open, tapping another remaining territory replaces the pending pick, and tapping the map background cancels it.
+The confirmation sheet is a compact bottom sheet with the territory name and cancel/confirm controls. The shared player bar remains visible during confirmation. The pending territory itself is highlighted on the map for the active drafting viewer. While confirmation is open, the map is frozen; the active drafter must use the sheet X to cancel or the check to confirm.
 
 Draft result notifications do not exist. Confirmed picks, including timeout/autodraft picks, immediately update ownership and advance the draft.
 

@@ -212,6 +212,7 @@ async function runSourceChecks() {
   assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".modal-scrim"), "Map camera controls stack below modal popups.");
   assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".draft-sheet-scrim"), "Map camera controls stack below draft sheets.");
   assert(cssZIndex(stylesSource, ".map-camera-control") < cssZIndex(stylesSource, ".army-build-scrim"), "Map camera controls stack below army build modal.");
+  assert(cssZIndex(stylesSource, ".game-layout > .player-bar") > cssZIndex(stylesSource, ".army-build-scrim") && cssZIndex(stylesSource, ".game-layout > .player-bar") > cssZIndex(stylesSource, ".notification-backdrop"), "Game-stage player bar stays above centered game overlays.");
   assert(syncMessagesSource.includes('type: "snapshot"') && syncMessagesSource.includes("revision: number"), "Sync messages use revisioned host snapshots.");
   assert(syncMessagesSource.includes('type: "hostEnded"') && appSource.includes('type: "hostEnded"'), "Sync messages include an explicit host-ended event.");
   assert(syncMessagesSource.includes('type: "removed"') && appSource.includes('type: "removed"'), "Sync messages include an explicit removed event.");
@@ -265,7 +266,7 @@ async function runSourceChecks() {
   assert(gameStateSource.includes('value === "allocationWaiting" ? "allocation"'), "Old allocationWaiting saves normalize to allocation.");
   assert(gameViewSource.includes('game.mode === "sync" && game.phase === "allocation" && localAllocationReady'), "Ready page is derived from this device's ready state.");
   assert(appSource.includes("function ReadyColumn") && appSource.includes('title="Ready"') && appSource.includes('title="Waiting"'), "Allocation ready page uses ready and waiting columns.");
-  assert(gameViewSource.includes("function playerBarTimerRemaining") && appSource.includes("const timerRemaining = playerBarTimerRemaining(game, now)") && appSource.includes("timerRemaining={timerRemaining}"), "A persistent player bar keeps relevant timers visible through one timer helper.");
+  assert(gameViewSource.includes("function playerBarTimerRemaining") && appSource.includes("const timerRemaining = playerBarTimerRemaining(game, now, pausedReturnPhase)") && playerChromeSource.includes("timerRemaining !== null && timerRemaining !== undefined"), "A persistent player bar keeps relevant timers visible through one timer helper, including zero remaining time.");
   assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
   assert(qrCodeUiSource.includes("data-qr-text") && qrCodeUiSource.includes("handlePaste") && appSource.includes("QrPanel") && appSource.includes("QrScanner"), "QR UI is centralized and scanner supports paste-driven verification.");
   assert(!appSource.includes("QRCode.toString") && !appSource.includes("function QrScanner") && !appSource.includes("function QrPanel"), "App imports QR UI instead of defining scanner/rendering internals.");

@@ -311,7 +311,7 @@ function App() {
   const viewerPendingTerritory = pendingDraftTerritoryId
     ? generatedMapData.territories.find((territory) => territory.id === pendingDraftTerritoryId) ?? null
     : null;
-  const timerRemaining = playerBarTimerRemaining(game, now);
+  const timerRemaining = playerBarTimerRemaining(game, now, pausedReturnPhase);
   const canControlSetup = game.mode === "local" || isSyncHost;
   const mapPressMode = mapPressModeForGame({
     activeDraftPlayer: active,

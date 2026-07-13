@@ -306,7 +306,7 @@ export function territoryInspectionForViewer({
   };
 }
 
-export function playerBarTimerRemaining(game: GameState, now: number) {
+export function playerBarTimerRemaining(game: GameState, now: number, pausedReturnPhase: AppPhase | null) {
   if (game.phase === "draft" && game.draft?.timerEndsAt) {
     return Math.max(0, game.draft.timerEndsAt - now);
   }
@@ -315,8 +315,16 @@ export function playerBarTimerRemaining(game: GameState, now: number) {
     return Math.max(0, game.allocation.timerEndsAt - now);
   }
 
-  if (game.phase === "allocation" || game.phase === "allocationHandoff" || (game.phase === "paused" && Boolean(game.allocation))) {
+  if (game.phase === "allocation" || game.phase === "allocationHandoff") {
     return game.allocation?.timerRemainingMs ?? null;
+  }
+
+  if (game.phase !== "paused" || game.turn || pausedReturnPhase === "gameMap") {
+    return null;
+  }
+
+  if (game.allocation) {
+    return game.allocation.timerRemainingMs ?? null;
   }
 
   return game.draft?.timerRemainingMs ?? null;
