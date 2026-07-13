@@ -113,6 +113,7 @@ async function runSourceChecks() {
   const territoryPreviewSource = await readFile(new URL("../maps/previews/territories-background.svg", import.meta.url), "utf8");
   const blueTerritoryPreviewSource = await readFile(new URL("../maps/previews/territories-blue.svg", import.meta.url), "utf8");
   const syncMessagesSource = await readFile(new URL("../src/sync/syncMessages.ts", import.meta.url), "utf8");
+  const qrCodeUiSource = await readFile(new URL("../src/sync/QrCodeUi.tsx", import.meta.url), "utf8");
   const syncTransportSource = await readFile(new URL("../src/sync/syncTransport.ts", import.meta.url), "utf8");
   const appArchitectureDocs = await readFile(new URL("../docs/app-architecture.md", import.meta.url), "utf8");
   const setupDraftDocs = await readFile(new URL("../docs/setup-draft-sync-v1.md", import.meta.url), "utf8");
@@ -253,7 +254,8 @@ async function runSourceChecks() {
   assert(appSource.includes("function ReadyColumn") && appSource.includes('title="Ready"') && appSource.includes('title="Waiting"'), "Allocation ready page uses ready and waiting columns.");
   assert(gameViewSource.includes("function playerBarTimerRemaining") && appSource.includes("const timerRemaining = playerBarTimerRemaining(game, now)") && appSource.includes("timerRemaining={timerRemaining}"), "A persistent player bar keeps relevant timers visible through one timer helper.");
   assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
-  assert(appSource.includes("data-qr-text") && appSource.includes("handlePaste"), "QR scanner supports paste-driven verification.");
+  assert(qrCodeUiSource.includes("data-qr-text") && qrCodeUiSource.includes("handlePaste") && appSource.includes("QrPanel") && appSource.includes("QrScanner"), "QR UI is centralized and scanner supports paste-driven verification.");
+  assert(!appSource.includes("QRCode.toString") && !appSource.includes("function QrScanner") && !appSource.includes("function QrPanel"), "App imports QR UI instead of defining scanner/rendering internals.");
   assert(appSource.includes("canAdvance={isSyncHost") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
@@ -273,6 +275,9 @@ async function runSourceChecks() {
   assert(troopMarkerSource.includes("data-troop-marker"), "Troop markers expose territory ids for visibility verification.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
   assert(appSource.includes('className="connection-label" aria-hidden={mode !== "sync"}') && appSource.includes("canRemove && player.id !== localPlayerId"), "Pause rows keep local and sync action/status slots aligned.");
+  assert(stylesSource.includes(".player-row.compact-row") && stylesSource.includes("grid-template-columns: minmax(0, 1fr) 96px 38px") && stylesSource.includes(".player-row.compact-row > .connection-label") && stylesSource.includes(".player-row.compact-row > .icon-button-spacer"), "Pause rows use fixed name/status/action columns with the action slot on the far right.");
+  assert(gameStateSource.includes("removeNonConnectedSyncLobbyPlayers") && gameStateSource.includes('state.phase === "setup" && connectionStatus !== "connected"') && gameStateSource.includes('player.connectionStatus === "connected"'), "Sync setup lobby removes reconnecting/disconnected players instead of preserving recovery slots.");
+  assert(appSource.includes("removeNonConnectedSyncLobbyPlayers({") && setupDraftDocs.includes("Restarting from sync pause returns to setup with only currently connected players"), "Sync restart to setup prunes non-connected players and documents that recovery is active-game only.");
   assert(appSource.includes("function PlayerIdentity") && (appSource.match(/className=\"player-dot\"/g) ?? []).length === 1, "Read-only player identity rows share one dot/name component.");
   assert(appSource.includes("function PlayerBar") && gameViewSource.includes("showPlayerBar") && appSource.includes("allocation-waiting-panel"), "Game stages use the shared persistent player bar.");
   assert(gameViewSource.includes("function playerBarPlayerForGame") && gameViewSource.includes("function playerBarDraftProgress") && appSource.includes("const playerBarPlayer = playerBarPlayerForGame") && !appSource.includes("const playerBarIsDraft ="), "Persistent player-bar identity and progress use named helpers.");

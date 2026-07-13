@@ -1002,10 +1002,25 @@ export function applySyncPlayerConnectionStatus(state: GameState, playerId: stri
     return state;
   }
 
+  if (state.phase === "setup" && connectionStatus !== "connected") {
+    return removePlayerFromDraft(state, playerId);
+  }
+
   const next = markSyncPlayerStatus(state, playerId, connectionStatus);
   return connectionStatus !== "connected" && (state.phase === "draft" || state.phase === "allocation" || state.phase === "turn")
     ? pauseSyncGame(next)
     : next;
+}
+
+export function removeNonConnectedSyncLobbyPlayers(state: GameState): GameState {
+  if (state.mode !== "sync" || state.phase !== "setup") {
+    return state;
+  }
+
+  return {
+    ...state,
+    players: state.players.filter((player) => player.connectionStatus === "connected"),
+  };
 }
 
 export function pauseSyncGame(state: GameState): GameState {
@@ -1752,7 +1767,7 @@ function restoreSyncHostGame(game: GameState, localPlayerId: string): GameState 
 
   return game.phase === "draft" || game.phase === "allocation" || game.phase === "turn" || game.phase === "turnHandoff"
     ? { ...restored, phase: "paused" }
-    : restored;
+    : removeNonConnectedSyncLobbyPlayers(restored);
 }
 
 function simulateRandomDraft(players: GamePlayer[], config: GameConfig, draft: DraftState) {

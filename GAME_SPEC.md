@@ -863,6 +863,8 @@ The joiner:
 
 Duplicate colors are allowed in the sync lobby, but the host Start button remains disabled until all remaining players have unique colors.
 
+The sync lobby has no reconnecting or disconnected state. If a player stops being connected before the draft starts, the host removes that player from the lobby immediately. If the host restarts a paused active game back to setup, reconnecting and disconnected players are removed before the setup lobby is shown. Active-game recovery QR behavior applies only after the draft has started.
+
 The QR handshake should follow the same broad requirements as Qwixx:
 
 - Large, crisp QR codes.
@@ -1042,7 +1044,8 @@ Sync host pause is a synchronization reset:
 - The active pick timer is not preserved.
 - Any pending selected territory or confirmation sheet is discarded.
 - On unpause, the current player's turn starts over with a fresh timer.
-- The host can restart from pause after confirmation, returning everyone to setup while keeping current sync connections open.
+- The host can restart from pause after confirmation, returning connected players to setup while keeping current sync connections open.
+- Restart removes reconnecting and disconnected players because the setup lobby accepts connected players only.
 - Sync pause includes connected, disconnected, and reconnecting player status.
 - Sync host pause always includes a recovery QR and scan button for disconnected-player recovery.
 - Sync non-host pause does not include a blank QR placeholder or recovery tools.
@@ -1085,6 +1088,7 @@ Graceful quit and ungraceful disconnect are different:
 - Ungraceful disconnect keeps the player in the game, keeps their territories owned, marks them reconnecting on the host, and forces pause.
 - Host end-game sends `hostEnded` so joiners return home instead of staying in a disconnected game.
 - Host removal sends `removed` to that peer when possible. Removed players return home and cannot rejoin.
+- Reconnecting and disconnected slots are preserved only while an active game remains paused. If the host returns to setup, those players are removed.
 
 `connected` means the device is currently on the same authoritative game page as the host:
 

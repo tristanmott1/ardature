@@ -73,6 +73,8 @@ Sync setup behavior:
 - The host can later unlock a player name or color.
 - Before the draft starts, a joiner can quit and disappears from the lobby, freeing their color.
 - Before the draft starts, the host can remove joined players.
+- The setup lobby has no reconnecting or disconnected state. If a joined player stops being connected before the draft starts, the host removes that player from the lobby immediately.
+- Restarting from sync pause returns to setup with only currently connected players. Reconnecting or disconnected players are removed because QR recovery applies only to active games.
 
 Setup options controlled by the host/local device:
 
@@ -166,7 +168,8 @@ Sync host pause is a synchronization reset:
 - The active pick timer is not preserved.
 - Any pending selected territory or confirmation sheet is discarded.
 - On unpause, the current player's turn starts over with a fresh timer.
-- The host can restart from pause after confirmation, returning everyone to setup while keeping current sync connections open.
+- The host can restart from pause after confirmation, returning connected players to setup while keeping current sync connections open.
+- Restart removes any reconnecting or disconnected players before the setup lobby is shown.
 - Sync pause includes connected, disconnected, and reconnecting player status.
 - Sync host pause always includes a recovery QR and scan button for disconnected-player recovery.
 - Sync non-host pause never includes a QR placeholder or recovery tools. Recovery is coordinated through the host because the host is the source of truth.
@@ -227,6 +230,7 @@ Sync reconnect and pause:
 
 - The host can manually pause a draft.
 - Any ungraceful disconnect during draft forces pause.
+- Reconnect and disconnected recovery are active-game concepts only. Setup lobby never preserves reconnecting/disconnected players.
 - Host refresh during an unpaused sync draft restores into paused mode with all non-host players disconnected.
 - After host refresh restore, the host creates a fresh recovery transport and renders a new pause recovery QR. The QR must not remain as a blank placeholder.
 - While paused, the host shows a lobby-style page with the current players and connection status.
@@ -236,11 +240,13 @@ Sync reconnect and pause:
 
 Graceful quit and ungraceful disconnect are different:
 
+- In sync setup, disconnected players are simply removed from the setup roster. Setup has no recovery slots; a player who drops before the draft can join again through the normal first-join QR flow.
 - Graceful quit during sync draft sends a quit message. The host removes that player, clears their territories, returns those territories to the remaining pool, pauses the draft, then shows the pause page without that player.
 - Ungraceful disconnect first marks the player `reconnecting`, keeps their territories owned, and forces pause.
 - `reconnecting` lasts 10 seconds. If WebRTC recovers during that window, the player returns to `connected`.
 - Host and joiner make this transition independently. The host marks the player `disconnected` after its own 10-second reconnect window. The joiner returns home after its own 10-second reconnect window. The host cannot tell the joiner to become disconnected because the connection is already unhealthy.
 - The disconnected player remains in the host game and can return only through the host pause recovery QR.
+- If the host returns to setup before that recovery happens, the disconnected player is removed and cannot reclaim that setup slot.
 - If the host intentionally ends the game, it sends `hostEnded` so joiners return home instead of remaining in a disconnected game.
 - If the host removes a player, it sends `removed` when possible, then closes that peer. Removed players cannot rejoin.
 - Automatic WebRTC reconnect should behave like Qwixx where possible inside the 10-second reconnecting window.
