@@ -61,6 +61,12 @@ export type GameStageLayout = {
   troopSection: TroopSectionMode;
 };
 
+export type PlayerBarControls = {
+  canCycleViewer: boolean;
+  canPause: boolean;
+  pauseLabel: string;
+};
+
 type PlayerBarContext = {
   activeDraftPlayer: GamePlayer | null;
   allocationPlayer: GamePlayer | null;
@@ -544,6 +550,18 @@ export function playerBarDraftProgress(game: GameState, player: GamePlayer | nul
   return isDraftBar && player
     ? draftProgressForPlayer(game, player.id)
     : null;
+}
+
+export function playerBarControlsForGame(game: GameState, isSyncHost: boolean): PlayerBarControls {
+  return {
+    canCycleViewer: game.phase === "gameMap" && game.mode === "local",
+    canPause: game.phase !== "paused" && (game.mode === "local" || isSyncHost),
+    pauseLabel: game.phase === "draft"
+      ? "Pause draft"
+      : game.phase === "gameMap" || game.phase === "turn"
+        ? "Pause map"
+        : "Pause allocation",
+  };
 }
 
 export function notificationPlayerId(game: GameState, syncRole: SyncRole, localPlayerId: string | null, turnViewerId: string | null) {

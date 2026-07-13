@@ -88,6 +88,7 @@ import {
   gameStageLayoutForState,
   mapPressModeForGame,
   notificationPlayerId,
+  playerBarControlsForGame,
   playerBarDraftProgress,
   playerBarPlayerForGame,
   playerBarTimerRemaining,
@@ -292,6 +293,7 @@ function App() {
     pausedReturnPhase,
   });
   const playerBarProgress = playerBarDraftProgress(game, playerBarPlayer);
+  const playerBarControls = playerBarControlsForGame(game, isSyncHost);
   const layout = gameStageLayoutForState({
     activeOverlay,
     allocationBuildSubmitted,
@@ -1861,9 +1863,9 @@ function App() {
         <PlayerBar
           detail={playerBarProgress ? `${playerBarProgress.drafted} / ${playerBarProgress.total}` : null}
           onExit={returnHome}
-          onPause={game.phase !== "paused" && (game.mode === "local" || isSyncHost) ? pauseDraft : undefined}
-          onTitlePress={game.phase === "gameMap" && game.mode === "local" ? cycleGameMapViewer : undefined}
-          pauseLabel={game.phase === "draft" ? "Pause draft" : game.phase === "gameMap" || game.phase === "turn" ? "Pause map" : "Pause allocation"}
+          onPause={playerBarControls.canPause ? pauseDraft : undefined}
+          onTitlePress={playerBarControls.canCycleViewer ? cycleGameMapViewer : undefined}
+          pauseLabel={playerBarControls.pauseLabel}
           player={playerBarPlayer}
           timerRemaining={timerRemaining}
           title={playerBarPlayer?.name ?? "Game"}
