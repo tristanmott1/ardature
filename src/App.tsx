@@ -135,8 +135,6 @@ type MapSelectionState = {
   turnSelectedTerritoryId: string | null;
 };
 
-type MapSelectionValue = string | null | ((current: string | null) => string | null);
-
 const EMPTY_MAP_SELECTIONS: MapSelectionState = {
   allocationSelectedTerritoryId: null,
   gameMapSelectedTerritoryId: null,
@@ -324,33 +322,6 @@ function App() {
 
   function updateMapSelections(updates: Partial<MapSelectionState>) {
     setMapSelections((current) => ({ ...current, ...updates }));
-  }
-
-  function setMapSelectionValue(key: keyof MapSelectionState, value: MapSelectionValue) {
-    setMapSelections((current) => ({
-      ...current,
-      [key]: typeof value === "function" ? value(current[key]) : value,
-    }));
-  }
-
-  function setPendingDraftTerritoryId(value: MapSelectionValue) {
-    setMapSelectionValue("pendingDraftTerritoryId", value);
-  }
-
-  function setAllocationSelectedTerritoryId(value: MapSelectionValue) {
-    setMapSelectionValue("allocationSelectedTerritoryId", value);
-  }
-
-  function setGameMapSelectedTerritoryId(value: MapSelectionValue) {
-    setMapSelectionValue("gameMapSelectedTerritoryId", value);
-  }
-
-  function setTurnSelectedTerritoryId(value: MapSelectionValue) {
-    setMapSelectionValue("turnSelectedTerritoryId", value);
-  }
-
-  function setPendingSpyTerritoryId(value: MapSelectionValue) {
-    setMapSelectionValue("pendingSpyTerritoryId", value);
   }
 
   function toggleMapSelection(key: keyof MapSelectionState, territoryId: string) {
@@ -585,7 +556,7 @@ function App() {
     }
 
     sendJoinerCommand({ type: "draftConfirm", territoryId: pendingDraftTerritoryId });
-    setPendingDraftTerritoryId(null);
+    updateMapSelections({ pendingDraftTerritoryId: null });
   }, [canControlActivePlayer, canSendSyncCommand, game.draft?.timerEndsAt, game.phase, isSyncJoiner, now, pendingDraftTerritoryId]);
 
   useEffect(() => {
@@ -1258,7 +1229,7 @@ function App() {
         break;
       case "draft":
         if (canPickTerritory(game, territoryId)) {
-          setPendingDraftTerritoryId(territoryId);
+          updateMapSelections({ pendingDraftTerritoryId: territoryId });
         }
         break;
       case "inspect":
@@ -1271,7 +1242,7 @@ function App() {
         break;
       case "spy":
         if (turnPlayerId && ownership[territoryId] && ownership[territoryId] !== turnPlayerId) {
-          setPendingSpyTerritoryId(territoryId);
+          updateMapSelections({ pendingSpyTerritoryId: territoryId });
         }
         break;
       default:
@@ -1280,7 +1251,7 @@ function App() {
   }
 
   function cancelPendingPick() {
-    setPendingDraftTerritoryId(null);
+    updateMapSelections({ pendingDraftTerritoryId: null });
   }
 
   function confirmPendingPick() {
@@ -1290,7 +1261,7 @@ function App() {
 
     if (isSyncJoiner) {
       if (sendJoinerCommand({ type: "draftConfirm", territoryId: pendingDraftTerritoryId })) {
-        setPendingDraftTerritoryId(null);
+        updateMapSelections({ pendingDraftTerritoryId: null });
       }
       return;
     }
@@ -1298,7 +1269,7 @@ function App() {
     setGame((current) => pendingDraftTerritoryId
       ? confirmTerritoryPick(current, pendingDraftTerritoryId, Date.now())
       : current);
-    setPendingDraftTerritoryId(null);
+    updateMapSelections({ pendingDraftTerritoryId: null });
   }
 
   function changeArmyMarker(marker: ArmyMarker) {
@@ -1330,7 +1301,7 @@ function App() {
       return;
     }
 
-    setAllocationSelectedTerritoryId(null);
+    updateMapSelections({ allocationSelectedTerritoryId: null });
     setGame((current) => finishAllocationForPlayer(current, allocationPlayerId));
   }
 
@@ -1344,13 +1315,13 @@ function App() {
   }
 
   function startLocalAllocationTurn() {
-    setAllocationSelectedTerritoryId(null);
+    updateMapSelections({ allocationSelectedTerritoryId: null });
     setGame((current) => beginAllocationTurn(current));
   }
 
   function changeGameMapViewer(playerId: string) {
     setLocalPlayerId(playerId);
-    setGameMapSelectedTerritoryId(null);
+    updateMapSelections({ gameMapSelectedTerritoryId: null });
   }
 
   function cycleGameMapViewer() {
@@ -1369,14 +1340,19 @@ function App() {
   }
 
   function clearTurnSelections() {
-    setTurnSelectedTerritoryId(null);
-    setPendingSpyTerritoryId(null);
+    updateMapSelections({
+      pendingSpyTerritoryId: null,
+      turnSelectedTerritoryId: null,
+    });
   }
 
   function clearNonDraftMapSelections() {
-    setAllocationSelectedTerritoryId(null);
-    setGameMapSelectedTerritoryId(null);
-    clearTurnSelections();
+    updateMapSelections({
+      allocationSelectedTerritoryId: null,
+      gameMapSelectedTerritoryId: null,
+      pendingSpyTerritoryId: null,
+      turnSelectedTerritoryId: null,
+    });
   }
 
   function beginTurnReinforcements() {
@@ -1384,7 +1360,7 @@ function App() {
       return;
     }
 
-    setPendingSpyTerritoryId(null);
+    updateMapSelections({ pendingSpyTerritoryId: null });
     setGame((current) => startReinforcements(cancelSpySelection(current), turnPlayerId));
   }
 
@@ -1418,7 +1394,7 @@ function App() {
     }
 
     const reinforcement = game.turn.reinforcement;
-    setTurnSelectedTerritoryId(null);
+    updateMapSelections({ turnSelectedTerritoryId: null });
 
     if (isSyncJoiner) {
       sendTurnCommand({ type: "commitReinforcements", reinforcement });
@@ -1439,7 +1415,7 @@ function App() {
       return;
     }
 
-    setPendingSpyTerritoryId(null);
+    updateMapSelections({ pendingSpyTerritoryId: null });
     setGame((current) => startSpySelection(current, turnPlayerId));
   }
 
@@ -1449,7 +1425,7 @@ function App() {
     }
 
     const territoryId = pendingSpyTerritoryId;
-    setPendingSpyTerritoryId(null);
+    updateMapSelections({ pendingSpyTerritoryId: null });
 
     if (isSyncJoiner) {
       sendTurnCommand({ type: "confirmSpy", territoryId });
@@ -1460,7 +1436,7 @@ function App() {
   }
 
   function cancelTurnSpy() {
-    setPendingSpyTerritoryId(null);
+    updateMapSelections({ pendingSpyTerritoryId: null });
     setGame((current) => cancelSpySelection(current));
   }
 
@@ -1493,7 +1469,7 @@ function App() {
       return;
     }
 
-    setGameMapSelectedTerritoryId(null);
+    updateMapSelections({ gameMapSelectedTerritoryId: null });
     clearTurnSelections();
 
     if (isSyncJoiner) {
@@ -1510,7 +1486,7 @@ function App() {
     }
 
     if (isSyncGame) {
-      setPendingDraftTerritoryId(null);
+      updateMapSelections({ pendingDraftTerritoryId: null });
     }
     clearNonDraftMapSelections();
     setPausedReturnPhase(game.phase === "gameMap" ? "gameMap" : null);
