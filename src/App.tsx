@@ -1851,8 +1851,131 @@ function App() {
     }
   }
 
+  function renderActiveOverlay() {
+    if (!activeOverlay) {
+      return null;
+    }
+
+    switch (activeOverlay.type) {
+      case "armyBuild":
+        if (activeOverlay.build === "allocation" && allocationPlayer) {
+          return (
+            <ArmyBuildModal
+              allocation={game.allocation}
+              onArmyMarkerChange={changeArmyMarker}
+              onSubmitBuild={submitCurrentArmyBuild}
+              player={allocationPlayer}
+            />
+          );
+        }
+
+        if (activeOverlay.build === "reinforcement" && turnActionPlayer && turnReinforcement && turnProjectedReinforcements) {
+          return (
+            <ArmyBuildModal
+              marker={turnReinforcement.marker}
+              onArmyMarkerChange={changeReinforcementMarker}
+              onSubmitBuild={submitCurrentReinforcementBuild}
+              player={turnActionPlayer}
+              projectedTroops={turnProjectedReinforcements}
+              troopTypes={MIXTURE_TROOP_TYPES}
+            />
+          );
+        }
+
+        return null;
+      case "confirm":
+        if (activeOverlay.confirm === "draft" && viewerPendingTerritory) {
+          return (
+            <ConfirmSheet
+              ariaLabel="Confirm territory"
+              cancelLabel="Cancel pick"
+              confirmLabel="Confirm pick"
+              onCancel={cancelPendingPick}
+              onConfirm={confirmPendingPick}
+              title={viewerPendingTerritory.name}
+            />
+          );
+        }
+
+        if (activeOverlay.confirm === "spy" && spyTargetTerritory && spyCapturePercent !== null) {
+          return (
+            <ConfirmSheet
+              ariaLabel="Confirm spy"
+              cancelLabel="Cancel spy"
+              confirmLabel="Send spy"
+              text={`${spyCapturePercent}% captured`}
+              onCancel={cancelTurnSpy}
+              onConfirm={confirmTurnSpy}
+              title={spyTargetTerritory.name}
+            />
+          );
+        }
+
+        return null;
+      case "decision":
+        return activeOverlay.decision === "exit"
+          ? (
+            <DecisionDialog
+              message="End this game and return home?"
+              onCancel={() => setIsEndGamePromptOpen(false)}
+              onConfirm={endGame}
+            />
+          )
+          : (
+            <DecisionDialog
+              confirmLabel="Restart game"
+              message="Restart this game and return to setup?"
+              onCancel={() => setIsRestartGamePromptOpen(false)}
+              onConfirm={restartPausedGame}
+            />
+          );
+      case "handoff":
+        if (activeOverlay.handoff === "allocation" && allocationPlayer) {
+          return <HandoffPanel ariaLabel="Allocation handoff" buttonLabel="Begin allocation" onContinue={startLocalAllocationTurn} />;
+        }
+
+        return currentTurnPlayer
+          ? <HandoffPanel ariaLabel="Turn handoff" buttonLabel="Begin turn" onContinue={startLocalTurn} />
+          : null;
+      case "notification":
+        return currentNotification
+          ? <GameNotificationDialog notification={currentNotification} onClose={dismissCurrentNotification} players={game.players} />
+          : null;
+      case "pause":
+        return (
+          <PausePanel
+            canRemove={game.mode === "local" || syncRole === "host"}
+            canResume={game.mode === "local" || (syncRole === "host" && game.players.every((player) => player.connectionStatus === "connected"))}
+            localPlayerId={localPlayerId}
+            mode={game.mode}
+            onRemovePlayer={removePlayer}
+            onRestart={game.mode === "local" || syncRole === "host" ? () => setIsRestartGamePromptOpen(true) : undefined}
+            onResume={resumeDraft}
+            onScanRecoveryAnswer={game.mode === "sync" && syncRole === "host" ? () => setSyncCameraMode("joinAnswer") : undefined}
+            players={game.players}
+            syncMessage={syncMessage}
+            syncQrText={game.mode === "sync" && syncRole === "host" ? syncQrText : ""}
+          />
+        );
+      case "scanner":
+        return syncCameraMode
+          ? (
+            <QrScanner
+              onCancel={() => setSyncCameraMode(null)}
+              onScan={syncCameraMode === "hostOffer" ? scanHostOffer : acceptJoinAnswer}
+              title={syncCameraMode === "hostOffer" ? "Scan host" : "Scan answer"}
+            />
+          )
+          : null;
+      case "syncBlocked":
+        return <SyncSessionBlocker onHome={resetAppToHome} session={syncSession} />;
+    }
+  }
+
+  const activeOverlayElement = renderActiveOverlay();
+
   return (
-      <main
+    <main
       className={`app-shell${showGameStageLayout ? " game-layout" : ""}`}
       data-app-phase={game.phase}
       data-sync-role={syncRole ?? "none"}
@@ -1953,26 +2076,6 @@ function App() {
         />
       ) : null}
 
-      {activeOverlay?.type === "armyBuild" && activeOverlay.build === "allocation" && allocationPlayer ? (
-        <ArmyBuildModal
-          allocation={game.allocation}
-          onArmyMarkerChange={changeArmyMarker}
-          onSubmitBuild={submitCurrentArmyBuild}
-          player={allocationPlayer}
-        />
-      ) : null}
-
-      {activeOverlay?.type === "armyBuild" && activeOverlay.build === "reinforcement" && turnActionPlayer && turnReinforcement && turnProjectedReinforcements ? (
-        <ArmyBuildModal
-          marker={turnReinforcement.marker}
-          onArmyMarkerChange={changeReinforcementMarker}
-          onSubmitBuild={submitCurrentReinforcementBuild}
-          player={turnActionPlayer}
-          projectedTroops={turnProjectedReinforcements}
-          troopTypes={MIXTURE_TROOP_TYPES}
-        />
-      ) : null}
-
       {game.phase === "home" && !syncEntryOpen ? (
         <HomePanel onStartLocal={startLocalSetup} onStartSync={openSyncEntry} />
       ) : null}
@@ -2020,92 +2123,7 @@ function App() {
         />
       ) : null}
 
-      {activeOverlay?.type === "pause" ? (
-        <PausePanel
-          canRemove={game.mode === "local" || syncRole === "host"}
-          canResume={game.mode === "local" || (syncRole === "host" && game.players.every((player) => player.connectionStatus === "connected"))}
-          localPlayerId={localPlayerId}
-          mode={game.mode}
-          onRemovePlayer={removePlayer}
-          onRestart={game.mode === "local" || syncRole === "host" ? () => setIsRestartGamePromptOpen(true) : undefined}
-          onResume={resumeDraft}
-          onScanRecoveryAnswer={game.mode === "sync" && syncRole === "host" ? () => setSyncCameraMode("joinAnswer") : undefined}
-          players={game.players}
-          syncMessage={syncMessage}
-          syncQrText={game.mode === "sync" && syncRole === "host" ? syncQrText : ""}
-        />
-      ) : null}
-
-      {activeOverlay?.type === "handoff" && activeOverlay.handoff === "allocation" && allocationPlayer ? (
-        <HandoffPanel ariaLabel="Allocation handoff" buttonLabel="Begin allocation" onContinue={startLocalAllocationTurn} />
-      ) : null}
-
-      {activeOverlay?.type === "handoff" && activeOverlay.handoff === "turn" && currentTurnPlayer ? (
-        <HandoffPanel ariaLabel="Turn handoff" buttonLabel="Begin turn" onContinue={startLocalTurn} />
-      ) : null}
-
-      {activeOverlay?.type === "confirm" && activeOverlay.confirm === "draft" && viewerPendingTerritory ? (
-        <ConfirmSheet
-          ariaLabel="Confirm territory"
-          cancelLabel="Cancel pick"
-          confirmLabel="Confirm pick"
-          onCancel={cancelPendingPick}
-          onConfirm={confirmPendingPick}
-          title={viewerPendingTerritory.name}
-        />
-      ) : null}
-
-      {activeOverlay?.type === "confirm" && activeOverlay.confirm === "spy" && spyTargetTerritory && spyCapturePercent !== null ? (
-        <ConfirmSheet
-          ariaLabel="Confirm spy"
-          cancelLabel="Cancel spy"
-          confirmLabel="Send spy"
-          text={`${spyCapturePercent}% captured`}
-          onCancel={cancelTurnSpy}
-          onConfirm={confirmTurnSpy}
-          title={spyTargetTerritory.name}
-        />
-      ) : null}
-
-      {activeOverlay?.type === "notification" && currentNotification ? (
-        <GameNotificationDialog
-          notification={currentNotification}
-          onClose={dismissCurrentNotification}
-          players={game.players}
-        />
-      ) : null}
-
-      {activeOverlay?.type === "scanner" && syncCameraMode ? (
-        <QrScanner
-          onCancel={() => setSyncCameraMode(null)}
-          onScan={syncCameraMode === "hostOffer" ? scanHostOffer : acceptJoinAnswer}
-          title={syncCameraMode === "hostOffer" ? "Scan host" : "Scan answer"}
-        />
-      ) : null}
-
-      {activeOverlay?.type === "decision" && activeOverlay.decision === "exit" ? (
-        <DecisionDialog
-          message="End this game and return home?"
-          onCancel={() => setIsEndGamePromptOpen(false)}
-          onConfirm={endGame}
-        />
-      ) : null}
-
-      {activeOverlay?.type === "decision" && activeOverlay.decision === "restart" ? (
-        <DecisionDialog
-          confirmLabel="Restart game"
-          message="Restart this game and return to setup?"
-          onCancel={() => setIsRestartGamePromptOpen(false)}
-          onConfirm={restartPausedGame}
-        />
-      ) : null}
-
-      {activeOverlay?.type === "syncBlocked" ? (
-        <SyncSessionBlocker
-          onHome={resetAppToHome}
-          session={syncSession}
-        />
-      ) : null}
+      {activeOverlayElement}
     </main>
   );
 }

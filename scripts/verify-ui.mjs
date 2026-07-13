@@ -163,6 +163,7 @@ async function runSourceChecks() {
   assert(!appSource.includes("syncDraftNoticeFromOwnershipChange") && !appSource.includes("PickResultDialog"), "Draft result notifications are completely removed.");
   assert(!gameTypesSource.includes("resultTerritoryId") && !gameTypesSource.includes("resultPlayerId"), "Draft state does not store stale result popup fields.");
   assert(appSource.includes("type ActiveOverlay") && appSource.includes('type: "confirm"') && appSource.includes('type: "pause"'), "App uses a single overlay model for game-stage popups.");
+  assert(appSource.includes("function renderActiveOverlay()") && appSource.includes("const activeOverlayElement = renderActiveOverlay()"), "App renders active overlays through one switch.");
   assert(appSource.includes('className="troop-icon-button turn-spy-button"') && appSource.includes("turn-spy-spacer") && !appSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling and keeps a spacer when lost.");
   assert(stylesSource.includes('.turn-spy-button[data-selected="true"]') && stylesSource.includes(".turn-spy-spacer"), "Turn spy selected and missing states have dedicated styling.");
   assert(appSource.includes("syncSnapshotForViewer") && appSource.includes("hostTransportRef.current?.sendToPeer(player.id") && appSource.includes("spyIntel: null") && appSource.includes("reinforcement: null"), "Sync snapshots hide private turn sub-state from passive viewers.");
