@@ -187,6 +187,8 @@ Pure game-stage projection rules live in `src/game/gameView.ts`. `App.tsx` shoul
 
 Troop and spy icon rendering lives in `src/game/troopIcons.tsx`. Screens should reuse `TroopIconCount`, `TroopIconImage`, `troopIconSrc`, `spyIconSrc`, and `troopName` instead of defining their own troop asset paths, labels, or side mappings.
 
+Troop rows and captured-spy rows live in `src/ui/TroopControls.tsx`. Allocation, reinforcement, army build, and map-inspection screens should import `TroopPlacementRows`, `TroopCountRow`, and `CapturedSpyRow` instead of defining local add/remove row markup or captured-spy layouts.
+
 QR display and scanning UI lives in `src/sync/QrCodeUi.tsx`. `App.tsx` decides when sync QR flows are active, but QR SVG generation, camera scanning, paste-driven verification, torch support, and QR decode details stay inside that sync UI module.
 
 The `Map` section is always the main visual section. It sits below the troop section when one is visible, otherwise below the player bar. It sits above the action section when one is visible, otherwise above the bottom of the screen. Pan, zoom, return-to-map, and auto-focus controls are available only when the current screen is a map-interaction screen. Any popup, modal, sheet, handoff, pause, scanner, notification, army-build modal, or confirmation dialog hides the map camera buttons and disables manual pan/zoom until dismissed. The sync allocation waiting page is not an overlay, but it is still a waiting screen rather than a map-interaction screen, so it also hides map camera buttons.

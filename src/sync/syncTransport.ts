@@ -90,7 +90,7 @@ type SyncTransportCallbacks = {
 };
 
 const CHANNEL_NAME = "ardature";
-const ICE_TIMEOUT_MS = 1800;
+const ICE_TIMEOUT_MS = 5000;
 const HEARTBEAT_INTERVAL_MS = 1000;
 const HEARTBEAT_TIMEOUT_MS = 3000;
 const DEFAULT_RECONNECT_GRACE_MS = 10000;
