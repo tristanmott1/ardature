@@ -115,6 +115,16 @@ type MapPressModeContext = {
   syncJoinerBlocked: boolean;
 };
 
+type MapSelectionPressContext = {
+  allocationPlayerId: string | null;
+  game: GameState;
+  mapPressMode: MapPressMode | null;
+  ownership: TerritoryOwnerMap;
+  selections: MapSelectionState;
+  territoryId: string;
+  turnPlayerId: string | null;
+};
+
 type ActiveOverlayContext = {
   allocationBuildSubmitted: boolean;
   allocationPlayerId: string | null;
@@ -396,6 +406,39 @@ export function mapPressModeForGame({
   return "inspect";
 }
 
+export function mapSelectionUpdateForPress({
+  allocationPlayerId,
+  game,
+  mapPressMode,
+  ownership,
+  selections,
+  territoryId,
+  turnPlayerId,
+}: MapSelectionPressContext): Partial<MapSelectionState> | null {
+  switch (mapPressMode) {
+    case "allocation":
+      return allocationPlayerId && ownership[territoryId] === allocationPlayerId
+        ? { allocationSelectedTerritoryId: toggledSelection(selections.allocationSelectedTerritoryId, territoryId) }
+        : null;
+    case "draft":
+      return canPickTerritory(game, territoryId)
+        ? { pendingDraftTerritoryId: territoryId }
+        : null;
+    case "inspect":
+      return { gameMapSelectedTerritoryId: toggledSelection(selections.gameMapSelectedTerritoryId, territoryId) };
+    case "reinforcement":
+      return turnPlayerId && ownership[territoryId] === turnPlayerId
+        ? { turnSelectedTerritoryId: toggledSelection(selections.turnSelectedTerritoryId, territoryId) }
+        : null;
+    case "spy":
+      return turnPlayerId && ownership[territoryId] && ownership[territoryId] !== turnPlayerId
+        ? { pendingSpyTerritoryId: territoryId }
+        : null;
+    case null:
+      return null;
+  }
+}
+
 export function gameStageLayoutForState({
   activeOverlay,
   allocationBuildSubmitted,
@@ -668,6 +711,10 @@ function troopSectionModeForGame({
   }
 
   return null;
+}
+
+function toggledSelection(currentTerritoryId: string | null, territoryId: string) {
+  return currentTerritoryId === territoryId ? null : territoryId;
 }
 
 function territoryTroopTotalWithTurnPreview(game: GameState, territoryId: string) {

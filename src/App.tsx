@@ -87,6 +87,7 @@ import {
   createTroopMarkers,
   gameStageLayoutForState,
   mapPressModeForGame,
+  mapSelectionUpdateForPress,
   notificationPlayerId,
   playerBarControlsForGame,
   playerBarDraftProgress,
@@ -312,13 +313,6 @@ function App() {
 
   function updateMapSelections(updates: Partial<MapSelectionState>) {
     setMapSelections((current) => ({ ...current, ...updates }));
-  }
-
-  function toggleMapSelection(key: keyof MapSelectionState, territoryId: string) {
-    setMapSelections((current) => ({
-      ...current,
-      [key]: current[key] === territoryId ? null : territoryId,
-    }));
   }
 
   useEffect(() => {
@@ -1147,32 +1141,18 @@ function App() {
   }
 
   function pressTerritory(territoryId: string) {
-    switch (mapPressMode) {
-      case "allocation":
-        if (allocationPlayerId && ownership[territoryId] === allocationPlayerId) {
-          toggleMapSelection("allocationSelectedTerritoryId", territoryId);
-        }
-        break;
-      case "draft":
-        if (canPickTerritory(game, territoryId)) {
-          updateMapSelections({ pendingDraftTerritoryId: territoryId });
-        }
-        break;
-      case "inspect":
-        toggleMapSelection("gameMapSelectedTerritoryId", territoryId);
-        break;
-      case "reinforcement":
-        if (turnPlayerId && ownership[territoryId] === turnPlayerId) {
-          toggleMapSelection("turnSelectedTerritoryId", territoryId);
-        }
-        break;
-      case "spy":
-        if (turnPlayerId && ownership[territoryId] && ownership[territoryId] !== turnPlayerId) {
-          updateMapSelections({ pendingSpyTerritoryId: territoryId });
-        }
-        break;
-      default:
-        break;
+    const updates = mapSelectionUpdateForPress({
+      allocationPlayerId,
+      game,
+      mapPressMode,
+      ownership,
+      selections: mapSelections,
+      territoryId,
+      turnPlayerId,
+    });
+
+    if (updates) {
+      updateMapSelections(updates);
     }
   }
 
