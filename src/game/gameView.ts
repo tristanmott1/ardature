@@ -82,6 +82,13 @@ export type PlayerBarControls = {
   pauseLabel: string;
 };
 
+export type PausePanelPolicy = {
+  canRemove: boolean;
+  canResume: boolean;
+  canRestart: boolean;
+  canScanRecoveryAnswer: boolean;
+};
+
 export type GameViewContext = {
   activeDraftPlayer: GamePlayer | null;
   allocationBuildSubmitted: boolean;
@@ -767,6 +774,17 @@ export function canAdvanceAllocationWaiting(game: GameState, isSyncHost: boolean
       game.allocation &&
       game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready),
   );
+}
+
+export function pausePanelPolicyForGame(game: GameState, isSyncHost: boolean): PausePanelPolicy {
+  const canControlPausedGame = game.mode === "local" || isSyncHost;
+
+  return {
+    canRemove: canControlPausedGame,
+    canResume: game.mode === "local" || (isSyncHost && game.players.every((player) => player.connectionStatus === "connected")),
+    canRestart: canControlPausedGame,
+    canScanRecoveryAnswer: isSyncHost,
+  };
 }
 
 export function notificationPlayerId(game: GameState, syncRole: SyncRole, localPlayerId: string | null, turnViewerId: string | null) {

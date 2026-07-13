@@ -228,7 +228,7 @@ Game-stage overlays are organized by role, not by phase. Only one overlay should
 7. Game notification
 8. Confirm sheet
 
-Overlay priority, overlay predicate policy, and overlay behavior live in `src/game/gameView.ts`. `App.tsx` should pass current game/session facts into those projections and render the selected overlay; it should not precompute separate `needs...`, `canShow...`, map-freeze, camera-button, or section-hiding booleans inline. Destructive confirmations use one `decisionPrompt` state, not separate exit/restart booleans. QR scanner UI uses scanner naming, not map-camera naming, so it cannot be confused with map pan/zoom controls.
+Overlay priority, overlay predicate policy, overlay behavior, and pause-panel permissions live in `src/game/gameView.ts`. `App.tsx` should pass current game/session facts into those projections and render the selected overlay; it should not precompute separate `needs...`, `canShow...`, map-freeze, camera-button, section-hiding, pause-resume, restart, removal, or recovery-scan booleans inline. Destructive confirmations use one `decisionPrompt` state, not separate exit/restart booleans. QR scanner UI uses scanner naming, not map-camera naming, so it cannot be confused with map pan/zoom controls.
 
 Every active overlay hides map camera buttons and disables manual pan/zoom until the overlay is dismissed. The player bar remains visible once draft has started, except for pre-game utility flows where the game has not started for that device. Troop and action sections hide whenever an overlay takes over the interaction.
 

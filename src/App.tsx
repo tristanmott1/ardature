@@ -94,6 +94,7 @@ import {
   mapPressModeForGame,
   mapSelectionUpdateForPress,
   notificationPlayerId,
+  pausePanelPolicyForGame,
   playerBarControlsForGame,
   playerBarDraftProgress,
   playerBarPlayerForGame,
@@ -293,6 +294,7 @@ function App() {
   });
   const playerBarProgress = playerBarDraftProgress(game, playerBarPlayer);
   const playerBarControls = playerBarControlsForGame(game, isSyncHost);
+  const pausePanelPolicy = pausePanelPolicyForGame(game, isSyncHost);
   const layout = gameStageLayoutForState({
     activeOverlay,
     allocationBuildSubmitted,
@@ -1484,17 +1486,17 @@ function App() {
       case "pause":
         return (
           <PausePanel
-            canRemove={game.mode === "local" || isSyncHost}
-            canResume={game.mode === "local" || (isSyncHost && game.players.every((player) => player.connectionStatus === "connected"))}
+            canRemove={pausePanelPolicy.canRemove}
+            canResume={pausePanelPolicy.canResume}
             localPlayerId={localPlayerId}
             mode={game.mode}
             onRemovePlayer={removePlayer}
-            onRestart={game.mode === "local" || isSyncHost ? () => setDecisionPrompt("restart") : undefined}
+            onRestart={pausePanelPolicy.canRestart ? () => setDecisionPrompt("restart") : undefined}
             onResume={resumeCurrentGame}
-            onScanRecoveryAnswer={isSyncHost ? () => setSyncScannerMode("joinAnswer") : undefined}
+            onScanRecoveryAnswer={pausePanelPolicy.canScanRecoveryAnswer ? () => setSyncScannerMode("joinAnswer") : undefined}
             players={game.players}
             syncMessage={syncMessage}
-            syncQrText={isSyncHost ? syncQrText : ""}
+            syncQrText={pausePanelPolicy.canScanRecoveryAnswer ? syncQrText : ""}
           />
         );
       case "scanner":
