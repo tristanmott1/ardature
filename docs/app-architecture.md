@@ -219,6 +219,8 @@ Overlay roles:
 - `ScannerModal`: QR camera utility. Scanner flows opened before a device has joined/rejoined a game are not bound by game-stage player bar rules.
 - `SyncBlockedModal`: centered reconnecting/disconnected/host-ended blocker. While reconnecting, the device is not connected to host truth and must not show stale host-authored facts as current.
 
+Shared overlay UI primitives live in `src/ui/Overlays.tsx`: `ConfirmSheet`, `DecisionDialog`, `HandoffPanel`, `NotificationDialog`, `ModalActions`, and `ModalIconButton`. `App` should choose the active overlay and pass game-derived text/callbacks into those primitives; it should not define duplicate dialog/button primitives inline.
+
 Draft result notifications no longer exist. After a draft pick is confirmed, including timeout/autodraft picks, ownership updates and the draft immediately advances to the next pick.
 
 ## UI Style
