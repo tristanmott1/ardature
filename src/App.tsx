@@ -231,14 +231,11 @@ function App() {
           ? [{ color: player.color, id: player.id, name: player.name }]
           : [])
     : [];
-  const gameMapSelectedTerritory = territoryForId(gameMapSelectedTerritoryId);
   const gameMapViewer = game.players.find((player) => player.id === turnViewerId) ?? game.players[0] ?? null;
   const turnActionPlayer = currentTurnPlayer;
   const turnReinforcement = game.turn?.reinforcement ?? null;
   const turnProjectedReinforcements = turnPlayerId ? projectReinforcementTroops(game, turnPlayerId) : null;
-  const turnBuildSubmitted = Boolean(turnReinforcement?.buildSubmitted);
   const turnSelectedTerritory = territoryForId(turnSelectedTerritoryId);
-  const spyIntelTerritory = canControlTurnPlayer ? territoryForId(game.turn?.spyIntel?.targetTerritoryId) : null;
   const spyTargetTerritory = territoryForId(pendingSpyTerritoryId);
   const spyCapturePercent = pendingSpyTerritoryId && turnPlayerId ? spyCaptureProbability(game, turnPlayerId, pendingSpyTerritoryId) : null;
   const currentNotificationPlayerId = notificationPlayerId(game, syncRole, localPlayerId, turnViewerId);
@@ -246,15 +243,13 @@ function App() {
   const gameMapInspection = territoryInspectionForViewer({
     game,
     ownership,
-    selectedTerritory: gameMapSelectedTerritory,
     selectedTerritoryId: gameMapSelectedTerritoryId,
     viewerId: turnViewerId,
   });
   const turnMapInspection = territoryInspectionForViewer({
     game,
     ownership,
-    revealedTerritory: spyIntelTerritory,
-    selectedTerritory: gameMapSelectedTerritory,
+    revealedTerritoryId: canControlTurnPlayer ? game.turn?.spyIntel?.targetTerritoryId : null,
     selectedTerritoryId: gameMapSelectedTerritoryId,
     viewerId: turnViewerId,
   });

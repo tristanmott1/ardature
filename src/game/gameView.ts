@@ -93,8 +93,7 @@ type MapSelectionCleanupContext = {
 type TerritoryInspectionContext = {
   game: GameState;
   ownership: TerritoryOwnerMap;
-  revealedTerritory?: GeneratedTerritoryData | null;
-  selectedTerritory: GeneratedTerritoryData | null;
+  revealedTerritoryId?: string | null;
   selectedTerritoryId: string | null;
   viewerId: string | null;
 };
@@ -435,11 +434,13 @@ export function gameStageLayoutForState({
 export function territoryInspectionForViewer({
   game,
   ownership,
-  revealedTerritory,
-  selectedTerritory,
+  revealedTerritoryId,
   selectedTerritoryId,
   viewerId,
 }: TerritoryInspectionContext): TerritoryInspection {
+  const revealedTerritory = revealedTerritoryId ? territoryForId(revealedTerritoryId) : null;
+  const selectedTerritory = selectedTerritoryId ? territoryForId(selectedTerritoryId) : null;
+
   if (revealedTerritory) {
     return {
       capturedSpies: capturedSpiesOnTerritory(game, revealedTerritory.id),
