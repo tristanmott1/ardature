@@ -482,6 +482,7 @@ select {
 .player-list {
   display: grid;
   gap: 8px;
+  width: 100%;
 }
 
 .player-row {
@@ -489,6 +490,8 @@ select {
   gap: 6px;
   align-items: center;
   flex-wrap: nowrap;
+  box-sizing: border-box;
+  width: 100%;
   min-height: 50px;
   padding: 7px;
   border: 1px solid var(--line);
@@ -503,7 +506,7 @@ select {
 
 .player-row.compact-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(88px, auto) 38px;
+  grid-template-columns: auto minmax(0, 1fr) 96px 38px;
 }
 
 .player-row.compact-row > strong {
@@ -517,6 +520,8 @@ select {
 .player-row.compact-row > .connection-label {
   grid-column: 3;
   justify-self: end;
+  width: 100%;
+  text-align: right;
 }
 
 .player-row.compact-row > .icon-button,
@@ -1271,7 +1276,7 @@ select {
   }
 
   .player-row.compact-row {
-    grid-template-columns: auto minmax(0, 1fr) minmax(88px, auto) 34px;
+    grid-template-columns: auto minmax(0, 1fr) 88px 34px;
   }
 
   .player-row input {
