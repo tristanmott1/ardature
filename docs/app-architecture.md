@@ -56,6 +56,8 @@ The exact file list can evolve, but the boundaries should stay clear:
 - `src/game/armyBuild.ts` owns the tunable starting budgets and fixed-point troop costs, plus the deterministic integer army selector.
 - `src/sync/` owns Qwixx-style local network synchronization adapted for Ardatúrë.
 
+The service worker owns installed-app caching. When a change must force already-installed devices onto fresh shell assets, bump `CACHE_NAME` in `public/sw.js` so old cached HTML, manifest, and bundles are discarded on activation.
+
 ## Public Assets
 
 The `public/` directory is organized by runtime asset purpose:
@@ -191,9 +193,9 @@ Complete game-state transitions belong in `src/game/gameState.ts`. Pausing and r
 
 Game-stage section UI lives in `src/ui/GameSections.tsx`. The public troop surface is one `TroopSection` component with internal modes for initial allocation placement, reinforcement placement, and read-only troop information. Allocation waiting columns and the turn action bar remain separate components, but they are rendered through the same four-section layout slots instead of through additional layout branches. `App.tsx` chooses which section slot to render and passes callbacks/data into these section components; it should not define section panels inline or reach for separate allocation/reinforcement/map-info/status panels.
 
-Pre-game panel UI lives in `src/ui/SetupPanels.tsx`: home mode selection, sync entry/recovery slot selection, and local/sync setup configuration. Setup form primitives remain in `src/ui/FormControls.tsx`. `App.tsx` owns setup state changes and sync commands, but it should not define home/setup panel markup inline.
+Pre-game panel UI lives in `src/ui/SetupPanels.tsx`: home mode selection, sync entry/recovery slot selection, and local/sync setup configuration. Setup form primitives remain in `src/ui/FormControls.tsx`. Setup list/config mutations live in `src/game/gameState.ts`, including first-available color selection, list reordering, randomization, forced-unlimited config rules, and paused restart-to-setup cleanup. `App.tsx` owns setup event wiring and sync commands, but it should call those game-state helpers instead of duplicating setup mutation logic inline.
 
-Small setup helpers that are not app wiring live in `src/game/setupUtils.ts`, such as first-available color selection and list reordering. Sync QR error text formatting lives in `src/sync/syncErrors.ts`. `App.tsx` should call these helpers rather than defining one-off utility functions at the bottom of the file.
+Sync QR error text formatting lives in `src/sync/syncErrors.ts`. `App.tsx` should call these helpers rather than defining one-off utility functions at the bottom of the file.
 
 Generated territory lookup helpers live in `src/map/territoryLookup.ts`. Components and game-view projections should use `territoryForId`, `territoryName`, and `territoriesInRegion` instead of repeatedly scanning `generatedMapData.territories`.
 

@@ -1,6 +1,7 @@
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalPauseRecovery } from "./app/useLocalPauseRecovery";
 import {
+  addSetupPlayer,
   applySyncDraftConfirm,
   adjustReinforcementTroop,
   adjustTerritoryTroop,
@@ -36,12 +37,14 @@ import {
   isSetupValid,
   pauseGame,
   projectReinforcementTroops,
+  randomizeSetupPlayers,
   readLocalGame,
   readSyncHostGame,
   reinforcementComplete,
   remainingTerritoryIds,
-  removeNonConnectedSyncLobbyPlayers,
-  removePlayerFromDraft,
+  removeSetupPlayer,
+  reorderSetupPlayers,
+  restartPausedGameToSetup,
   resumePausedGame,
   saveLocalGame,
   saveSyncHostGame,
@@ -55,6 +58,10 @@ import {
   submitReinforcementBuild,
   updateArmyMarker,
   updateReinforcementMarker,
+  updateSetupConfig,
+  updateSetupPlayer,
+  updateUnlockedSetupPlayer,
+  unlockSetupPlayerField,
 } from "./game/gameState";
 import type {
   AppPhase,
@@ -74,7 +81,6 @@ import {
   saveSyncProfilePreference,
   syncProfileFromPreferences,
 } from "./game/setupPreferences";
-import { firstAvailableColor, moveItem } from "./game/setupUtils";
 import { notificationMessage } from "./game/notificationText";
 import {
   activeOverlayForState,
@@ -922,16 +928,7 @@ function App() {
       return;
     }
 
-    setGame((current) => ({
-      ...current,
-      players: [
-        ...current.players,
-        {
-          ...createPlayer(draftName),
-          color: firstAvailableColor(current.players),
-        },
-      ],
-    }));
+    setGame((current) => addSetupPlayer(current, draftName));
     setDraftName("");
   }
 
@@ -956,10 +953,7 @@ function App() {
         allowed.color = updates.color;
       }
 
-      setGame((current) => ({
-        ...current,
-        players: current.players.map((candidate) => candidate.id === playerId ? { ...candidate, ...allowed } : candidate),
-      }));
+      setGame((current) => updateUnlockedSetupPlayer(current, playerId, allowed));
       sendJoinerCommand({
         type: "profileUpdate",
         name: allowed.name,
@@ -968,23 +962,7 @@ function App() {
       return;
     }
 
-    setGame((current) => ({
-      ...current,
-      players: current.players.map((player) => {
-        if (player.id !== playerId) {
-          return player;
-        }
-
-        const hostLockedUpdates = current.mode === "sync" && isSyncHost && player.id !== localPlayerId
-          ? {
-              nameLocked: updates.name !== undefined ? true : player.nameLocked,
-              colorLocked: updates.color !== undefined ? true : player.colorLocked,
-            }
-          : {};
-
-        return { ...player, ...updates, ...hostLockedUpdates };
-      }),
-    }));
+    setGame((current) => updateSetupPlayer(current, playerId, updates, isSyncHost ? localPlayerId : null));
   }
 
   function unlockPlayerField(playerId: string, field: "name" | "color") {
@@ -992,16 +970,7 @@ function App() {
       return;
     }
 
-    setGame((current) => ({
-      ...current,
-      players: current.players.map((player) => player.id === playerId
-        ? {
-            ...player,
-            nameLocked: field === "name" ? false : player.nameLocked,
-            colorLocked: field === "color" ? false : player.colorLocked,
-          }
-        : player),
-    }));
+    setGame((current) => unlockSetupPlayerField(current, playerId, field));
   }
 
   function removePlayer(playerId: string) {
@@ -1013,12 +982,7 @@ function App() {
       hostTransportRef.current?.sendToPeer(playerId, { type: "removed" });
     }
     hostTransportRef.current?.removePeer(playerId);
-    setGame((current) => current.phase === "paused"
-      ? removePlayerFromDraft(current, playerId)
-      : {
-          ...current,
-          players: current.players.filter((player) => player.id !== playerId),
-        });
+    setGame((current) => removeSetupPlayer(current, playerId));
   }
 
   function reorderPlayer(playerId: string, overPlayerId: string) {
@@ -1026,16 +990,7 @@ function App() {
       return;
     }
 
-    setGame((current) => {
-      const fromIndex = current.players.findIndex((player) => player.id === playerId);
-      const toIndex = current.players.findIndex((player) => player.id === overPlayerId);
-
-      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
-        return current;
-      }
-
-      return { ...current, players: moveItem(current.players, fromIndex, toIndex) };
-    });
+    setGame((current) => reorderSetupPlayers(current, playerId, overPlayerId));
   }
 
   function beginDrag(event: ReactPointerEvent<HTMLButtonElement>, playerId: string) {
@@ -1052,15 +1007,7 @@ function App() {
       return;
     }
 
-    setGame((current) => {
-      const players = [...current.players];
-      for (let index = players.length - 1; index > 0; index -= 1) {
-        const swapIndex = Math.floor(Math.random() * (index + 1));
-        [players[index], players[swapIndex]] = [players[swapIndex], players[index]];
-      }
-
-      return { ...current, players };
-    });
+    setGame(randomizeSetupPlayers);
   }
 
   function updateConfig(updates: Partial<GameConfig>) {
@@ -1068,18 +1015,7 @@ function App() {
       return;
     }
 
-    setGame((current) => {
-      const config = { ...current.config, ...updates };
-
-      return {
-        ...current,
-        config: {
-          ...config,
-          pickTimeLimit: config.draftStyle === "random" ? 0 : config.pickTimeLimit,
-          troopAllocationTimeLimit: config.allocationStyle === "random" ? 0 : config.troopAllocationTimeLimit,
-        },
-      };
-    });
+    setGame((current) => updateSetupConfig(current, updates));
   }
 
   function beginDraft() {
@@ -1408,15 +1344,7 @@ function App() {
     }
 
     setIsRestartGamePromptOpen(false);
-    setGame((current) => current.phase === "paused" && (current.mode === "local" || isSyncHost)
-      ? removeNonConnectedSyncLobbyPlayers({
-          ...current,
-          phase: "setup",
-          draft: null,
-          allocation: null,
-          turn: null,
-        })
-      : current);
+    setGame((current) => restartPausedGameToSetup(current, isSyncHost));
   }
 
   function resetAppToHome() {

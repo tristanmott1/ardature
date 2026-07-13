@@ -101,7 +101,6 @@ async function runSourceChecks() {
   const gameViewSource = await readFile(new URL("../src/game/gameView.ts", import.meta.url), "utf8");
   const notificationTextSource = await readFile(new URL("../src/game/notificationText.ts", import.meta.url), "utf8");
   const playerColorsSource = await readFile(new URL("../src/game/playerColors.ts", import.meta.url), "utf8");
-  const setupUtilsSource = await readFile(new URL("../src/game/setupUtils.ts", import.meta.url), "utf8");
   const troopIconsSource = await readFile(new URL("../src/game/troopIcons.tsx", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapConnectionsSource = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
@@ -171,6 +170,7 @@ async function runSourceChecks() {
     setupPanelsSource,
     mapDataSource,
     notificationTextSource,
+    appArchitectureDocs,
     gameplayTurnsDocs,
     gameSpecDocs,
   ].join("\n");
@@ -190,6 +190,7 @@ async function runSourceChecks() {
       gameSpecDocs.includes("| Rhûn | 4 heavy |"),
     "User-facing names preserve required special characters.",
   );
+  assert(serviceWorkerSource.includes('const CACHE_NAME = "ardature-v2"'), "Service worker cache version is bumped for refreshed shell assets.");
   assert(territoryLookupSource.includes("territoryForId") && !appSource.includes("generatedMapData.territories.find") && !gameSectionsSource.includes("generatedMapData.territories.find") && !gameViewSource.includes("new Map<string, GeneratedTerritoryData>"), "Territory lookup uses one shared generated-data helper.");
   assert(mapWidth === sourceWidth * 10 + 3000 && mapHeight === sourceHeight * 10 + 3000, "Generated app data includes the 1500-unit display frame.");
   assert(
@@ -230,7 +231,17 @@ async function runSourceChecks() {
   assert(gameStateSource.includes("applyRegionControlChanges") && gameStateSource.includes('type: "regionGained"') && gameStateSource.includes('type: "regionLost"'), "Region notifications come from authoritative control transitions.");
   assert(gameStateSource.includes('type: "spyLost"') && gameStateSource.includes('type: "spyCaptured"') && appSource.includes("NotificationDialog") && !appSource.includes("GameNotificationDialog"), "Spy capture notifications use the queued blocking notification flow.");
   assert(appSource.includes('from "./game/notificationText"') && notificationTextSource.includes("function notificationMessage") && !appSource.includes("function notificationMessage"), "Notification text formatting is imported instead of defined inline.");
-  assert(appSource.includes('from "./game/setupUtils"') && setupUtilsSource.includes("function firstAvailableColor") && setupUtilsSource.includes("function moveItem") && !appSource.includes("function firstAvailableColor") && !appSource.includes("function moveItem"), "Setup list helpers are imported instead of defined inline.");
+  assert(
+    gameStateSource.includes("function addSetupPlayer") &&
+      gameStateSource.includes("function reorderSetupPlayers") &&
+      gameStateSource.includes("function updateSetupConfig") &&
+      appSource.includes("addSetupPlayer(current") &&
+      appSource.includes("updateSetupConfig(current") &&
+      !appSource.includes('from "./game/setupUtils"') &&
+      !appSource.includes("function firstAvailableColor") &&
+      !appSource.includes("function moveItem"),
+    "Setup list and config mutations live in game-state helpers instead of App.",
+  );
   assert(gameTypesSource.includes('status: "available" | "captured" | "dead"') && gameTypesSource.includes("custodianPlayerId: string | null") && !gameTypesSource.includes("capturedTerritoryId: string | null"), "Spy state stores explicit status, territory, and custodian.");
   assert(gameStateSource.includes("capturedSpiesOnTerritory") && gameStateSource.includes("restoreCapturedSpies") && gameStateSource.includes("custodianPlayerId: territoryOwnerId"), "Captured spies are selected by territory and custody follows ownership changes.");
   assert(gameSectionsSource.includes("CapturedSpyRow") && troopControlsSource.includes("function CapturedSpyRow") && troopIconsSource.includes('captured ? "-captured" : ""') && troopIconsSource.includes("ownerColor={player.color}"), "Captured spies and troop icons use owner-colored circular icon rendering.");
@@ -344,7 +355,7 @@ async function runSourceChecks() {
   assert(pausePanelSource.includes('className="connection-label pause-row-status"') && pausePanelSource.includes("canRemove && player.id !== localPlayerId") && pausePanelSource.includes("pause-row-action"), "Pause rows keep local and sync action/status slots aligned.");
   assert(stylesSource.includes(".player-row.compact-row") && stylesSource.includes('grid-template-areas: "identity status action"') && stylesSource.includes("grid-template-columns: minmax(0, 1fr) 96px 38px") && stylesSource.includes(".player-row.compact-row > .pause-row-action"), "Pause rows use fixed name/status/action columns with the action slot on the far right.");
   assert(gameStateSource.includes("removeNonConnectedSyncLobbyPlayers") && gameStateSource.includes('state.phase === "setup" && connectionStatus !== "connected"') && gameStateSource.includes('player.connectionStatus === "connected"'), "Sync setup lobby removes reconnecting/disconnected players instead of preserving recovery slots.");
-  assert(appSource.includes("removeNonConnectedSyncLobbyPlayers({") && setupDraftDocs.includes("Restarting from sync pause returns to setup with only currently connected players"), "Sync restart to setup prunes non-connected players and documents that recovery is active-game only.");
+  assert(appSource.includes("restartPausedGameToSetup(current") && gameStateSource.includes("removeNonConnectedSyncLobbyPlayers({") && setupDraftDocs.includes("Restarting from sync pause returns to setup with only currently connected players"), "Sync restart to setup prunes non-connected players and documents that recovery is active-game only.");
   assert(appSource.includes('from "./ui/PlayerChrome"') && setupPanelsSource.includes('from "./PlayerChrome"') && playerChromeSource.includes("function PlayerIdentity") && (playerChromeSource.match(/className=\"player-dot\"/g) ?? []).length === 1 && !appSource.includes("function PlayerIdentity"), "Read-only player identity rows share one imported dot/name component.");
   assert(playerChromeSource.includes("function PlayerBar") && gameViewSource.includes("showPlayerBar") && gameSectionsSource.includes("allocation-waiting-panel") && !appSource.includes("function PlayerBar"), "Game stages use the shared persistent player bar.");
   assert(gameViewSource.includes("function playerBarPlayerForGame") && gameViewSource.includes("function playerBarDraftProgress") && appSource.includes("const playerBarPlayer = playerBarPlayerForGame") && !appSource.includes("const playerBarIsDraft ="), "Persistent player-bar identity and progress use named helpers.");
@@ -751,6 +762,8 @@ async function runSetupPreferenceChecks(page) {
   await page.goto(baseUrl);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
+  assert(await page.title() === "Ardatúrë", "Browser title renders Ardatúrë with real Unicode characters.");
+  assert(await page.locator(".brand-row h1").textContent() === "Ardatúrë", "Home title renders Ardatúrë with real Unicode characters.");
   await capture(page, "01-home-mobile.png");
   await assertNoMapCameraControls(page, "Home overlay hides map camera controls.");
 

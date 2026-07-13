@@ -98,6 +98,140 @@ export function isSetupValid(players: GamePlayer[]) {
   return true;
 }
 
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
+  const nextItems = [...items];
+  const [item] = nextItems.splice(fromIndex, 1);
+  nextItems.splice(toIndex, 0, item);
+  return nextItems;
+}
+
+export function firstAvailableColor(players: GamePlayer[]) {
+  const usedColors = new Set(players.map((player) => player.color).filter(Boolean));
+  return PLAYER_COLORS.find((color) => !usedColors.has(color)) ?? null;
+}
+
+export function addSetupPlayer(state: GameState, name: string): GameState {
+  if (!name.trim() || state.players.length >= 6) {
+    return state;
+  }
+
+  return {
+    ...state,
+    players: [
+      ...state.players,
+      {
+        ...createPlayer(name),
+        color: firstAvailableColor(state.players),
+      },
+    ],
+  };
+}
+
+export function updateUnlockedSetupPlayer(state: GameState, playerId: string, updates: Partial<GamePlayer>): GameState {
+  return {
+    ...state,
+    players: state.players.map((player) => {
+      if (player.id !== playerId) {
+        return player;
+      }
+
+      return {
+        ...player,
+        name: updates.name !== undefined && !player.nameLocked ? updates.name : player.name,
+        color: updates.color !== undefined && !player.colorLocked ? updates.color : player.color,
+      };
+    }),
+  };
+}
+
+export function updateSetupPlayer(state: GameState, playerId: string, updates: Partial<GamePlayer>, hostPlayerId: string | null): GameState {
+  return {
+    ...state,
+    players: state.players.map((player) => {
+      if (player.id !== playerId) {
+        return player;
+      }
+
+      const hostLockedUpdates = state.mode === "sync" && player.id !== hostPlayerId
+        ? {
+            nameLocked: updates.name !== undefined ? true : player.nameLocked,
+            colorLocked: updates.color !== undefined ? true : player.colorLocked,
+          }
+        : {};
+
+      return { ...player, ...updates, ...hostLockedUpdates };
+    }),
+  };
+}
+
+export function unlockSetupPlayerField(state: GameState, playerId: string, field: "name" | "color"): GameState {
+  return {
+    ...state,
+    players: state.players.map((player) => player.id === playerId
+      ? {
+          ...player,
+          nameLocked: field === "name" ? false : player.nameLocked,
+          colorLocked: field === "color" ? false : player.colorLocked,
+        }
+      : player),
+  };
+}
+
+export function removeSetupPlayer(state: GameState, playerId: string): GameState {
+  return state.phase === "paused"
+    ? removePlayerFromDraft(state, playerId)
+    : {
+        ...state,
+        players: state.players.filter((player) => player.id !== playerId),
+      };
+}
+
+export function reorderSetupPlayers(state: GameState, playerId: string, overPlayerId: string): GameState {
+  const fromIndex = state.players.findIndex((player) => player.id === playerId);
+  const toIndex = state.players.findIndex((player) => player.id === overPlayerId);
+
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+    return state;
+  }
+
+  return { ...state, players: moveItem(state.players, fromIndex, toIndex) };
+}
+
+export function randomizeSetupPlayers(state: GameState, random = Math.random): GameState {
+  const players = [...state.players];
+  for (let index = players.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [players[index], players[swapIndex]] = [players[swapIndex], players[index]];
+  }
+
+  return { ...state, players };
+}
+
+export function updateSetupConfig(state: GameState, updates: Partial<GameConfig>): GameState {
+  const config = { ...state.config, ...updates };
+
+  return {
+    ...state,
+    config: {
+      ...config,
+      pickTimeLimit: config.draftStyle === "random" ? 0 : config.pickTimeLimit,
+      troopAllocationTimeLimit: config.allocationStyle === "random" ? 0 : config.troopAllocationTimeLimit,
+    },
+  };
+}
+
+export function restartPausedGameToSetup(state: GameState, isSyncHost: boolean): GameState {
+  return state.phase === "paused" && (state.mode === "local" || isSyncHost)
+    ? removeNonConnectedSyncLobbyPlayers({
+        ...state,
+        phase: "setup",
+        draft: null,
+        allocation: null,
+        turn: null,
+      })
+    : state;
+}
+
 export function colorForPlayer(player: GamePlayer | undefined): MapSkin {
   return player?.color ?? "background";
 }
