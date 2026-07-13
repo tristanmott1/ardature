@@ -164,6 +164,7 @@ async function runSourceChecks() {
   assert(!gameTypesSource.includes("resultTerritoryId") && !gameTypesSource.includes("resultPlayerId"), "Draft state does not store stale result popup fields.");
   assert(appSource.includes("type ActiveOverlay") && appSource.includes('type: "confirm"') && appSource.includes('type: "pause"'), "App uses a single overlay model for game-stage popups.");
   assert(appSource.includes("function renderActiveOverlay()") && appSource.includes("const activeOverlayElement = renderActiveOverlay()"), "App renders active overlays through one switch.");
+  assert(appSource.includes("function ModalActions") && appSource.includes("function ModalIconButton") && (appSource.match(/className=\"modal-actions\"/g) ?? []).length === 1, "Dialog action rows share one modal action primitive.");
   assert(appSource.includes("function renderTroopSection()") && appSource.includes("function renderActionSection()") && appSource.includes("{troopSectionElement}") && appSource.includes("{actionSectionElement}"), "App renders game-stage sections through explicit section slots.");
   assert(appSource.includes('className="troop-icon-button turn-spy-button"') && appSource.includes("turn-spy-spacer") && !appSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling and keeps a spacer when lost.");
   assert(stylesSource.includes('.turn-spy-button[data-selected="true"]') && stylesSource.includes(".turn-spy-spacer"), "Turn spy selected and missing states have dedicated styling.");

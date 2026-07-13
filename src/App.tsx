@@ -3144,14 +3144,14 @@ function ConfirmSheet({
       <section className="modal-panel draft-sheet" role="dialog" aria-label={ariaLabel}>
         <h2>{title}</h2>
         {text ? <p className="muted">{text}</p> : null}
-        <div className="modal-actions">
-          <button className="icon-button danger large" type="button" onClick={onCancel} aria-label={cancelLabel}>
+        <ModalActions>
+          <ModalIconButton label={cancelLabel} onClick={onCancel} tone="danger">
             <X size={24} />
-          </button>
-          <button className="icon-button primary large" type="button" onClick={onConfirm} aria-label={confirmLabel}>
+          </ModalIconButton>
+          <ModalIconButton label={confirmLabel} onClick={onConfirm} tone="primary">
             <Check size={24} />
-          </button>
-        </div>
+          </ModalIconButton>
+        </ModalActions>
       </section>
     </div>
   );
@@ -3172,11 +3172,11 @@ function GameNotificationDialog({
     <div className="modal-scrim notification-backdrop">
       <section className="modal-panel notification-modal" role="alertdialog" aria-label="Game notification">
         <h2>{message}</h2>
-        <div className="modal-actions">
-          <button className="icon-button primary large" type="button" onClick={onClose} aria-label="Dismiss notification">
+        <ModalActions>
+          <ModalIconButton label="Dismiss notification" onClick={onClose} tone="primary">
             <Check size={24} />
-          </button>
-        </div>
+          </ModalIconButton>
+        </ModalActions>
       </section>
     </div>
   );
@@ -3197,16 +3197,40 @@ function DecisionDialog({
     <div className="modal-scrim">
       <section className="modal-panel decision-modal" role="dialog" aria-label={message}>
         <h2>{message}</h2>
-        <div className="modal-actions">
-          <button className="icon-button large" type="button" onClick={onCancel} aria-label="Cancel">
+        <ModalActions>
+          <ModalIconButton label="Cancel" onClick={onCancel}>
             <X size={24} />
-          </button>
-          <button className="icon-button danger large" type="button" onClick={onConfirm} aria-label={confirmLabel}>
+          </ModalIconButton>
+          <ModalIconButton label={confirmLabel} onClick={onConfirm} tone="danger">
             <Check size={24} />
-          </button>
-        </div>
+          </ModalIconButton>
+        </ModalActions>
       </section>
     </div>
+  );
+}
+
+function ModalActions({ children }: { children: ReactNode }) {
+  return <div className="modal-actions">{children}</div>;
+}
+
+function ModalIconButton({
+  children,
+  label,
+  onClick,
+  tone = "plain",
+}: {
+  children: ReactNode;
+  label: string;
+  onClick: () => void;
+  tone?: "danger" | "plain" | "primary";
+}) {
+  const toneClass = tone === "plain" ? "" : ` ${tone}`;
+
+  return (
+    <button className={`icon-button${toneClass} large`} type="button" onClick={onClick} aria-label={label}>
+      {children}
+    </button>
   );
 }
 
