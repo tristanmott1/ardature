@@ -332,6 +332,7 @@ async function runSourceChecks() {
   assert(!appSource.includes('detail="ready"') && !appSource.includes("allocating</span>"), "Allocation ready page does not show row-level ready labels.");
   assert(qrCodeUiSource.includes("data-qr-text") && qrCodeUiSource.includes("handlePaste") && (setupPanelsSource.includes("QrPanel") || pausePanelSource.includes("QrPanel")) && appSource.includes("QrScanner"), "QR UI is centralized and scanner supports paste-driven verification.");
   assert(!appSource.includes("QRCode.toString") && !appSource.includes("function QrScanner") && !appSource.includes("function QrPanel"), "App imports QR UI instead of defining scanner/rendering internals.");
+  assert(!pausePanelSource.includes('<div className="qr-placeholder"'), "Pause recovery never renders a blank QR placeholder without QR text.");
   assert(appSource.includes('from "./sync/syncErrors"') && syncErrorsSource.includes("function formatQrHandshakeError") && !appSource.includes("function formatQrHandshakeError"), "Sync QR error text formatting is imported instead of defined inline.");
   assert(appSource.includes("canAdvance={isSyncHost") && appSource.includes("onAdvance={startAllocatedGame}"), "Allocation waiting panel exposes host-only start control.");
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
@@ -2024,6 +2025,7 @@ async function runSyncRecoveryChecks(browser) {
   await host.getByRole("dialog", { name: "Paused" }).waitFor();
   await capture(host, "18-sync-pause-recovery-qr-mobile.png");
   assert((await host.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").count()) === 1, "Sync host pause always shows a recovery QR.");
+  assert((await host.getByRole("dialog", { name: "Paused" }).locator(".qr-placeholder").count()) === 0, "Sync host pause does not show a blank QR placeholder.");
   await assertCompactPlayerRowsAligned(host, ".pause-modal .player-row.compact-row", "Sync pause player rows align names, statuses, and actions");
   await joiner.getByRole("dialog", { name: "Paused" }).waitFor({ timeout: 15000 });
   await capture(joiner, "18b-sync-joiner-pause-no-qr-mobile.png");
@@ -2049,6 +2051,7 @@ async function runSyncRecoveryChecks(browser) {
   await host.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").waitFor({ timeout: 15000 });
   await host.locator('.pause-modal [data-player-status="disconnected"]').waitFor({ timeout: 15000 });
   await capture(host, "21-sync-host-refresh-recovery-qr-mobile.png");
+  assert((await host.getByRole("dialog", { name: "Paused" }).locator(".qr-placeholder").count()) === 0, "Sync host refresh recovery does not show a blank QR placeholder.");
 
   await recoveryJoiner.goto(baseUrl);
   await recoveryJoiner.evaluate(() => localStorage.clear());

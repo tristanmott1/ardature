@@ -172,7 +172,7 @@ Sync host pause is a synchronization reset:
 - The host can restart from pause after confirmation, returning connected players to setup while keeping current sync connections open.
 - Restart removes any reconnecting or disconnected players before the setup lobby is shown.
 - Sync pause includes connected, disconnected, and reconnecting player status.
-- Sync host pause always includes a recovery QR and scan button for disconnected-player recovery.
+- Sync host pause includes a recovery QR and scan button for disconnected-player recovery as soon as a recovery offer exists. It must never render a blank QR placeholder while that offer is being created.
 - Sync non-host pause never includes a QR placeholder or recovery tools. Recovery is coordinated through the host because the host is the source of truth.
 - Pause and recovery rows use one compact grid in both local and sync mode: color dot, left-aligned player name, fixed status column, and far-right trash/action slot or spacer. Local pause reserves the same empty status column so trash icons line up exactly with sync pause rows.
 - The host can remove players while paused.

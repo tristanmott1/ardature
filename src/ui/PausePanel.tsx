@@ -60,7 +60,7 @@ export function PausePanel({
         </div>
         {showRecoveryTools ? (
           <div className="pause-recovery-tools">
-            {syncQrText ? <QrPanel text={syncQrText} /> : <div className="qr-placeholder" />}
+            {syncQrText ? <QrPanel text={syncQrText} /> : null}
             <button className="secondary icon-text-button scan-answer-button" type="button" onClick={onScanRecoveryAnswer}>
               <ScanLine size={18} />
               Scan
