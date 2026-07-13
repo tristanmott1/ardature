@@ -206,6 +206,33 @@ type MapPressModeContext = {
   syncJoinerBlocked: boolean;
 };
 
+type GameStageLayout = {
+  canUseMapCameraControls: boolean;
+  freezeMapGestures: boolean;
+  showActionSection: boolean;
+  showAllocationTroopSection: boolean;
+  showAllocationWaitingSection: boolean;
+  showGameMapInfoSection: boolean;
+  showGameStageLayout: boolean;
+  showPlayerBar: boolean;
+  showReinforcementTroopSection: boolean;
+  showTurnActionSection: boolean;
+  showTurnInfoSection: boolean;
+  showTroopSection: boolean;
+};
+
+type GameStageLayoutContext = {
+  activeOverlay: ActiveOverlay | null;
+  canControlTurnPlayer: boolean;
+  canShowAllocationSection: boolean;
+  game: GameState;
+  gameMapInspection: TerritoryInspection;
+  localAllocationReady: boolean;
+  playerBarPlayer: GamePlayer | null;
+  turnActionPlayer: GamePlayer | null;
+  turnMapInspection: TerritoryInspection;
+};
+
 function firstActiveOverlay(...overlays: Array<ActiveOverlay | null>): ActiveOverlay | null {
   for (const overlay of overlays) {
     if (overlay) {
@@ -414,24 +441,6 @@ function App() {
     spyTargetTerritory && spyCapturePercent !== null ? { type: "confirm", confirm: "spy" } : null,
     canShowConfirm ? { type: "confirm", confirm: "draft" } : null,
   );
-  const hasActiveOverlay = Boolean(activeOverlay);
-  const isGameStage = game.phase !== "home" && game.phase !== "setup";
-  const hideInteractiveSections = hasActiveOverlay;
-  const freezeMapGestures = hasActiveOverlay;
-  const showTroopSection = !hideInteractiveSections;
-  const showActionSection = !hideInteractiveSections;
-  const showAllocationTroopSection = showTroopSection && canShowAllocationSection;
-  const showAllocationWaitingSection = showTroopSection && game.mode === "sync" && game.phase === "allocation" && localAllocationReady;
-  const hideMapCameraControls = hasActiveOverlay || showAllocationWaitingSection;
-  const showGameMapInfoSection = showTroopSection && game.phase === "gameMap" && Boolean(gameMapInspection.selectedTerritory);
-  const showTurnActionSection = showActionSection && game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer);
-  const showReinforcementTroopSection = showTroopSection && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace";
-  const showTurnInfoSection = game.phase === "turn" &&
-    game.turn?.stage !== "reinforcementBuild" &&
-    game.turn?.stage !== "reinforcementPlace" &&
-    game.turn?.stage !== "spyTarget" &&
-    Boolean(turnMapInspection.selectedTerritory) &&
-    showTroopSection;
   const playerBarPlayer = playerBarPlayerForGame({
     activeDraftPlayer: active,
     allocationPlayer,
@@ -441,9 +450,17 @@ function App() {
     pausedReturnPhase,
   });
   const playerBarProgress = playerBarDraftProgress(game, playerBarPlayer);
-  const showPlayerBar = isGameStage && Boolean(playerBarPlayer);
-  const showGameStageLayout = isGameStage;
-  const canUseMapCameraControls = isGameStage && !hideMapCameraControls;
+  const layout = gameStageLayoutForState({
+    activeOverlay,
+    canControlTurnPlayer,
+    canShowAllocationSection,
+    game,
+    gameMapInspection,
+    localAllocationReady,
+    playerBarPlayer,
+    turnActionPlayer,
+    turnMapInspection,
+  });
 
   useEffect(() => {
     latestGameRef.current = game;
@@ -1993,7 +2010,7 @@ function App() {
   }
 
   function renderTroopSection() {
-    if (showAllocationTroopSection && allocationPlayer) {
+    if (layout.showAllocationTroopSection && allocationPlayer) {
       return (
         <AllocationPanel
           allocation={game.allocation}
@@ -2007,7 +2024,7 @@ function App() {
       );
     }
 
-    if (showGameMapInfoSection) {
+    if (layout.showGameMapInfoSection) {
       return (
         <GameMapPanel
           capturedSpies={gameMapInspection.capturedSpies}
@@ -2020,7 +2037,7 @@ function App() {
       );
     }
 
-    if (showAllocationWaitingSection && allocationPlayer) {
+    if (layout.showAllocationWaitingSection && allocationPlayer) {
       return (
         <AllocationWaitingPanel
           players={game.players}
@@ -2031,7 +2048,7 @@ function App() {
       );
     }
 
-    if (showReinforcementTroopSection && turnActionPlayer && turnReinforcement) {
+    if (layout.showReinforcementTroopSection && turnActionPlayer && turnReinforcement) {
       return (
         <ReinforcementPanel
           allocation={game.allocation}
@@ -2047,7 +2064,7 @@ function App() {
       );
     }
 
-    if (showTurnInfoSection) {
+    if (layout.showTurnInfoSection) {
       return (
         <GameMapPanel
           capturedSpies={turnMapInspection.capturedSpies}
@@ -2064,7 +2081,7 @@ function App() {
   }
 
   function renderActionSection() {
-    if (!showTurnActionSection || !turnActionPlayer) {
+    if (!layout.showTurnActionSection || !turnActionPlayer) {
       return null;
     }
 
@@ -2089,11 +2106,11 @@ function App() {
 
   return (
     <main
-      className={`app-shell${showGameStageLayout ? " game-layout" : ""}`}
+      className={`app-shell${layout.showGameStageLayout ? " game-layout" : ""}`}
       data-app-phase={game.phase}
       data-sync-role={syncRole ?? "none"}
     >
-      {showPlayerBar ? (
+      {layout.showPlayerBar ? (
         <PlayerBar
           detail={playerBarProgress ? `${playerBarProgress.drafted} / ${playerBarProgress.total}` : null}
           onExit={returnHome}
@@ -2110,13 +2127,13 @@ function App() {
 
       <MapView
         autoFocusEnabled={autoFocusEnabled}
-        frozen={freezeMapGestures}
+        frozen={layout.freezeMapGestures}
         mapData={generatedMapData}
-        onTerritoryPress={!freezeMapGestures && mapPressMode ? pressTerritory : undefined}
+        onTerritoryPress={!layout.freezeMapGestures && mapPressMode ? pressTerritory : undefined}
         onAutoFocusChange={changeAutoFocusEnabled}
         resetCameraKey={resetCameraKey}
         selectedTerritoryId={viewerSelectedTerritoryId}
-        showCameraControls={canUseMapCameraControls}
+        showCameraControls={layout.canUseMapCameraControls}
         territoryStates={territoryStates}
         troopMarkers={troopMarkers}
       />
@@ -3736,6 +3753,44 @@ function mapPressModeForGame({
   }
 
   return "inspect";
+}
+
+function gameStageLayoutForState({
+  activeOverlay,
+  canControlTurnPlayer,
+  canShowAllocationSection,
+  game,
+  gameMapInspection,
+  localAllocationReady,
+  playerBarPlayer,
+  turnActionPlayer,
+  turnMapInspection,
+}: GameStageLayoutContext): GameStageLayout {
+  const hasActiveOverlay = Boolean(activeOverlay);
+  const isGameStage = game.phase !== "home" && game.phase !== "setup";
+  const showTroopSection = !hasActiveOverlay;
+  const showActionSection = !hasActiveOverlay;
+  const showAllocationWaitingSection = showTroopSection && game.mode === "sync" && game.phase === "allocation" && localAllocationReady;
+
+  return {
+    canUseMapCameraControls: isGameStage && !hasActiveOverlay && !showAllocationWaitingSection,
+    freezeMapGestures: hasActiveOverlay,
+    showActionSection,
+    showAllocationTroopSection: showTroopSection && canShowAllocationSection,
+    showAllocationWaitingSection,
+    showGameMapInfoSection: showTroopSection && game.phase === "gameMap" && Boolean(gameMapInspection.selectedTerritory),
+    showGameStageLayout: isGameStage,
+    showPlayerBar: isGameStage && Boolean(playerBarPlayer),
+    showReinforcementTroopSection: showTroopSection && game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer) && game.turn?.stage === "reinforcementPlace",
+    showTurnActionSection: showActionSection && game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer),
+    showTurnInfoSection: showTroopSection &&
+      game.phase === "turn" &&
+      game.turn?.stage !== "reinforcementBuild" &&
+      game.turn?.stage !== "reinforcementPlace" &&
+      game.turn?.stage !== "spyTarget" &&
+      Boolean(turnMapInspection.selectedTerritory),
+    showTroopSection,
+  };
 }
 
 function territoryInspectionForViewer({
