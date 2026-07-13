@@ -372,11 +372,14 @@ function App() {
     canShowConfirm ? { type: "confirm", confirm: "draft" } : null,
   );
   const hasActiveOverlay = Boolean(activeOverlay);
-  const showTroopSection = !hasActiveOverlay;
-  const showActionSection = !hasActiveOverlay;
-  const mapFrozen = hasActiveOverlay;
+  const isGameStage = game.phase !== "home" && game.phase !== "setup";
+  const hideInteractiveSections = hasActiveOverlay;
+  const freezeMapGestures = hasActiveOverlay;
+  const showTroopSection = !hideInteractiveSections;
+  const showActionSection = !hideInteractiveSections;
   const showAllocationTroopSection = showTroopSection && canShowAllocationSection;
   const showAllocationWaitingSection = showTroopSection && game.mode === "sync" && game.phase === "allocation" && localAllocationReady;
+  const hideMapCameraControls = hasActiveOverlay || showAllocationWaitingSection;
   const showGameMapInfoSection = showTroopSection && game.phase === "gameMap" && Boolean(gameMapSelectedTerritory);
   const showTurnActionSection = showActionSection && game.phase === "turn" && canControlTurnPlayer && Boolean(turnActionPlayer);
   const showReinforcementTroopSection = showTroopSection && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace";
@@ -410,9 +413,9 @@ function App() {
   const playerBarProgress = playerBarIsDraft && playerBarPlayer
     ? draftProgressForPlayer(game, playerBarPlayer.id)
     : null;
-  const showPlayerBar = game.phase !== "home" && game.phase !== "setup" && Boolean(playerBarPlayer);
-  const showGameStageLayout = game.phase !== "home" && game.phase !== "setup";
-  const canUseMapCameraControls = game.phase !== "home" && game.phase !== "setup" && !hasActiveOverlay && !showAllocationWaitingSection;
+  const showPlayerBar = isGameStage && Boolean(playerBarPlayer);
+  const showGameStageLayout = isGameStage;
+  const canUseMapCameraControls = isGameStage && !hideMapCameraControls;
 
   useEffect(() => {
     latestGameRef.current = game;
@@ -2089,9 +2092,9 @@ function App() {
 
       <MapView
         autoFocusEnabled={autoFocusEnabled}
-        frozen={mapFrozen}
+        frozen={freezeMapGestures}
         mapData={generatedMapData}
-        onTerritoryPress={!mapFrozen && (canDraftOnMap || canAllocateOnMap || canReinforceOnMap || canSpyOnMap || canInspectGameMap) ? pressTerritory : undefined}
+        onTerritoryPress={!freezeMapGestures && (canDraftOnMap || canAllocateOnMap || canReinforceOnMap || canSpyOnMap || canInspectGameMap) ? pressTerritory : undefined}
         onAutoFocusChange={changeAutoFocusEnabled}
         resetCameraKey={resetCameraKey}
         selectedTerritoryId={viewerSelectedTerritoryId}

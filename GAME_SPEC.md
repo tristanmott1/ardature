@@ -909,7 +909,7 @@ Game-stage popups and modals are organized by role. Only one overlay is active a
 7. Game notification
 8. Confirm sheet
 
-Every active overlay freezes the map, hides return-to-map and auto-focus controls, and hides troop/action sections until dismissed. The player bar remains visible once draft has started, except for scanner/rejoin utility flows that happen before the device has joined or rejoined the game.
+Every active overlay freezes the map, hides return-to-map and auto-focus controls, and hides troop/action sections until dismissed. The player bar remains visible once draft has started, except for scanner/rejoin utility flows that happen before the device has joined or rejoined the game. The sync allocation waiting page is not an overlay, but it is a waiting screen rather than a map-interaction screen; it keeps the player bar and waiting columns visible while hiding map camera controls.
 
 Overlay roles:
 

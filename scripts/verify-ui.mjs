@@ -183,7 +183,8 @@ async function runSourceChecks() {
   assert(!gameTypesSource.includes("selectedTerritoryId") && !gameStateSource.includes("selectedTerritoryId: null") && !gameStateSource.includes("allocation.selectedTerritoryId"), "Shared allocation state does not store selected visual territory.");
   assert(!syncMessagesSource.includes("draftPending"), "Sync messages do not share pending draft selections.");
   assert(!syncMessagesSource.includes('type: "allocationUpdate";\n      allocation: PlayerAllocation;') || !syncMessagesSource.includes("selectedTerritoryId"), "Allocation sync messages do not include selected territory UI state.");
-  assert(appSource.includes('const showPlayerBar = game.phase !== "home" && game.phase !== "setup"') && appSource.includes('const showGameStageLayout = game.phase !== "home" && game.phase !== "setup"'), "Game-stage layout and player bar are not gated by overlay-specific draft state.");
+  assert(appSource.includes('const isGameStage = game.phase !== "home" && game.phase !== "setup"') && appSource.includes("const showPlayerBar = isGameStage") && appSource.includes("const showGameStageLayout = isGameStage"), "Game-stage layout and player bar are not gated by overlay-specific draft state.");
+  assert(appSource.includes("const hideInteractiveSections = hasActiveOverlay") && appSource.includes("const freezeMapGestures = hasActiveOverlay") && appSource.includes("const hideMapCameraControls = hasActiveOverlay || showAllocationWaitingSection"), "Overlay policy derives section hiding, map freezing, and camera controls from named rules.");
   assert(appSource.includes("RotateCcw") && appSource.includes("restartPausedGame"), "Pause can restart to setup without closing transports.");
   assert(!appSource.includes('closeLabel="End game"'), "Pause modal does not use a close X to end the game.");
   assert(appSource.includes("closeOnOutsidePress"), "Color dropdowns close on outside press.");
