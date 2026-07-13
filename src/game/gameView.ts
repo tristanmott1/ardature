@@ -37,11 +37,11 @@ export type MapPressMode = "draft" | "allocation" | "reinforcement" | "spy" | "i
 
 export type TroopSectionMode =
   | { type: "allocation"; source: "initial" | "reinforcement" }
+  | { type: "allocationWaiting" }
   | { type: "info"; source: "gameMap" | "turn" }
   | null;
 
 export type ActionSectionMode = "none" | "turn";
-export type StatusSectionMode = "none" | "allocationWaiting";
 
 export type GameStageLayout = {
   actionSection: ActionSectionMode;
@@ -49,7 +49,6 @@ export type GameStageLayout = {
   freezeMapGestures: boolean;
   showGameStageLayout: boolean;
   showPlayerBar: boolean;
-  statusSection: StatusSectionMode;
   troopSection: TroopSectionMode;
 };
 
@@ -295,9 +294,6 @@ export function gameStageLayoutForState({
   const hasActiveOverlay = Boolean(activeOverlay);
   const isGameStage = game.phase !== "home" && game.phase !== "setup";
   const hideSections = hasActiveOverlay;
-  const statusSection = !hideSections && game.mode === "sync" && game.phase === "allocation" && localAllocationReady
-    ? "allocationWaiting"
-    : "none";
   const troopSection = hideSections
     ? null
     : troopSectionModeForGame({
@@ -306,6 +302,7 @@ export function gameStageLayoutForState({
         allocationSelectedTerritoryId,
         game,
         gameMapInspection,
+        localAllocationReady,
         turnActionPlayer,
         turnMapInspection,
         turnSelectedTerritoryId,
@@ -314,11 +311,10 @@ export function gameStageLayoutForState({
 
   return {
     actionSection,
-    canUseMapCameraControls: isGameStage && !hideSections && statusSection === "none",
+    canUseMapCameraControls: isGameStage && !hideSections,
     freezeMapGestures: hasActiveOverlay,
     showGameStageLayout: isGameStage,
     showPlayerBar: isGameStage && Boolean(playerBarPlayer),
-    statusSection,
     troopSection,
   };
 }
@@ -499,10 +495,15 @@ function troopSectionModeForGame({
   canControlTurnPlayer,
   game,
   gameMapInspection,
+  localAllocationReady,
   turnActionPlayer,
   turnMapInspection,
   turnSelectedTerritoryId,
-}: Omit<GameStageLayoutContext, "activeOverlay" | "localAllocationReady" | "playerBarPlayer">): TroopSectionMode {
+}: Omit<GameStageLayoutContext, "activeOverlay" | "playerBarPlayer">): TroopSectionMode {
+  if (game.mode === "sync" && game.phase === "allocation" && localAllocationReady) {
+    return { type: "allocationWaiting" };
+  }
+
   if (game.phase === "allocation" && allocationBuildSubmitted && allocationSelectedTerritoryId) {
     return { type: "allocation", source: "initial" };
   }

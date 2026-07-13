@@ -1864,6 +1864,15 @@ function App() {
             selectedTerritoryId={allocationSelectedTerritoryId}
           />
         ) : null;
+      case "allocationWaiting":
+        return allocationPlayer ? (
+          <AllocationWaitingPanel
+            players={game.players}
+            allocation={game.allocation}
+            canAdvance={isSyncHost && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
+            onAdvance={startAllocatedGame}
+          />
+        ) : null;
       case "info":
         if (layout.troopSection.source === "turn") {
           return (
@@ -1893,22 +1902,6 @@ function App() {
     }
   }
 
-  function renderStatusSection() {
-    switch (layout.statusSection) {
-      case "allocationWaiting":
-        return allocationPlayer ? (
-          <AllocationWaitingPanel
-            players={game.players}
-            allocation={game.allocation}
-            canAdvance={isSyncHost && Boolean(game.allocation && game.players.every((player) => game.allocation?.playerAllocations[player.id]?.ready))}
-            onAdvance={startAllocatedGame}
-          />
-        ) : null;
-      case "none":
-        return null;
-    }
-  }
-
   function renderActionSection() {
     if (layout.actionSection !== "turn" || !turnActionPlayer) {
       return null;
@@ -1930,7 +1923,6 @@ function App() {
   }
 
   const troopSectionElement = renderTroopSection();
-  const statusSectionElement = renderStatusSection();
   const actionSectionElement = renderActionSection();
   const activeOverlayElement = renderActiveOverlay();
 
@@ -1952,8 +1944,6 @@ function App() {
           title={playerBarPlayer?.name ?? "Game"}
         />
       ) : null}
-
-      {statusSectionElement}
 
       {troopSectionElement}
 

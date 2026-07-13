@@ -172,10 +172,11 @@ The `PlayerBar` is always present from the start of draft. It is never covered b
 
 `PlayerBar` and the small dot/name `PlayerIdentity` live in `src/ui/PlayerChrome.tsx`. Game screens should import these shared components instead of defining new player-name rows or local player-bar variants.
 
-The `TroopSection` is optional and appears below the player bar. It has exactly two modes:
+The `TroopSection` slot is optional and appears below the player bar. It has two troop-display modes plus one sync waiting state:
 
 - `allocation`: used during initial manual troop allocation and reinforcement placement.
 - `info`: used during normal map inspection after allocation, during passive sync turns, and during successful spy intel.
+- `allocationWaiting`: used when this sync device has finished allocation and is waiting for other players.
 
 In `allocation` mode, the troop section is hidden until a valid owned territory is selected. Pressing the selected territory again unselects it and hides the section. The top row shows the remaining troop pool and uses the non-clickable `+` affordance. The selected territory name is bold between the rows. The bottom row shows troops on the selected territory and uses the non-clickable `-` affordance. The Ready/Finish check button remains in this troop section below the rows.
 
@@ -183,11 +184,11 @@ In `info` mode, the troop section is hidden until a territory is selected. Press
 
 In code, the troop section should stay driven by one explicit section mode. It must be either absent or fully rendered as one mode, never partially present because several overlapping booleans disagreed.
 
-Sync allocation waiting is not a troop-section mode. It is a status panel in the same upper game-stage slot below the player bar: ready/waiting columns are visible, troop rows are absent, map camera controls are hidden, and the map remains inert as a waiting surface.
+Sync allocation waiting uses the same upper game-stage section slot as troop rows. Ready/waiting columns are visible, troop rows are absent, and the map remains below the section. It is not a popup or modal, so it must not create a separate fifth section or a separate status-section render path.
 
 Pure game-stage projection rules live in `src/game/gameView.ts`. `App.tsx` should use that module for active overlay priority, selected territory priority, map press mode, player-bar identity/progress, notification visibility, sync snapshot redaction, and section layout. The app shell should wire state and events; it should not grow duplicate phase-condition clusters for those rules.
 
-Game-stage section UI lives in `src/ui/GameSections.tsx`. The public troop surface is one `TroopSection` component with internal modes for initial allocation placement, reinforcement placement, and read-only troop information. Allocation waiting columns and the turn action bar remain separate section components because they are not troop-section modes. `App.tsx` chooses which section slot to render and passes callbacks/data into these section components; it should not define section panels inline or reach for separate allocation/reinforcement/map-info panels.
+Game-stage section UI lives in `src/ui/GameSections.tsx`. The public troop surface is one `TroopSection` component with internal modes for initial allocation placement, reinforcement placement, and read-only troop information. Allocation waiting columns and the turn action bar remain separate components, but they are rendered through the same four-section layout slots instead of through additional layout branches. `App.tsx` chooses which section slot to render and passes callbacks/data into these section components; it should not define section panels inline or reach for separate allocation/reinforcement/map-info/status panels.
 
 Pre-game panel UI lives in `src/ui/SetupPanels.tsx`: home mode selection, sync entry/recovery slot selection, and local/sync setup configuration. Setup form primitives remain in `src/ui/FormControls.tsx`. `App.tsx` owns setup state changes and sync commands, but it should not define home/setup panel markup inline.
 
@@ -205,7 +206,7 @@ Army build modal UI and triangle marker math live in `src/ui/ArmyBuildModal.tsx`
 
 QR display and scanning UI lives in `src/sync/QrCodeUi.tsx`. `App.tsx` decides when sync QR flows are active, but QR SVG generation, camera scanning, paste-driven verification, torch support, and QR decode details stay inside that sync UI module.
 
-The `Map` section is always the main visual section. It sits below the troop section when one is visible, otherwise below the player bar. It sits above the action section when one is visible, otherwise above the bottom of the screen. Pan, zoom, return-to-map, and auto-focus controls are available only when the current screen is a map-interaction screen. Any popup, modal, sheet, handoff, pause, scanner, notification, army-build modal, or confirmation dialog hides the map camera buttons and disables manual pan/zoom until dismissed. The sync allocation waiting page is not an overlay, but it is still a waiting screen rather than a map-interaction screen, so it also hides map camera buttons.
+The `Map` section is always the main visual section. It sits below the troop section when one is visible, otherwise below the player bar. It sits above the action section when one is visible, otherwise above the bottom of the screen. Pan, zoom, return-to-map, and auto-focus controls are available whenever no popup, modal, sheet, handoff, pause, scanner, notification, army-build modal, or confirmation dialog covers the map. Active overlays hide the map camera buttons and disable manual pan/zoom until dismissed. Normal section content, including the sync allocation waiting columns, must not create a separate camera-control exception.
 
 The `ActionSection` appears only after troop allocation is complete, and only when the local viewer can act on the current turn. It is a real bottom section, not a map overlay. It contains a single-line instruction row above the button row. When no action is selected, the instruction is `Choose an action`. When spy targeting is selected, the instruction is `Select a territory`. The button row has the spy button on the left, using the same circular troop-icon button style without a count bubble, and the stage/action button area in the middle/right. During successful spy intel, the stage/action buttons are replaced by a dismiss button while the troop section shows the intel in `info` mode.
 
