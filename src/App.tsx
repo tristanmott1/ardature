@@ -1500,8 +1500,7 @@ function App() {
   }
 
   function startLocalTurn() {
-    setTurnSelectedTerritoryId(null);
-    setPendingSpyTerritoryId(null);
+    clearTurnSelections();
     setGame((current) => beginTurnAfterHandoff(current));
   }
 
@@ -1528,6 +1527,17 @@ function App() {
   function changeAutoFocusEnabled(enabled: boolean) {
     setAutoFocusEnabled(enabled);
     saveMapPreferences({ autoFocusEnabled: enabled });
+  }
+
+  function clearTurnSelections() {
+    setTurnSelectedTerritoryId(null);
+    setPendingSpyTerritoryId(null);
+  }
+
+  function clearNonDraftMapSelections() {
+    setAllocationSelectedTerritoryId(null);
+    setGameMapSelectedTerritoryId(null);
+    clearTurnSelections();
   }
 
   function beginTurnReinforcements() {
@@ -1645,8 +1655,7 @@ function App() {
     }
 
     setGameMapSelectedTerritoryId(null);
-    setTurnSelectedTerritoryId(null);
-    setPendingSpyTerritoryId(null);
+    clearTurnSelections();
 
     if (game.mode === "sync" && syncRole === "joiner") {
       joinTransportRef.current?.send({ type: "turnCommand", command: { type: "fortify" } });
@@ -1664,10 +1673,7 @@ function App() {
     if (game.mode === "sync") {
       setPendingDraftTerritoryId(null);
     }
-    setAllocationSelectedTerritoryId(null);
-    setGameMapSelectedTerritoryId(null);
-    setTurnSelectedTerritoryId(null);
-    setPendingSpyTerritoryId(null);
+    clearNonDraftMapSelections();
     setPausedReturnPhase(game.phase === "gameMap" ? "gameMap" : null);
 
     setGame((current) => {
