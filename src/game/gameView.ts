@@ -58,7 +58,7 @@ export type UpperGameSectionMode =
   | { type: "allocationWaiting" }
   | null;
 
-export type ActionSectionMode = "none" | "turn";
+export type ActionSectionMode = "turn" | null;
 
 export type GameStageLayout = {
   actionSection: ActionSectionMode;
@@ -565,7 +565,7 @@ export function gameStageLayoutForState({
         turnMapInspection,
         turnSelectedTerritoryId,
       });
-  const actionSection = !hideSections && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer ? "turn" : "none";
+  const actionSection = !hideSections && game.phase === "turn" && canControlTurnPlayer && turnActionPlayer ? "turn" : null;
 
   return {
     actionSection,
