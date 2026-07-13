@@ -11,7 +11,6 @@ import {
   applySyncProfileUpdate,
   applySyncTurnCommand,
   beginAllocationTurn,
-  beginAllocationTimer,
   beginDraftTimer,
   beginTurnAfterHandoff,
   canAddReinforcementTroop,
@@ -35,9 +34,7 @@ import {
   finishReinforcements,
   finishAllocationForPlayer,
   isSetupValid,
-  pauseDraftTimer,
-  pauseAllocationTimer,
-  pauseSyncGame,
+  pauseGame,
   projectReinforcementTroops,
   readLocalGame,
   readSyncHostGame,
@@ -45,6 +42,7 @@ import {
   remainingTerritoryIds,
   removeNonConnectedSyncLobbyPlayers,
   removePlayerFromDraft,
+  resumePausedGame,
   saveLocalGame,
   saveSyncHostGame,
   spyCaptureProbability,
@@ -1363,7 +1361,7 @@ function App() {
     setGame((current) => fortifyAndFinishTurn(current, turnPlayerId));
   }
 
-  function pauseDraft() {
+  function pauseCurrentGame() {
     if (isSyncGame && !isSyncHost) {
       return;
     }
@@ -1373,135 +1371,14 @@ function App() {
     }
     clearNonDraftMapSelections();
     setPausedReturnPhase(game.phase === "gameMap" ? "gameMap" : null);
-
-    setGame((current) => {
-      if (current.phase === "draft" && current.draft) {
-        return current.mode === "sync"
-          ? pauseSyncGame(current)
-          : {
-              ...current,
-              phase: "paused",
-              draft: pauseDraftTimer(current.draft, Date.now()),
-            };
-      }
-
-      if (current.phase === "allocation" && current.allocation) {
-        return {
-          ...current,
-          phase: "paused",
-          allocation: current.mode === "sync"
-            ? {
-                ...current.allocation,
-                timerEndsAt: null,
-                timerRemainingMs: current.allocation.timerRemainingMs,
-              }
-            : pauseAllocationTimer(current.allocation, Date.now()),
-        };
-      }
-
-      if (current.phase === "gameMap") {
-        return {
-          ...current,
-          phase: "paused",
-          allocation: current.allocation
-            ? {
-                ...current.allocation,
-                timerEndsAt: null,
-              }
-            : current.allocation,
-        };
-      }
-
-      if (current.phase === "turn" || current.phase === "turnHandoff") {
-        return current.mode === "sync"
-          ? pauseSyncGame(current)
-          : {
-              ...current,
-              phase: "paused",
-            };
-      }
-
-      return current;
-    });
+    setGame((current) => pauseGame(current, Date.now()));
   }
 
-  function resumeDraft() {
+  function resumeCurrentGame() {
     const returnPhase = pausedReturnPhase;
 
     setPausedReturnPhase(null);
-
-    setGame((current) => {
-      if (current.phase !== "paused") {
-        return current;
-      }
-
-      if (returnPhase === "gameMap") {
-        return {
-          ...current,
-          phase: "gameMap",
-        };
-      }
-
-      if (current.turn) {
-        if (current.mode === "sync") {
-          if (!isSyncHost || current.players.some((player) => player.connectionStatus !== "connected")) {
-            return current;
-          }
-
-          return {
-            ...current,
-            phase: "turn",
-          };
-        }
-
-        return {
-          ...current,
-          phase: "turn",
-        };
-      }
-
-      if (current.allocation) {
-        if (current.mode === "sync") {
-          if (!isSyncHost || current.players.some((player) => player.connectionStatus !== "connected")) {
-            return current;
-          }
-
-          return {
-            ...current,
-            phase: "allocation",
-            allocation: beginAllocationTimer(current.allocation, current.config, Date.now()),
-          };
-        }
-
-        return {
-          ...current,
-          phase: "allocation",
-          allocation: beginAllocationTimer(current.allocation, current.config, Date.now()),
-        };
-      }
-
-      if (!current.draft) {
-        return current;
-      }
-
-      if (current.mode === "sync") {
-        if (!isSyncHost || current.players.some((player) => player.connectionStatus !== "connected")) {
-          return current;
-        }
-
-        return {
-          ...current,
-          phase: "draft",
-          draft: beginDraftTimer(current.draft, current.config, Date.now()),
-        };
-      }
-
-      return {
-        ...current,
-        phase: "draft",
-        draft: beginDraftTimer(current.draft, current.config, Date.now()),
-      };
-    });
+    setGame((current) => resumePausedGame(current, returnPhase, isSyncHost, Date.now()));
   }
 
   function returnHome() {
@@ -1690,7 +1567,7 @@ function App() {
             mode={game.mode}
             onRemovePlayer={removePlayer}
             onRestart={game.mode === "local" || isSyncHost ? () => setIsRestartGamePromptOpen(true) : undefined}
-            onResume={resumeDraft}
+            onResume={resumeCurrentGame}
             onScanRecoveryAnswer={isSyncHost ? () => setSyncCameraMode("joinAnswer") : undefined}
             players={game.players}
             syncMessage={syncMessage}
@@ -1825,7 +1702,7 @@ function App() {
         <PlayerBar
           detail={playerBarProgress ? `${playerBarProgress.drafted} / ${playerBarProgress.total}` : null}
           onExit={returnHome}
-          onPause={playerBarControls.canPause ? pauseDraft : undefined}
+          onPause={playerBarControls.canPause ? pauseCurrentGame : undefined}
           onTitlePress={playerBarControls.canCycleViewer ? cycleGameMapViewer : undefined}
           pauseLabel={playerBarControls.pauseLabel}
           player={playerBarPlayer}

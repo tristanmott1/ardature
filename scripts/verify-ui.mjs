@@ -208,7 +208,7 @@ async function runSourceChecks() {
     assert(values[0] >= 0 && values[1] >= 0 && values[2] <= mapWidth && values[3] <= mapHeight, "Generated focus bounds stay inside the map.");
   }
   assert(appSource.includes("SyncHostTransport") && appSource.includes("SyncJoinTransport"), "App wires the QR sync transport.");
-  assert(appSource.includes("pauseSyncGame"), "App has sync pause semantics.");
+  assert(gameStateSource.includes("function pauseGame") && gameStateSource.includes("function resumePausedGame") && appSource.includes("pauseGame(current") && appSource.includes("resumePausedGame(current") && !appSource.includes("pauseSyncGame") && !appSource.includes("pauseDraftTimer") && !appSource.includes("pauseAllocationTimer"), "Pause and resume game-state transitions are centralized outside App.");
   assert(!appSource.includes("syncDraftNoticeFromOwnershipChange") && !appSource.includes("PickResultDialog"), "Draft result notifications are completely removed.");
   assert(!gameTypesSource.includes("resultTerritoryId") && !gameTypesSource.includes("resultPlayerId"), "Draft state does not store stale result popup fields.");
   assert(gameViewSource.includes("type ActiveOverlay") && gameViewSource.includes('type: "confirm"') && gameViewSource.includes('type: "pause"') && gameViewSource.includes("function activeOverlayForState"), "App uses a single overlay model for game-stage popups.");

@@ -1071,6 +1071,98 @@ export function pauseSyncGame(state: GameState): GameState {
   };
 }
 
+export function pauseGame(state: GameState, now: number): GameState {
+  if (state.phase === "draft" && state.draft) {
+    return state.mode === "sync"
+      ? pauseSyncGame(state)
+      : {
+          ...state,
+          phase: "paused",
+          draft: pauseDraftTimer(state.draft, now),
+        };
+  }
+
+  if (state.phase === "allocation" && state.allocation) {
+    return {
+      ...state,
+      phase: "paused",
+      allocation: state.mode === "sync"
+        ? {
+            ...state.allocation,
+            timerEndsAt: null,
+            timerRemainingMs: state.allocation.timerRemainingMs,
+          }
+        : pauseAllocationTimer(state.allocation, now),
+    };
+  }
+
+  if (state.phase === "gameMap") {
+    return {
+      ...state,
+      phase: "paused",
+      allocation: state.allocation
+        ? {
+            ...state.allocation,
+            timerEndsAt: null,
+          }
+        : state.allocation,
+    };
+  }
+
+  if (state.phase === "turn" || state.phase === "turnHandoff") {
+    return state.mode === "sync"
+      ? pauseSyncGame(state)
+      : {
+          ...state,
+          phase: "paused",
+        };
+  }
+
+  return state;
+}
+
+export function resumePausedGame(state: GameState, returnPhase: AppPhase | null, isSyncHost: boolean, now: number): GameState {
+  if (state.phase !== "paused") {
+    return state;
+  }
+
+  if (returnPhase === "gameMap") {
+    return {
+      ...state,
+      phase: "gameMap",
+    };
+  }
+
+  if (state.mode === "sync" && (!isSyncHost || state.players.some((player) => player.connectionStatus !== "connected"))) {
+    return state;
+  }
+
+  if (state.turn) {
+    return {
+      ...state,
+      phase: "turn",
+    };
+  }
+
+  if (state.allocation) {
+    return {
+      ...state,
+      phase: "allocation",
+      allocation: beginAllocationTimer(state.allocation, state.config, now),
+    };
+  }
+
+  if (!state.draft) {
+    return state;
+  }
+
+  return {
+    ...state,
+    phase: "draft",
+    draft: beginDraftTimer(state.draft, state.config, now),
+  };
+}
+
 export function markSyncPlayerStatus(state: GameState, playerId: string, connectionStatus: GamePlayer["connectionStatus"]): GameState {
   return {
     ...state,
@@ -1697,30 +1789,7 @@ export function pauseLocalGameForStorage(state: GameState, now: number): GameSta
     return state;
   }
 
-  if (state.phase === "draft" && state.draft) {
-    return {
-      ...state,
-      phase: "paused",
-      draft: pauseDraftTimer(state.draft, now),
-    };
-  }
-
-  if (state.phase === "allocation" && state.allocation) {
-    return {
-      ...state,
-      phase: "paused",
-      allocation: pauseAllocationTimer(state.allocation, now),
-    };
-  }
-
-  if (state.phase === "turn" || state.phase === "turnHandoff") {
-    return {
-      ...state,
-      phase: "paused",
-    };
-  }
-
-  return state;
+  return pauseGame(state, now);
 }
 
 export function saveSyncHostGame(state: GameState, localPlayerId: string | null, revision: number) {
