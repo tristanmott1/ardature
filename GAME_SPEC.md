@@ -994,7 +994,7 @@ Visibility rules:
 - Pressing the selected territory again unselects it and hides the troop section.
 - Selecting one of your own territories shows its name and heavy/cavalry/elite/leader breakdown.
 - Any troop type with count `0` is grayed out.
-- Selecting an opponent territory shows its name and all four troop types grayed out with `?` in the count bubbles.
+- Selecting an opponent territory shows its name and the selected territory owner's four troop icons grayed out with `?` in the count bubbles.
 - Opponent territory breakdowns are never shown during normal inspection, even if the viewer can see the total troop count on the map.
 - Opponent territories connected to any of the viewer's territories show total troop count only.
 - Opponent territories not connected to any of the viewer's territories show ownership only.

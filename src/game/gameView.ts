@@ -597,12 +597,14 @@ export function territoryInspectionForViewer({
     };
   }
 
-  if (!selectedTerritory || !selectedTerritoryId || !viewerId || ownership[selectedTerritoryId] !== viewerId) {
+  const selectedOwnerId = selectedTerritoryId ? ownership[selectedTerritoryId] ?? null : null;
+
+  if (!selectedTerritory || !selectedTerritoryId || !viewerId || selectedOwnerId !== viewerId) {
     return {
       capturedSpies: [],
       selectedTerritory,
       troopBreakdown: null,
-      troopPlayerId: viewerId,
+      troopPlayerId: selectedOwnerId,
     };
   }
 

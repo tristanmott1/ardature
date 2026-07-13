@@ -57,7 +57,7 @@ When the current viewer is not in the middle of an action, map inspection uses t
 - Pressing the selected territory again unselects it and hides the troop section.
 - The troop section shows the territory name and all four troop-type icons.
 - Own territories show exact counts, with zero-count troop types grayed out.
-- Opponent territories show all four troop types disabled/grayed with `?` in the count bubbles.
+- Opponent territories show the selected territory owner's four troop icons disabled/grayed with `?` in the count bubbles.
 - Captured spies are shown only when exact counts are visible.
 - Passive sync devices use this same default inspection mode during opponent turns.
 

@@ -257,6 +257,7 @@ async function runSourceChecks() {
   assert(gameViewSource.includes("function selectedTerritoryForMap") && appSource.includes("const viewerSelectedTerritoryId = selectedTerritoryForMap") && gameViewSource.includes('game.turn?.stage === "spyIntel"'), "Map selected-territory priority is centralized in one helper.");
   assert(gameViewSource.includes("type MapPressMode") && gameViewSource.includes("function mapPressModeForGame") && gameViewSource.includes("function mapSelectionUpdateForPress") && appSource.includes("mapSelectionUpdateForPress({") && !appSource.includes("switch (mapPressMode)") && appSource.includes("onTerritoryPress={!layout.freezeMapGestures && mapPressMode ? pressTerritory : undefined}"), "Map territory presses use one explicit mode and selection-update contract.");
   assert(gameViewSource.includes("function territoryInspectionForViewer") && gameViewSource.includes("revealedTerritoryId") && gameViewSource.includes("territoryForId(revealedTerritoryId)") && appSource.includes("const gameMapInspection = territoryInspectionForViewer") && appSource.includes("const turnMapInspection = territoryInspectionForViewer") && !appSource.includes("const gameMapSelectedTerritory =") && !appSource.includes("const spyIntelTerritory ="), "Territory troop visibility, lookup, and captured-spy inspection use one projection helper.");
+  assert(gameViewSource.includes("const selectedOwnerId") && gameViewSource.includes("troopPlayerId: selectedOwnerId"), "Unknown opponent troop info uses the selected territory owner's icon side.");
   assert(!appSource.includes("function selectedTerritoryForMap") && !appSource.includes("function activeOverlayForState") && !appSource.includes("function gameStageLayoutForState") && !appSource.includes("function syncSnapshotForViewer"), "App imports pure game-view projections instead of defining duplicate phase logic.");
   assert(!gameTypesSource.includes("pendingTerritoryId") && !gameStateSource.includes("pendingTerritoryId"), "Shared draft state does not store pending visual selection.");
   assert(!gameTypesSource.includes("selectedTerritoryId") && !gameStateSource.includes("selectedTerritoryId: null") && !gameStateSource.includes("allocation.selectedTerritoryId"), "Shared allocation state does not store selected visual territory.");
@@ -1415,10 +1416,10 @@ async function runReadOnlyVisibilityChecks(page) {
   assert((await page.locator(".troop-section-info").count()) === 0, "Pressing the selected read-only territory again hides the troop section.");
   await clickTerritory(page, "bree");
   assert((await page.locator(".troop-section-info .selected-territory-name").getByText("Bree").count()) === 1, "Read-only map shows connected opponent territory name.");
-  await assertUnknownTroopRow(page, "Read-only map shows connected opponent troop icons as unknown.");
+  await assertUnknownTroopRow(page, "Read-only map shows connected opponent troop icons as unknown.", "orc");
   await clickTerritory(page, "nurn");
   assert((await page.locator(".troop-section-info .selected-territory-name").getByText("Nurn").count()) === 1, "Read-only map shows distant opponent territory name.");
-  await assertUnknownTroopRow(page, "Read-only map shows distant opponent troop icons as unknown.");
+  await assertUnknownTroopRow(page, "Read-only map shows distant opponent troop icons as unknown.", "orc");
   await clickTerritory(page, "nurn");
   assert((await page.locator(".troop-section-info").count()) === 0, "Pressing the selected opponent territory again hides the troop section.");
   await page.getByRole("button", { name: "Change viewer" }).click();
@@ -1427,13 +1428,17 @@ async function runReadOnlyVisibilityChecks(page) {
   assert((await page.locator(".troop-section-info .troop-icon-count").count()) === 4, "Cycling local viewer reveals that player's own distant breakdown.");
 }
 
-async function assertUnknownTroopRow(page, message) {
+async function assertUnknownTroopRow(page, message, expectedHeavyIcon = null) {
   const bubbles = await page.locator(".troop-section-info .troop-count-bubble").evaluateAll((nodes) =>
     nodes.map((node) => (node.textContent ?? "").trim()),
   );
 
   assert(bubbles.length === 4 && bubbles.every((text) => text === "?"), message);
   assert((await page.locator('.troop-section-info .troop-icon-count[data-muted="true"]').count()) === 4, `${message} Unknown troop icons are muted.`);
+  if (expectedHeavyIcon) {
+    const heavyIconSrc = await page.locator(".troop-section-info .troop-icon-count").first().locator("img").getAttribute("src");
+    assert(heavyIconSrc?.includes(`/troops/icons/${expectedHeavyIcon}.png`), `${message} Unknown troop icons use the territory owner's side.`);
+  }
 }
 
 async function dismissQueuedNotifications(page) {
