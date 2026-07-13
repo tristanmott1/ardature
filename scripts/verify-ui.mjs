@@ -940,6 +940,19 @@ async function runLocalDraftChecks(page) {
   assert((await page.locator('.territory-border-ink[stroke-width="10"]').count()) === (await page.locator(".territory-border-ink").count()), "Territory borders use the thin stroke.");
   assert((await page.locator('.region-border-ink[stroke-width="20"]').count()) === (await page.locator(".region-border-ink").count()), "Regional borders use the thick stroke.");
 
+  for (const [territoryId, territoryName] of [
+    ["lorien", "Lórien"],
+    ["sea-of-rhun", "Sea of Rhûn"],
+    ["udun", "Udûn"],
+    ["druwaith-iaur", "Drúwaith Iaur"],
+  ]) {
+    await clickTerritory(page, territoryId);
+    const renderedName = await page.getByRole("dialog", { name: "Confirm territory" }).locator("h2").textContent();
+    assert(renderedName === territoryName, `${territoryName} renders with required special characters in draft confirmation.`);
+    await page.getByRole("dialog", { name: "Confirm territory" }).getByRole("button", { name: "Cancel pick" }).click();
+    await page.getByRole("dialog", { name: "Confirm territory" }).waitFor({ state: "detached" });
+  }
+
   const beforeDefaultSelection = await viewBox(page);
   await clickTerritory(page, "shire");
   const confirmDialog = page.getByRole("dialog", { name: "Confirm territory" });
