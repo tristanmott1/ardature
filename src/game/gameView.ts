@@ -498,6 +498,22 @@ export function applyMapSelectionUpdates(selections: MapSelectionState, updates:
   return next;
 }
 
+export function clearTurnMapSelections(selections: MapSelectionState): MapSelectionState {
+  return applyMapSelectionUpdates(selections, {
+    pendingSpyTerritoryId: null,
+    turnSelectedTerritoryId: null,
+  });
+}
+
+export function clearNonDraftMapSelections(selections: MapSelectionState): MapSelectionState {
+  return applyMapSelectionUpdates(selections, {
+    allocationSelectedTerritoryId: null,
+    gameMapSelectedTerritoryId: null,
+    pendingSpyTerritoryId: null,
+    turnSelectedTerritoryId: null,
+  });
+}
+
 export function mapPressModeForGame({
   activeDraftPlayer,
   allocationBuildSubmitted,

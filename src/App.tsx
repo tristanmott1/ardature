@@ -85,6 +85,8 @@ import { notificationMessage } from "./game/notificationText";
 import {
   activeOverlayForState,
   applyMapSelectionUpdates,
+  clearNonDraftMapSelections as clearNonDraftMapSelectionState,
+  clearTurnMapSelections,
   createTroopMarkers,
   gameStageLayoutForState,
   gameViewContextForState,
@@ -1157,19 +1159,11 @@ function App() {
   }
 
   function clearTurnSelections() {
-    updateMapSelections({
-      pendingSpyTerritoryId: null,
-      turnSelectedTerritoryId: null,
-    });
+    setMapSelections(clearTurnMapSelections);
   }
 
   function clearNonDraftMapSelections() {
-    updateMapSelections({
-      allocationSelectedTerritoryId: null,
-      gameMapSelectedTerritoryId: null,
-      pendingSpyTerritoryId: null,
-      turnSelectedTerritoryId: null,
-    });
+    setMapSelections(clearNonDraftMapSelectionState);
   }
 
   function beginTurnReinforcements() {
