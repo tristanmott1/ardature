@@ -156,6 +156,15 @@ type ActiveOverlay =
   | { type: "notification" }
   | { type: "confirm"; confirm: "draft" | "spy" };
 
+type PlayerBarContext = {
+  activeDraftPlayer: GamePlayer | null;
+  allocationPlayer: GamePlayer | null;
+  currentTurnPlayer: GamePlayer | null;
+  game: GameState;
+  gameMapViewer: GamePlayer | null;
+  pausedReturnPhase: AppPhase | null;
+};
+
 function firstActiveOverlay(...overlays: Array<ActiveOverlay | null>): ActiveOverlay | null {
   for (const overlay of overlays) {
     if (overlay) {
@@ -383,30 +392,15 @@ function App() {
     game.turn?.stage !== "spyTarget" &&
     Boolean(turnMapSelectedTerritory) &&
     showTroopSection;
-  const pausedDraftPlayer = game.phase === "paused" && game.draft && !game.allocation
-    ? activePlayer({ ...game, phase: "draft" })
-    : null;
-  const playerBarPlayer = game.phase === "draft"
-    ? active
-    : game.phase === "allocation" || game.phase === "allocationHandoff"
-      ? allocationPlayer
-    : game.phase === "turn" || game.phase === "turnHandoff"
-      ? currentTurnPlayer
-    : game.phase === "gameMap"
-        ? gameMapViewer
-        : game.phase === "paused" && game.turn
-          ? currentTurnPlayer
-        : game.phase === "paused" && pausedReturnPhase === "gameMap"
-          ? gameMapViewer
-          : game.phase === "paused" && game.allocation
-            ? allocationPlayer
-            : game.phase === "paused"
-              ? pausedDraftPlayer
-              : null;
-  const playerBarIsDraft = game.phase === "draft" || (game.phase === "paused" && Boolean(game.draft) && !game.allocation);
-  const playerBarProgress = playerBarIsDraft && playerBarPlayer
-    ? draftProgressForPlayer(game, playerBarPlayer.id)
-    : null;
+  const playerBarPlayer = playerBarPlayerForGame({
+    activeDraftPlayer: active,
+    allocationPlayer,
+    currentTurnPlayer,
+    game,
+    gameMapViewer,
+    pausedReturnPhase,
+  });
+  const playerBarProgress = playerBarDraftProgress(game, playerBarPlayer);
   const showPlayerBar = isGameStage && Boolean(playerBarPlayer);
   const showGameStageLayout = isGameStage;
   const canUseMapCameraControls = isGameStage && !hideMapCameraControls;
@@ -3645,6 +3639,61 @@ function playerBarTimerRemaining(game: GameState, now: number) {
   }
 
   return game.draft?.timerRemainingMs ?? null;
+}
+
+function playerBarPlayerForGame({
+  activeDraftPlayer,
+  allocationPlayer,
+  currentTurnPlayer,
+  game,
+  gameMapViewer,
+  pausedReturnPhase,
+}: PlayerBarContext) {
+  if (game.phase === "draft") {
+    return activeDraftPlayer;
+  }
+
+  if (game.phase === "allocation" || game.phase === "allocationHandoff") {
+    return allocationPlayer;
+  }
+
+  if (game.phase === "turn" || game.phase === "turnHandoff") {
+    return currentTurnPlayer;
+  }
+
+  if (game.phase === "gameMap") {
+    return gameMapViewer;
+  }
+
+  if (game.phase !== "paused") {
+    return null;
+  }
+
+  if (game.turn) {
+    return currentTurnPlayer;
+  }
+
+  if (pausedReturnPhase === "gameMap") {
+    return gameMapViewer;
+  }
+
+  if (game.allocation) {
+    return allocationPlayer;
+  }
+
+  if (game.draft) {
+    return activePlayer({ ...game, phase: "draft" });
+  }
+
+  return null;
+}
+
+function playerBarDraftProgress(game: GameState, player: GamePlayer | null) {
+  const isDraftBar = game.phase === "draft" || (game.phase === "paused" && Boolean(game.draft) && !game.allocation);
+
+  return isDraftBar && player
+    ? draftProgressForPlayer(game, player.id)
+    : null;
 }
 
 function territoryTroopTotalWithTurnPreview(game: GameState, territoryId: string) {
