@@ -2,16 +2,13 @@ import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo
 import {
   Check,
   GripVertical,
-  Play,
   Plus,
-  RotateCcw,
   ScanLine,
   Shuffle,
   Trash2,
   Unlock,
   Users,
   Wifi,
-  X,
 } from "lucide-react";
 import {
   ALLOCATION_STYLES,
@@ -143,7 +140,9 @@ import { QrPanel, QrScanner } from "./sync/QrCodeUi";
 import { ArmyBuildModal } from "./ui/ArmyBuildModal";
 import { ColorSelect, ConfigSelectSection, PanelHeader, SelectField } from "./ui/FormControls";
 import { ConfirmSheet, DecisionDialog, HandoffPanel, ModalActions, ModalIconButton, NotificationDialog } from "./ui/Overlays";
+import { PausePanel } from "./ui/PausePanel";
 import { PlayerBar, PlayerIdentity } from "./ui/PlayerChrome";
+import { SyncSessionBlocker, type SyncSessionState } from "./ui/SyncSessionBlocker";
 import { CapturedSpyRow, TroopCountRow, TroopPlacementRows, UnknownTroopCountRow } from "./ui/TroopControls";
 import {
   SyncHostTransport,
@@ -154,8 +153,6 @@ import {
   type SyncRecoveryPlayerSlot,
   type SyncWireMessage,
 } from "./sync/syncTransport";
-
-type SyncSessionState = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected" | "hostEnded";
 
 type SyncCameraMode = "hostOffer" | "joinAnswer" | null;
 
@@ -2666,105 +2663,6 @@ function GameMapPanel({
       ) : null}
       {selectedTerritory && troopBreakdown ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
     </section>
-  );
-}
-
-function PausePanel({
-  canRemove,
-  canResume,
-  localPlayerId,
-  mode,
-  onRemovePlayer,
-  onRestart,
-  onResume,
-  onScanRecoveryAnswer,
-  players,
-  syncMessage,
-  syncQrText,
-}: {
-  canRemove: boolean;
-  canResume: boolean;
-  localPlayerId: string | null;
-  mode: "local" | "sync";
-  onRemovePlayer: (playerId: string) => void;
-  onRestart?: () => void;
-  onResume: () => void;
-  onScanRecoveryAnswer?: () => void;
-  players: GamePlayer[];
-  syncMessage?: string;
-  syncQrText?: string;
-}) {
-  const showRecoveryTools = mode === "sync" && Boolean(onScanRecoveryAnswer);
-
-  return (
-    <div className="modal-scrim">
-      <section className="modal-panel pause-modal" role="dialog" aria-label="Paused">
-        <div className="panel-header">
-          <h1>Paused</h1>
-          {onRestart ? (
-            <button className="icon-button" type="button" onClick={onRestart} aria-label="Restart game">
-              <RotateCcw size={18} />
-            </button>
-          ) : null}
-        </div>
-        <div className="player-list paused-list">
-          {players.map((player) => (
-            <article className="player-row compact-row" data-player-status={player.connectionStatus} key={player.id}>
-              <PlayerIdentity color={player.color} name={player.name} />
-              <span className="connection-label pause-row-status" aria-hidden={mode !== "sync"}>
-                {mode === "sync" ? player.connectionStatus : ""}
-              </span>
-              {canRemove && player.id !== localPlayerId ? (
-                <button className="icon-button danger pause-row-action" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
-                  <Trash2 size={16} />
-                </button>
-              ) : (
-                <span className="icon-button-spacer pause-row-action" aria-hidden="true" />
-              )}
-            </article>
-          ))}
-        </div>
-        {showRecoveryTools ? (
-          <div className="pause-recovery-tools">
-            {syncQrText ? <QrPanel text={syncQrText} /> : <div className="qr-placeholder" />}
-            <button className="secondary icon-text-button scan-answer-button" type="button" onClick={onScanRecoveryAnswer}>
-              <ScanLine size={18} />
-              Scan
-            </button>
-            {syncMessage ? <p className="sync-status">{syncMessage}</p> : null}
-          </div>
-        ) : null}
-        <button className="primary icon-text-button wide-button" type="button" onClick={onResume} disabled={!canResume || players.length < 2}>
-          <Play size={20} />
-          Resume
-        </button>
-      </section>
-    </div>
-  );
-}
-
-function SyncSessionBlocker({ onHome, session }: { onHome?: () => void; session: SyncSessionState }) {
-  const message = session === "hostEnded"
-    ? "Host ended the game"
-    : session === "disconnected"
-      ? "Host disconnected"
-      : "Reconnecting...";
-  const Icon = session === "reconnecting" ? X : Check;
-  const label = session === "reconnecting" ? "Stop reconnecting" : "Return home";
-
-  return (
-    <div className="modal-scrim sync-session-scrim">
-      <section className="modal-panel decision-modal sync-session-dialog" role="alertdialog" aria-label="Sync connection">
-        <h2>{message}</h2>
-        {onHome ? (
-          <div className="sync-session-actions">
-            <button className="icon-button primary large" type="button" onClick={onHome} aria-label={label}>
-              <Icon size={24} />
-            </button>
-          </div>
-        ) : null}
-      </section>
-    </div>
   );
 }
 

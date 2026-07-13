@@ -122,7 +122,9 @@ async function runSourceChecks() {
   const verifySource = await readFile(new URL("../scripts/verify-ui.mjs", import.meta.url), "utf8");
   const formControlsSource = await readFile(new URL("../src/ui/FormControls.tsx", import.meta.url), "utf8");
   const overlaysSource = await readFile(new URL("../src/ui/Overlays.tsx", import.meta.url), "utf8");
+  const pausePanelSource = await readFile(new URL("../src/ui/PausePanel.tsx", import.meta.url), "utf8");
   const playerChromeSource = await readFile(new URL("../src/ui/PlayerChrome.tsx", import.meta.url), "utf8");
+  const syncSessionBlockerSource = await readFile(new URL("../src/ui/SyncSessionBlocker.tsx", import.meta.url), "utf8");
   const troopControlsSource = await readFile(new URL("../src/ui/TroopControls.tsx", import.meta.url), "utf8");
   const appArchitectureDocs = await readFile(new URL("../docs/app-architecture.md", import.meta.url), "utf8");
   const setupDraftDocs = await readFile(new URL("../docs/setup-draft-sync-v1.md", import.meta.url), "utf8");
@@ -177,6 +179,8 @@ async function runSourceChecks() {
   assert(gameViewSource.includes("type ActiveOverlay") && gameViewSource.includes('type: "confirm"') && gameViewSource.includes('type: "pause"'), "App uses a single overlay model for game-stage popups.");
   assert(appSource.includes("function renderActiveOverlay()") && appSource.includes("const activeOverlayElement = renderActiveOverlay()"), "App renders active overlays through one switch.");
   assert(overlaysSource.includes("function ModalActions") && overlaysSource.includes("function ModalIconButton") && (overlaysSource.match(/className=\"modal-actions\"/g) ?? []).length === 1 && !appSource.includes("function ModalActions"), "Dialog action rows share one imported modal action primitive.");
+  assert(appSource.includes('from "./ui/PausePanel"') && pausePanelSource.includes("function PausePanel") && !appSource.includes("function PausePanel"), "Pause overlay UI is imported instead of defined inline.");
+  assert(appSource.includes('from "./ui/SyncSessionBlocker"') && syncSessionBlockerSource.includes("function SyncSessionBlocker") && !appSource.includes("function SyncSessionBlocker"), "Sync blocked overlay UI is imported instead of defined inline.");
   assert(appSource.includes("function renderTroopSection()") && appSource.includes("function renderActionSection()") && appSource.includes("{troopSectionElement}") && appSource.includes("{actionSectionElement}"), "App renders game-stage sections through explicit section slots.");
   assert(!troopControlsSource.includes("Select a territory"), "Allocation troop controls do not render a placeholder sliver when no territory is selected.");
   assert(appSource.includes('className="troop-icon-button turn-spy-button"') && appSource.includes("turn-spy-spacer") && !appSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling and keeps a spacer when lost.");
@@ -205,7 +209,7 @@ async function runSourceChecks() {
   assert(!syncMessagesSource.includes('type: "allocationUpdate";\n      allocation: PlayerAllocation;') || !syncMessagesSource.includes("selectedTerritoryId"), "Allocation sync messages do not include selected territory UI state.");
   assert(gameViewSource.includes('const isGameStage = game.phase !== "home" && game.phase !== "setup"') && gameViewSource.includes("showPlayerBar: isGameStage && Boolean(playerBarPlayer)") && gameViewSource.includes("showGameStageLayout: isGameStage"), "Game-stage layout and player bar are not gated by overlay-specific draft state.");
   assert(gameViewSource.includes("type TroopSectionMode") && gameViewSource.includes('type: "allocation"') && gameViewSource.includes('type: "info"') && gameViewSource.includes("type StatusSectionMode") && appSource.includes("function renderStatusSection()") && !appSource.includes("showAllocationTroopSection"), "Overlay policy separates troop-section modes from waiting/status panels.");
-  assert(appSource.includes("RotateCcw") && appSource.includes("restartPausedGame"), "Pause can restart to setup without closing transports.");
+  assert(pausePanelSource.includes("RotateCcw") && appSource.includes("restartPausedGame"), "Pause can restart to setup without closing transports.");
   assert(!appSource.includes('closeLabel="End game"'), "Pause modal does not use a close X to end the game.");
   assert(formControlsSource.includes("closeOnOutsidePress"), "Color dropdowns close on outside press.");
   assert(stylesSource.includes(".sync-entry-panel") && stylesSource.includes("padding-bottom: 112px"), "Sync entry reserves color menu space.");
@@ -233,10 +237,10 @@ async function runSourceChecks() {
   assert(syncTransportSource.includes("ARR:") && syncTransportSource.includes("ARY:"), "Sync transport has distinct compact recovery QR prefixes.");
   assert(syncTransportSource.includes("hostColor: PlayerColor") && syncTransportSource.includes("playerColor: PlayerColor") && syncTransportSource.includes("playerColor: player.color") && appSource.includes("color: answer.hostColor") && appSource.includes("color: joinedPlayer.color"), "Sync QR setup identity always pairs player names with colors before rendering.");
   assert(verifySource.includes("WebRtcHideLocalIpsWithMdns"), "UI verification disables mDNS-only WebRTC candidates for local headless sync handshakes.");
-  assert(appSource.includes("Stop reconnecting") && appSource.includes("<Icon size={24} />"), "Joiner reconnecting UI offers a local stop option.");
+  assert(syncSessionBlockerSource.includes("Stop reconnecting") && syncSessionBlockerSource.includes("<Icon size={24} />"), "Joiner reconnecting UI offers a local stop option.");
   assert(appSource.includes('connectionStatus === "disconnected"') && appSource.includes("createRecoveryOffer(disconnectedSyncPlayers)"), "Host recovery QR slots are filtered from host disconnected state.");
   assert(appSource.includes("hostTransportRef.current = new SyncHostTransport") && appSource.includes("restoredSyncHost"), "Restored sync hosts rebuild transport for recovery QR generation.");
-  assert(appSource.includes('const showRecoveryTools = mode === "sync" && Boolean(onScanRecoveryAnswer)'), "Recovery QR tools render only for the sync host pause modal.");
+  assert(pausePanelSource.includes('const showRecoveryTools = mode === "sync" && Boolean(onScanRecoveryAnswer)'), "Recovery QR tools render only for the sync host pause modal.");
   assert(appSource.includes("createRecoveryAnswer") && appSource.includes("onChooseRecoveryPlayer"), "Joiners choose a disconnected slot before creating a recovery answer.");
   assert(syncTransportSource.includes("color: PlayerColor;") && syncTransportSource.includes("hostColor: PlayerColor;") && syncTransportSource.includes("RECOVERY_PLAYER_COLORS.includes(slot.color as PlayerColor)"), "Recovery slots require validated player colors.");
   assert(!appSource.includes("host color is required for recovery.") && syncTransportSource.includes("RECOVERY_PLAYER_COLORS.includes(payload.hostColor as PlayerColor)") && syncTransportSource.includes("RECOVERY_PLAYER_COLORS.includes(payload.playerColor as PlayerColor)"), "Malformed QR identity colors are rejected by sync payload validation, not patched in UI.");
@@ -288,8 +292,8 @@ async function runSourceChecks() {
   assert(territoryFillSource.includes("mixWithWhite") && territoryFillSource.includes("SELECTED_WHITE_MIX = 0.35"), "Selected territory fill blends the current color with white.");
   assert(!territoryFillSource.includes('state.status === "selected" ? "#ffffff"'), "Selected territory fill is not hard-coded to white.");
   assert(troopMarkerSource.includes("data-troop-marker"), "Troop markers expose territory ids for visibility verification.");
-  assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
-  assert(appSource.includes('className="connection-label pause-row-status"') && appSource.includes("canRemove && player.id !== localPlayerId") && appSource.includes("pause-row-action"), "Pause rows keep local and sync action/status slots aligned.");
+  assert(pausePanelSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
+  assert(pausePanelSource.includes('className="connection-label pause-row-status"') && pausePanelSource.includes("canRemove && player.id !== localPlayerId") && pausePanelSource.includes("pause-row-action"), "Pause rows keep local and sync action/status slots aligned.");
   assert(stylesSource.includes(".player-row.compact-row") && stylesSource.includes('grid-template-areas: "identity status action"') && stylesSource.includes("grid-template-columns: minmax(0, 1fr) 96px 38px") && stylesSource.includes(".player-row.compact-row > .pause-row-action"), "Pause rows use fixed name/status/action columns with the action slot on the far right.");
   assert(gameStateSource.includes("removeNonConnectedSyncLobbyPlayers") && gameStateSource.includes('state.phase === "setup" && connectionStatus !== "connected"') && gameStateSource.includes('player.connectionStatus === "connected"'), "Sync setup lobby removes reconnecting/disconnected players instead of preserving recovery slots.");
   assert(appSource.includes("removeNonConnectedSyncLobbyPlayers({") && setupDraftDocs.includes("Restarting from sync pause returns to setup with only currently connected players"), "Sync restart to setup prunes non-connected players and documents that recovery is active-game only.");
