@@ -4,7 +4,6 @@ import {
   applySyncDraftConfirm,
   adjustReinforcementTroop,
   adjustTerritoryTroop,
-  activePlayer,
   allocationComplete,
   applySyncAllocationUpdate,
   applySyncPlayerConnectionStatus,
@@ -58,7 +57,6 @@ import {
   submitReinforcementBuild,
   updateArmyMarker,
   updateReinforcementMarker,
-  turnPlayer,
 } from "./game/gameState";
 import type {
   AppPhase,
@@ -84,6 +82,7 @@ import {
   activeOverlayForState,
   createTroopMarkers,
   gameStageLayoutForState,
+  gameViewContextForState,
   mapPressModeForGame,
   mapSelectionUpdateForPress,
   notificationPlayerId,
@@ -99,6 +98,7 @@ import {
   type ActiveOverlay,
   type MapSelectionState,
   type MapPressMode,
+  type SyncSessionStatus,
   type SyncRole,
 } from "./game/gameView";
 import { generatedMapData } from "./map/generated/mapData";
@@ -114,7 +114,7 @@ import { ConfirmSheet, DecisionDialog, HandoffPanel, NotificationDialog } from "
 import { PausePanel } from "./ui/PausePanel";
 import { PlayerBar } from "./ui/PlayerChrome";
 import { HomePanel, SetupPanel, SyncEntryPanel } from "./ui/SetupPanels";
-import { SyncSessionBlocker, type SyncSessionState } from "./ui/SyncSessionBlocker";
+import { SyncSessionBlocker } from "./ui/SyncSessionBlocker";
 import {
   SyncHostTransport,
   SyncJoinTransport,
@@ -151,7 +151,7 @@ function App() {
   const [syncName, setSyncName] = useState(() => syncProfileFromPreferences().name);
   const [syncColor, setSyncColor] = useState<PlayerColor | null>(() => syncProfileFromPreferences().color ?? "green");
   const [syncRole, setSyncRole] = useState<SyncRole>(() => restoredSyncHost ? "host" : null);
-  const [syncSession, setSyncSession] = useState<SyncSessionState>(() => restoredSyncHost ? "connected" : "idle");
+  const [syncSession, setSyncSession] = useState<SyncSessionStatus>(() => restoredSyncHost ? "connected" : "idle");
   const [localPlayerId, setLocalPlayerId] = useState<string | null>(() => restoredSyncHost?.localPlayerId ?? null);
   const [syncQrText, setSyncQrText] = useState("");
   const [syncAnswerText, setSyncAnswerText] = useState("");
@@ -173,7 +173,6 @@ function App() {
   const lastSentAllocationRef = useRef("");
   const syncRevisionRef = useRef(restoredSyncHost?.revision ?? 0);
   const lastSnapshotRevisionRef = useRef(0);
-  const active = activePlayer(game);
   const {
     allocationSelectedTerritoryId,
     gameMapSelectedTerritoryId,
@@ -181,31 +180,34 @@ function App() {
     pendingSpyTerritoryId,
     turnSelectedTerritoryId,
   } = mapSelections;
-  const currentTurnPlayer = turnPlayer(game);
   const ownership = game.draft?.ownership ?? createOwnershipMap();
-  const localAllocationPlayerId = game.allocation?.order[game.allocation.currentIndex] ?? null;
-  const allocationPlayerId = game.mode === "local"
-    ? localAllocationPlayerId
-    : localPlayerId;
-  const allocationPlayer = game.players.find((player) => player.id === allocationPlayerId) ?? null;
-  const allocationBuildSubmitted = Boolean(allocationPlayerId && game.allocation?.playerAllocations[allocationPlayerId]?.buildSubmitted);
-  const localAllocationReady = Boolean(allocationPlayerId && game.allocation?.playerAllocations[allocationPlayerId]?.ready);
-  const gameMapViewerId = game.mode === "local"
-    ? localPlayerId ?? game.players[0]?.id ?? null
-    : localPlayerId;
-  const turnViewerId = game.phase === "turn" || game.phase === "turnHandoff" || (game.phase === "paused" && game.turn)
-    ? game.mode === "local"
-      ? game.turn?.currentPlayerId ?? localPlayerId
-      : localPlayerId
-    : gameMapViewerId;
-  const isSyncGame = game.mode === "sync";
-  const isSyncHost = isSyncGame && syncRole === "host";
-  const isSyncJoiner = isSyncGame && syncRole === "joiner";
-  const syncJoinerBlocked = isSyncJoiner && (syncSession === "reconnecting" || syncSession === "disconnected" || syncSession === "hostEnded");
-  const canSendSyncCommand = !isSyncJoiner || syncSession === "connected";
-  const canControlActivePlayer = game.mode === "local" || (isSyncGame && canSendSyncCommand && active?.id === localPlayerId);
-  const canControlTurnPlayer = game.mode === "local" || (isSyncGame && canSendSyncCommand && game.turn?.currentPlayerId === localPlayerId);
-  const turnPlayerId = game.turn?.currentPlayerId ?? null;
+  const {
+    activeDraftPlayer: active,
+    allocationBuildSubmitted,
+    allocationPlayer,
+    allocationPlayerId,
+    canControlActivePlayer,
+    canControlSetup,
+    canControlTurnPlayer,
+    canSendSyncCommand,
+    currentTurnPlayer,
+    disconnectedSyncPlayers,
+    gameMapViewer,
+    gameMapViewerId,
+    isSyncGame,
+    isSyncHost,
+    isSyncJoiner,
+    localAllocationReady,
+    syncJoinerBlocked,
+    turnActionPlayer,
+    turnPlayerId,
+    turnViewerId,
+  } = gameViewContextForState({
+    game,
+    localPlayerId,
+    syncRole,
+    syncSession,
+  });
   const viewerSelectedTerritoryId = selectedTerritoryForMap({
     allocationPlayerId,
     allocationSelectedTerritoryId,
@@ -225,14 +227,6 @@ function App() {
     () => createTroopMarkers(game, allocationPlayerId, gameMapViewerId, turnViewerId),
     [allocationPlayerId, game, gameMapViewerId, turnViewerId],
   );
-  const disconnectedSyncPlayers = game.mode === "sync"
-    ? game.players
-        .flatMap((player) => player.id !== localPlayerId && player.connectionStatus === "disconnected" && player.color
-          ? [{ color: player.color, id: player.id, name: player.name }]
-          : [])
-    : [];
-  const gameMapViewer = game.players.find((player) => player.id === turnViewerId) ?? game.players[0] ?? null;
-  const turnActionPlayer = currentTurnPlayer;
   const turnReinforcement = game.turn?.reinforcement ?? null;
   const turnProjectedReinforcements = turnPlayerId ? projectReinforcementTroops(game, turnPlayerId) : null;
   const turnSelectedTerritory = territoryForId(turnSelectedTerritoryId);
@@ -256,7 +250,6 @@ function App() {
   const reinforcementCapturedSpies = turnSelectedTerritory ? capturedSpiesOnTerritory(game, turnSelectedTerritory.id) : [];
   const viewerPendingTerritory = territoryForId(pendingDraftTerritoryId);
   const timerRemaining = playerBarTimerRemaining(game, now, pausedReturnPhase);
-  const canControlSetup = game.mode === "local" || isSyncHost;
   const mapPressMode = mapPressModeForGame({
     activeDraftPlayer: active,
     allocationBuildSubmitted,

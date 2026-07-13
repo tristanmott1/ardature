@@ -1,8 +1,7 @@
 import { Check, X } from "lucide-react";
+import type { SyncSessionStatus } from "../game/gameView";
 
-export type SyncSessionState = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected" | "hostEnded";
-
-export function SyncSessionBlocker({ onHome, session }: { onHome?: () => void; session: SyncSessionState }) {
+export function SyncSessionBlocker({ onHome, session }: { onHome?: () => void; session: SyncSessionStatus }) {
   const message = session === "hostEnded"
     ? "Host ended the game"
     : session === "disconnected"

@@ -185,7 +185,7 @@ In code, the troop section should stay driven by one explicit section mode. It m
 
 Sync allocation waiting uses the same upper game-stage section slot as troop rows, but it is not a `TroopSection` mode. Ready/waiting columns are visible, troop rows are absent, and the map remains below the section. It is not a popup or modal, so it must not create a separate fifth section or a separate status-section render path.
 
-Pure game-stage projection rules live in `src/game/gameView.ts`. `App.tsx` should use that module for active overlay priority, selected territory priority, map press mode, player-bar identity/progress, notification visibility, sync snapshot redaction, and section layout. The app shell should wire state and events; it should not grow duplicate phase-condition clusters for those rules.
+Pure game-stage projection rules live in `src/game/gameView.ts`. `App.tsx` should use that module for viewer/control context, active overlay priority, selected territory priority, map press mode, player-bar identity/progress, notification visibility, sync snapshot redaction, and section layout. The app shell should wire state and events; it should not grow duplicate phase-condition clusters for those rules.
 
 Game-stage section UI lives in `src/ui/GameSections.tsx`. The public troop surface is one `TroopSection` component with internal modes for initial allocation placement, reinforcement placement, and read-only troop information. Allocation waiting columns and the turn action bar remain separate components, but they are rendered through the same four-section layout slots instead of through additional layout branches. `App.tsx` chooses which section slot to render and passes callbacks/data into these section components; it should not define section panels inline or reach for separate allocation/reinforcement/map-info/status panels.
 
@@ -385,7 +385,7 @@ Sync mode should be copied and adapted from Qwixx rather than literally reused:
 
 The host is always one of the players and owns the canonical `GameState`. Sync connection/session state is separate UI/session state owned by `App`. Joiners send requests and render host snapshots only while connected.
 
-`connected` has a strict meaning: the device is currently connected to the host, receiving recent host heartbeats/snapshots, and rendering host-authoritative state for the same game page/phase the host is on. A device must not be treated as connected merely because it has stale local state or because a WebRTC channel has not yet reported failure.
+`connected` has a strict meaning: the device is currently connected to the host, receiving recent host heartbeats/snapshots, and rendering host-authoritative state for the same game page/phase the host is on. A device must not be treated as connected merely because it has stale local state or because a WebRTC channel has not yet reported failure. The session-status type and session-derived viewer/control rules belong to `src/game/gameView.ts`; UI components such as `SyncSessionBlocker` render that projected state but do not define the session contract themselves.
 
 Heartbeat is the source of connection health:
 

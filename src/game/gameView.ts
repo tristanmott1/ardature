@@ -10,10 +10,13 @@ import {
   territoryTroopTotal,
   territoryTroops,
   troopTotal,
+  turnPlayer,
 } from "./gameState";
 import type { AppPhase, GamePlayer, GameState, TerritoryOwnerMap } from "./gameTypes";
 
 export type SyncRole = "host" | "joiner" | null;
+
+export type SyncSessionStatus = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected" | "hostEnded";
 
 export type ActiveOverlay =
   | { type: "syncBlocked" }
@@ -70,6 +73,29 @@ export type PlayerBarControls = {
   pauseLabel: string;
 };
 
+export type GameViewContext = {
+  activeDraftPlayer: GamePlayer | null;
+  allocationBuildSubmitted: boolean;
+  allocationPlayer: GamePlayer | null;
+  allocationPlayerId: string | null;
+  canControlActivePlayer: boolean;
+  canControlSetup: boolean;
+  canControlTurnPlayer: boolean;
+  canSendSyncCommand: boolean;
+  currentTurnPlayer: GamePlayer | null;
+  disconnectedSyncPlayers: Array<Pick<GamePlayer, "id" | "name"> & { color: NonNullable<GamePlayer["color"]> }>;
+  gameMapViewer: GamePlayer | null;
+  gameMapViewerId: string | null;
+  isSyncGame: boolean;
+  isSyncHost: boolean;
+  isSyncJoiner: boolean;
+  localAllocationReady: boolean;
+  syncJoinerBlocked: boolean;
+  turnActionPlayer: GamePlayer | null;
+  turnPlayerId: string | null;
+  turnViewerId: string | null;
+};
+
 type PlayerBarContext = {
   activeDraftPlayer: GamePlayer | null;
   allocationPlayer: GamePlayer | null;
@@ -116,6 +142,13 @@ type MapPressModeContext = {
   game: GameState;
   localAllocationReady: boolean;
   syncJoinerBlocked: boolean;
+};
+
+type GameViewContextInput = {
+  game: GameState;
+  localPlayerId: string | null;
+  syncRole: SyncRole;
+  syncSession: SyncSessionStatus;
 };
 
 type MapSelectionPressContext = {
@@ -224,6 +257,68 @@ function firstActiveOverlay(...overlays: Array<ActiveOverlay | null>): ActiveOve
   }
 
   return null;
+}
+
+export function gameViewContextForState({
+  game,
+  localPlayerId,
+  syncRole,
+  syncSession,
+}: GameViewContextInput): GameViewContext {
+  const activeDraftPlayer = activePlayer(game);
+  const currentTurnPlayer = turnPlayer(game);
+  const localAllocationPlayerId = game.allocation?.order[game.allocation.currentIndex] ?? null;
+  const allocationPlayerId = game.mode === "local"
+    ? localAllocationPlayerId
+    : localPlayerId;
+  const allocationPlayer = game.players.find((player) => player.id === allocationPlayerId) ?? null;
+  const allocationBuildSubmitted = Boolean(allocationPlayerId && game.allocation?.playerAllocations[allocationPlayerId]?.buildSubmitted);
+  const localAllocationReady = Boolean(allocationPlayerId && game.allocation?.playerAllocations[allocationPlayerId]?.ready);
+  const gameMapViewerId = game.mode === "local"
+    ? localPlayerId ?? game.players[0]?.id ?? null
+    : localPlayerId;
+  const turnViewerId = game.phase === "turn" || game.phase === "turnHandoff" || (game.phase === "paused" && game.turn)
+    ? game.mode === "local"
+      ? game.turn?.currentPlayerId ?? localPlayerId
+      : localPlayerId
+    : gameMapViewerId;
+  const isSyncGame = game.mode === "sync";
+  const isSyncHost = isSyncGame && syncRole === "host";
+  const isSyncJoiner = isSyncGame && syncRole === "joiner";
+  const syncJoinerBlocked = isSyncJoiner && (syncSession === "reconnecting" || syncSession === "disconnected" || syncSession === "hostEnded");
+  const canSendSyncCommand = !isSyncJoiner || syncSession === "connected";
+  const canControlActivePlayer = game.mode === "local" || (isSyncGame && canSendSyncCommand && activeDraftPlayer?.id === localPlayerId);
+  const canControlTurnPlayer = game.mode === "local" || (isSyncGame && canSendSyncCommand && game.turn?.currentPlayerId === localPlayerId);
+  const turnPlayerId = game.turn?.currentPlayerId ?? null;
+  const disconnectedSyncPlayers = game.mode === "sync"
+    ? game.players.flatMap((player) => player.id !== localPlayerId && player.connectionStatus === "disconnected" && player.color
+      ? [{ color: player.color, id: player.id, name: player.name }]
+      : [])
+    : [];
+  const gameMapViewer = game.players.find((player) => player.id === turnViewerId) ?? game.players[0] ?? null;
+
+  return {
+    activeDraftPlayer,
+    allocationBuildSubmitted,
+    allocationPlayer,
+    allocationPlayerId,
+    canControlActivePlayer,
+    canControlSetup: game.mode === "local" || isSyncHost,
+    canControlTurnPlayer,
+    canSendSyncCommand,
+    currentTurnPlayer,
+    disconnectedSyncPlayers,
+    gameMapViewer,
+    gameMapViewerId,
+    isSyncGame,
+    isSyncHost,
+    isSyncJoiner,
+    localAllocationReady,
+    syncJoinerBlocked,
+    turnActionPlayer: currentTurnPlayer,
+    turnPlayerId,
+    turnViewerId,
+  };
 }
 
 export function createTroopMarkers(game: GameState, allocationPlayerId: string | null, gameMapViewerId: string | null, turnViewerId: string | null) {
