@@ -187,6 +187,8 @@ Sync allocation waiting is not a troop-section mode. It is a status panel in the
 
 Pure game-stage projection rules live in `src/game/gameView.ts`. `App.tsx` should use that module for active overlay priority, selected territory priority, map press mode, player-bar identity/progress, notification visibility, sync snapshot redaction, and section layout. The app shell should wire state and events; it should not grow duplicate phase-condition clusters for those rules.
 
+Game-stage section UI lives in `src/ui/GameSections.tsx`: allocation placement, reinforcement placement, allocation waiting columns, read-only troop information, and the turn action bar. `App.tsx` chooses which section slot to render and passes callbacks/data into these section components; it should not define section panels inline.
+
 Troop and spy icon rendering lives in `src/game/troopIcons.tsx`. Screens should reuse `TroopIconCount`, `TroopIconImage`, `troopIconSrc`, `spyIconSrc`, and `troopName` instead of defining their own troop asset paths, labels, or side mappings.
 
 Troop rows and captured-spy rows live in `src/ui/TroopControls.tsx`. Allocation, reinforcement, army build, and map-inspection screens should import `TroopPlacementRows`, `TroopCountRow`, and `CapturedSpyRow` instead of defining local add/remove row markup or captured-spy layouts.

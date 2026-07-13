@@ -21,7 +21,6 @@ import {
   adjustReinforcementTroop,
   adjustTerritoryTroop,
   activePlayer,
-  addTroops,
   allocationComplete,
   applySyncAllocationUpdate,
   applySyncPlayerConnectionStatus,
@@ -33,7 +32,6 @@ import {
   beginDraftTimer,
   beginTurnAfterHandoff,
   canAddReinforcementTroop,
-  canAddTroop,
   canPickTerritory,
   canUseSpy,
   cancelSpySelection,
@@ -66,9 +64,7 @@ import {
   readLocalGame,
   readSyncHostGame,
   reinforcementComplete,
-  remainingReinforcementTroops,
   remainingTerritoryIds,
-  remainingTroops,
   removeNonConnectedSyncLobbyPlayers,
   removePlayerFromDraft,
   saveLocalGame,
@@ -81,7 +77,6 @@ import {
   startSpySelection,
   submitArmyBuild,
   submitReinforcementBuild,
-  territoryTroops,
   updateArmyMarker,
   updateReinforcementMarker,
   turnPlayer,
@@ -97,9 +92,6 @@ import type {
   GameState,
   PickTimeLimit,
   PlayerColor,
-  ReinforcementState,
-  TerritoryOwnerMap,
-  TroopCounts,
   TroopAllocationTimeLimit,
   TroopType,
   TurnCommand,
@@ -126,24 +118,21 @@ import {
   territoryInspectionForViewer,
   visibleNotification,
   type ActiveOverlay,
-  type CapturedSpyView,
   type MapPressMode,
   type SyncRole,
 } from "./game/gameView";
-import { spyIconSrc, TroopIconImage } from "./game/troopIcons";
 import { generatedMapData } from "./map/generated/mapData";
 import { MapView } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
-import type { GeneratedTerritoryData } from "./map/mapTypes";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
 import { QrPanel, QrScanner } from "./sync/QrCodeUi";
 import { ArmyBuildModal } from "./ui/ArmyBuildModal";
 import { ColorSelect, ConfigSelectSection, PanelHeader, SelectField } from "./ui/FormControls";
+import { AllocationPanel, AllocationWaitingPanel, GameMapPanel, ReinforcementPanel, TurnActionPanel } from "./ui/GameSections";
 import { ConfirmSheet, DecisionDialog, HandoffPanel, ModalActions, ModalIconButton, NotificationDialog } from "./ui/Overlays";
 import { PausePanel } from "./ui/PausePanel";
 import { PlayerBar, PlayerIdentity } from "./ui/PlayerChrome";
 import { SyncSessionBlocker, type SyncSessionState } from "./ui/SyncSessionBlocker";
-import { CapturedSpyRow, TroopCountRow, TroopPlacementRows, UnknownTroopCountRow } from "./ui/TroopControls";
 import {
   SyncHostTransport,
   SyncJoinTransport,
@@ -166,13 +155,6 @@ const DRAFT_STYLE_LABELS: Record<DraftStyle, string> = {
 const ALLOCATION_STYLE_LABELS: Record<AllocationStyle, string> = {
   manual: "Manual",
   random: "Random",
-};
-
-const EMPTY_TROOPS: TroopCounts = {
-  heavy: 0,
-  cavalry: 0,
-  elite: 0,
-  leader: 0,
 };
 
 function App() {
@@ -2385,281 +2367,6 @@ function SetupPanel({
           <Check size={20} />
         </button>
       ) : null}
-    </section>
-  );
-}
-
-function AllocationPanel({
-  allocation,
-  canFinish,
-  onAdjustTroop,
-  onFinish,
-  ownership,
-  player,
-  selectedTerritoryId,
-}: {
-  allocation: GameState["allocation"];
-  canFinish: boolean;
-  onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
-  onFinish: () => void;
-  ownership: TerritoryOwnerMap;
-  player: GamePlayer;
-  selectedTerritoryId: string | null;
-}) {
-  const playerAllocation = allocation?.playerAllocations[player.id] ?? null;
-
-  return (
-    <section className="game-section-panel allocation-panel">
-      {playerAllocation?.buildSubmitted && allocation ? (
-        <AllocationControls
-          allocation={allocation}
-          canFinish={canFinish}
-          onAdjustTroop={onAdjustTroop}
-          onFinish={onFinish}
-          ownership={ownership}
-          player={player}
-          selectedTerritoryId={selectedTerritoryId}
-        />
-      ) : null}
-    </section>
-  );
-}
-
-function TurnActionPanel({
-  canSpy,
-  spyMissing,
-  onDismissSpy,
-  onFortify,
-  onReinforce,
-  onSpy,
-  player,
-  stage,
-  spyReturnStage,
-}: {
-  canSpy: boolean;
-  spyMissing: boolean;
-  onDismissSpy: () => void;
-  onFortify: () => void;
-  onReinforce: () => void;
-  onSpy: () => void;
-  player: GamePlayer;
-  stage: NonNullable<GameState["turn"]>["stage"];
-  spyReturnStage: NonNullable<GameState["turn"]>["spyReturnStage"];
-}) {
-  const actionStage = stage === "spyTarget"
-    ? spyReturnStage ?? "reinforcementReady"
-    : stage === "reinforcementBuild" || stage === "reinforcementPlace"
-      ? "reinforcementReady"
-      : stage;
-  const spySelected = stage === "spyTarget";
-  const instruction = spySelected ? "Select a territory" : "Choose an action";
-
-  return (
-    <section className="game-section-panel turn-action-panel">
-      <p className="turn-action-instruction">{instruction}</p>
-      <div className="turn-action-buttons">
-        {spyMissing ? (
-          <span className="turn-spy-button turn-spy-spacer" aria-hidden="true" />
-        ) : (
-          <button className="troop-icon-button turn-spy-button" type="button" onClick={onSpy} disabled={!canSpy} data-selected={spySelected ? "true" : undefined} aria-label="Spy">
-            <TroopIconImage ownerColor={player.color} src={spyIconSrc(player.color)} />
-          </button>
-        )}
-        {stage === "spyIntel" ? (
-          <button className="primary icon-text-button turn-stage-button" type="button" onClick={onDismissSpy}>
-            <Check size={18} />
-            Dismiss
-          </button>
-        ) : actionStage === "reinforcementReady" ? (
-          <button className="primary icon-text-button turn-stage-button" type="button" onClick={onReinforce} disabled={stage === "reinforcementBuild" || stage === "reinforcementPlace"}>
-            Reinforcements
-          </button>
-        ) : (
-          <>
-            <button className="secondary icon-text-button turn-stage-button" type="button" disabled>
-              Attack
-            </button>
-            <button className="primary icon-text-button turn-stage-button" type="button" onClick={onFortify}>
-              Fortify
-            </button>
-          </>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function ReinforcementPanel({
-  allocation,
-  canFinish,
-  capturedSpies,
-  onAdjustTroop,
-  onFinish,
-  player,
-  players,
-  reinforcement,
-  selectedTerritory,
-}: {
-  allocation: GameState["allocation"];
-  canFinish: boolean;
-  capturedSpies: CapturedSpyView[];
-  onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
-  onFinish: () => void;
-  player: GamePlayer;
-  players: GamePlayer[];
-  reinforcement: ReinforcementState;
-  selectedTerritory: GeneratedTerritoryData | null;
-}) {
-  const selectedReinforcementTroops = selectedTerritory ? reinforcement.territories[selectedTerritory.id] ?? EMPTY_TROOPS : null;
-  const selectedTroops = selectedTerritory
-    ? addTroops(territoryTroops(allocation, selectedTerritory.id), selectedReinforcementTroops ?? EMPTY_TROOPS)
-    : null;
-  const remaining = remainingReinforcementTroops(reinforcement);
-  const canAddType = (troopType: TroopType) => selectedTroops !== null && remaining[troopType] > 0;
-  const canRemoveType = (troopType: TroopType) => Boolean(selectedReinforcementTroops && selectedReinforcementTroops[troopType] > 0);
-
-  if (!selectedTerritory || !selectedTroops) {
-    return null;
-  }
-
-  return (
-    <section className="game-section-panel allocation-panel reinforcement-panel">
-      <div className="allocation-controls">
-        <TroopPlacementRows
-          canAddType={canAddType}
-          canRemoveType={canRemoveType}
-          onAdjustTroop={onAdjustTroop}
-          player={player}
-          remaining={remaining}
-          selectedTroops={selectedTroops}
-          territoryName={selectedTerritory.name}
-        />
-        {selectedTerritory && selectedTroops ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
-        <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Finish reinforcements">
-          <Check size={20} />
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function AllocationControls({
-  allocation,
-  canFinish,
-  onAdjustTroop,
-  onFinish,
-  ownership,
-  player,
-  selectedTerritoryId,
-}: {
-  allocation: NonNullable<GameState["allocation"]>;
-  canFinish: boolean;
-  onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
-  onFinish: () => void;
-  ownership: TerritoryOwnerMap;
-  player: GamePlayer;
-  selectedTerritoryId: string | null;
-}) {
-  const selectedTroops = selectedTerritoryId ? territoryTroops(allocation, selectedTerritoryId) : null;
-  const remaining = remainingTroops(allocation, player.id);
-  const selectedTerritory = generatedMapData.territories.find((territory) => territory.id === selectedTerritoryId);
-  const canAddType = (troopType: TroopType) => Boolean(selectedTerritoryId && canAddTroop(allocation, ownership, player.id, selectedTerritoryId, troopType));
-  const canRemoveType = (troopType: TroopType) => Boolean(selectedTroops && selectedTroops[troopType] > 0);
-
-  if (!selectedTerritory || !selectedTroops) {
-    return null;
-  }
-
-  return (
-    <div className="allocation-controls">
-      <TroopPlacementRows
-        canAddType={canAddType}
-        canRemoveType={canRemoveType}
-        onAdjustTroop={onAdjustTroop}
-        player={player}
-        remaining={remaining}
-        selectedTroops={selectedTroops}
-        territoryName={selectedTerritory.name}
-      />
-      <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Ready">
-        <Check size={20} />
-      </button>
-    </div>
-  );
-}
-
-function AllocationWaitingPanel({
-  allocation,
-  canAdvance,
-  onAdvance,
-  players,
-}: {
-  allocation: GameState["allocation"];
-  canAdvance: boolean;
-  onAdvance: () => void;
-  players: GamePlayer[];
-}) {
-  const readyPlayers = players.filter((player) => allocation?.playerAllocations[player.id]?.ready);
-  const waitingPlayers = players.filter((player) => !allocation?.playerAllocations[player.id]?.ready);
-
-  return (
-    <section className="game-section-panel allocation-waiting-panel" role="status">
-      <div className="waiting-panel">
-        <div className="ready-columns">
-          <ReadyColumn title="Ready" players={readyPlayers} />
-          <ReadyColumn title="Waiting" players={waitingPlayers} />
-        </div>
-        {canAdvance ? (
-          <button className="primary icon-text-button wide-button" type="button" onClick={onAdvance} aria-label="Start game">
-            <Check size={20} />
-          </button>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-function ReadyColumn({ players, title }: { players: GamePlayer[]; title: string }) {
-  return (
-    <section className="ready-column" aria-label={title}>
-      <h2>{title}</h2>
-      <div className="ready-player-list">
-        {players.map((player) => (
-          <article className="ready-player-row" key={player.id}>
-            <PlayerIdentity color={player.color} name={player.name} />
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function GameMapPanel({
-  capturedSpies,
-  players,
-  selectedTerritory,
-  troopBreakdown,
-  troopPlayerId,
-  viewerId,
-}: {
-  capturedSpies: CapturedSpyView[];
-  players: GamePlayer[];
-  selectedTerritory: GeneratedTerritoryData | null;
-  troopBreakdown: TroopCounts | null;
-  troopPlayerId?: string | null;
-  viewerId: string | null;
-}) {
-  const troopPlayer = players.find((player) => player.id === (troopPlayerId ?? viewerId)) ?? players[0] ?? null;
-
-  return (
-    <section className="game-section-panel game-map-panel">
-      {selectedTerritory ? <strong className="selected-territory-name">{selectedTerritory.name}</strong> : null}
-      {selectedTerritory && troopPlayer ? (
-        troopBreakdown
-          ? <TroopCountRow counts={troopBreakdown} player={troopPlayer} />
-          : <UnknownTroopCountRow player={troopPlayer} />
-      ) : null}
-      {selectedTerritory && troopBreakdown ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
     </section>
   );
 }
