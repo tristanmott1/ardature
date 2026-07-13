@@ -93,6 +93,7 @@ type GameStageLayoutContext = {
   activeOverlay: ActiveOverlay | null;
   canControlTurnPlayer: boolean;
   canShowAllocationSection: boolean;
+  canShowReinforcementSection: boolean;
   game: GameState;
   gameMapInspection: TerritoryInspection;
   localAllocationReady: boolean;
@@ -236,6 +237,7 @@ export function gameStageLayoutForState({
   activeOverlay,
   canControlTurnPlayer,
   canShowAllocationSection,
+  canShowReinforcementSection,
   game,
   gameMapInspection,
   localAllocationReady,
@@ -251,6 +253,7 @@ export function gameStageLayoutForState({
     : troopSectionModeForGame({
         canControlTurnPlayer,
         canShowAllocationSection,
+        canShowReinforcementSection,
         game,
         gameMapInspection,
         localAllocationReady,
@@ -434,6 +437,7 @@ export function syncSnapshotForViewer(game: GameState, viewerId: string): GameSt
 function troopSectionModeForGame({
   canControlTurnPlayer,
   canShowAllocationSection,
+  canShowReinforcementSection,
   game,
   gameMapInspection,
   localAllocationReady,
@@ -456,7 +460,7 @@ function troopSectionModeForGame({
     return "none";
   }
 
-  if (canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace") {
+  if (canControlTurnPlayer && turnActionPlayer && canShowReinforcementSection) {
     return "reinforcement";
   }
 

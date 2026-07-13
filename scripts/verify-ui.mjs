@@ -94,6 +94,7 @@ async function launchBrowser() {
 async function runSourceChecks() {
   console.log("Checking sources");
   const appSource = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const armyBuildModalSource = await readFile(new URL("../src/ui/ArmyBuildModal.tsx", import.meta.url), "utf8");
   const armyBuildSource = await readFile(new URL("../src/game/armyBuild.ts", import.meta.url), "utf8");
   const gameStateSource = await readFile(new URL("../src/game/gameState.ts", import.meta.url), "utf8");
   const gameTypesSource = await readFile(new URL("../src/game/gameTypes.ts", import.meta.url), "utf8");
@@ -177,7 +178,9 @@ async function runSourceChecks() {
   assert(appSource.includes("function renderActiveOverlay()") && appSource.includes("const activeOverlayElement = renderActiveOverlay()"), "App renders active overlays through one switch.");
   assert(overlaysSource.includes("function ModalActions") && overlaysSource.includes("function ModalIconButton") && (overlaysSource.match(/className=\"modal-actions\"/g) ?? []).length === 1 && !appSource.includes("function ModalActions"), "Dialog action rows share one imported modal action primitive.");
   assert(appSource.includes("function renderTroopSection()") && appSource.includes("function renderActionSection()") && appSource.includes("{troopSectionElement}") && appSource.includes("{actionSectionElement}"), "App renders game-stage sections through explicit section slots.");
+  assert(!troopControlsSource.includes("Select a territory"), "Allocation troop controls do not render a placeholder sliver when no territory is selected.");
   assert(appSource.includes('className="troop-icon-button turn-spy-button"') && appSource.includes("turn-spy-spacer") && !appSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling and keeps a spacer when lost.");
+  assert(appSource.includes("turn-action-instruction") && stylesSource.includes(".turn-action-instruction"), "Turn action bar includes a dedicated instruction row.");
   assert(stylesSource.includes('.turn-spy-button[data-selected="true"]') && stylesSource.includes(".turn-spy-spacer"), "Turn spy selected and missing states have dedicated styling.");
   assert(appSource.includes("syncSnapshotForViewer") && appSource.includes("hostTransportRef.current?.sendToPeer(player.id") && gameViewSource.includes("spyIntel: null") && gameViewSource.includes("reinforcement: null"), "Sync snapshots hide private turn sub-state from passive viewers.");
   assert(gameTypesSource.includes("GameNotification") && gameTypesSource.includes("notifications: Record<string, GameNotification[]>") && gameTypesSource.includes("regionControl: Record<string, string | null>"), "Game state stores authoritative per-player notification queues and region control.");
@@ -285,8 +288,8 @@ async function runSourceChecks() {
   assert(!territoryFillSource.includes('state.status === "selected" ? "#ffffff"'), "Selected territory fill is not hard-coded to white.");
   assert(troopMarkerSource.includes("data-troop-marker"), "Troop markers expose territory ids for visibility verification.");
   assert(appSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
-  assert(appSource.includes('className="connection-label" aria-hidden={mode !== "sync"}') && appSource.includes("canRemove && player.id !== localPlayerId"), "Pause rows keep local and sync action/status slots aligned.");
-  assert(stylesSource.includes(".player-row.compact-row") && stylesSource.includes('grid-template-areas: "identity status action"') && stylesSource.includes("grid-template-columns: minmax(0, 1fr) 96px 38px") && stylesSource.includes("grid-area: action"), "Pause rows use fixed name/status/action columns with the action slot on the far right.");
+  assert(appSource.includes('className="connection-label pause-row-status"') && appSource.includes("canRemove && player.id !== localPlayerId") && appSource.includes("pause-row-action"), "Pause rows keep local and sync action/status slots aligned.");
+  assert(stylesSource.includes(".player-row.compact-row") && stylesSource.includes('grid-template-areas: "identity status action"') && stylesSource.includes("grid-template-columns: minmax(0, 1fr) 96px 38px") && stylesSource.includes(".player-row.compact-row > .pause-row-action"), "Pause rows use fixed name/status/action columns with the action slot on the far right.");
   assert(gameStateSource.includes("removeNonConnectedSyncLobbyPlayers") && gameStateSource.includes('state.phase === "setup" && connectionStatus !== "connected"') && gameStateSource.includes('player.connectionStatus === "connected"'), "Sync setup lobby removes reconnecting/disconnected players instead of preserving recovery slots.");
   assert(appSource.includes("removeNonConnectedSyncLobbyPlayers({") && setupDraftDocs.includes("Restarting from sync pause returns to setup with only currently connected players"), "Sync restart to setup prunes non-connected players and documents that recovery is active-game only.");
   assert(appSource.includes('from "./ui/PlayerChrome"') && playerChromeSource.includes("function PlayerIdentity") && (playerChromeSource.match(/className=\"player-dot\"/g) ?? []).length === 1 && !appSource.includes("function PlayerIdentity"), "Read-only player identity rows share one imported dot/name component.");
@@ -296,10 +299,11 @@ async function runSourceChecks() {
   assert(appSource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
   assert(troopControlsSource.includes("TroopIconCount") && troopIconsSource.includes("troopIconSrc") && troopIconsSource.includes("function TroopIconImage"), "Allocation UI uses troop image icons.");
-  assert(appSource.includes('from "./game/playerColors"') && troopIconsSource.includes('from "./playerColors"') && playerColorsSource.includes("function colorCss") && playerColorsSource.includes("function colorLabel") && playerColorsSource.includes("function isLightColor"), "Player color display helpers are centralized.");
+  assert(troopIconsSource.includes('from "./playerColors"') && formControlsSource.includes('from "../game/playerColors"') && playerColorsSource.includes("function colorCss") && playerColorsSource.includes("function colorLabel") && playerColorsSource.includes("function isLightColor"), "Player color display helpers are centralized.");
   assert(!appSource.includes("function TroopIconCount") && !appSource.includes("const TROOP_ICON_BY_SIDE") && !appSource.includes("function troopIconSrc"), "App imports troop icon primitives instead of defining duplicate troop asset mappings.");
   assert(stylesSource.includes("box-sizing: border-box") && stylesSource.includes("border: var(--icon-ring-width, 4px) solid var(--owner-color") && stylesSource.includes("background: #ffffff") && !stylesSource.includes("padding: 2px;"), "Troop icons use one border-box owner ring with a white interior and no padding gap.");
-  assert(appSource.includes("const iconRingWidth = 4") && appSource.includes("stroke: colorCss(player.color)") && appSource.includes('fill: "#ffffff"'), "Army triangle icons match the shared owner-ring geometry.");
+  assert(appSource.includes('from "./ui/ArmyBuildModal"') && !appSource.includes("function ArmyBuildModal") && !appSource.includes("function ArmyTriangle"), "App imports army build UI instead of defining it inline.");
+  assert(armyBuildModalSource.includes("const iconRingWidth = 4") && armyBuildModalSource.includes("stroke: colorCss(player.color)") && armyBuildModalSource.includes('fill: "#ffffff"'), "Army triangle icons match the shared owner-ring geometry.");
   assert(!appSource.includes("TroopBadge") && !appSource.includes("troopLabel"), "Old letter troop badge components are removed.");
   assert(!stylesSource.includes(".troop-badge") && !stylesSource.includes(".troop-chip") && !stylesSource.includes(".army-builder"), "Old troop badge styles are removed.");
   assert(!appSource.includes("troop-step-grid") && !appSource.includes("troop-stepper"), "Old troop stepper markup is removed.");
@@ -1183,7 +1187,8 @@ async function runRandomAllocationChecks(page) {
   const projectedCounts = (await page.locator(".army-build-modal .troop-count-bubble").evaluateAll((nodes) => nodes.map((node) => (node.textContent ?? "").trim()))).sort((left, right) => Number(left) - Number(right));
   assert(projectedCounts.join(",") === "1,13,13,13", "Two-player center army reserves one leader and spends 39 triangle budget.");
   await page.getByRole("button", { name: "Confirm army" }).click();
-  await page.waitForSelector(".allocation-controls");
+  await page.waitForSelector(".army-build-modal", { state: "detached" });
+  assert((await page.locator(".allocation-controls").count()) === 0, "Allocation troop section is hidden before selecting a territory.");
   const ownedTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="yellow"]').first().getAttribute("data-territory-fill");
   assert(ownedTerritoryId, "Random draft gives the allocating player at least one territory.");
   await clickTerritory(page, ownedTerritoryId);
@@ -1202,6 +1207,10 @@ async function runRandomAllocationChecks(page) {
   const allocationChildClasses = await page.locator(".allocation-controls").evaluate((node) => Array.from(node.children).map((child) => child.className));
   assert(String(allocationChildClasses[0]).includes("troop-action-row") && String(allocationChildClasses[1]).includes("allocation-target") && String(allocationChildClasses[2]).includes("troop-action-row"), "Allocation controls order add row, territory name, remove row.");
   assert((await page.locator(".troop-row-affordance button").count()) === 0, "Row plus and minus icons are not buttons.");
+  await clickTerritory(page, ownedTerritoryId);
+  assert((await page.locator(".allocation-controls").count()) === 0, "Pressing the selected allocation territory again hides the troop section.");
+  await clickTerritory(page, ownedTerritoryId);
+  await page.waitForSelector(".allocation-controls");
   await page.getByRole("button", { name: "Add heavy" }).click();
   assert((await page.locator(".troop-marker").count()) >= 1, "Adding a troop shows a troop marker.");
   await page.getByRole("button", { name: "Remove heavy" }).click();
@@ -1216,7 +1225,7 @@ async function runRandomAllocationChecks(page) {
   await page.getByRole("button", { name: "Begin allocation" }).click();
   await page.waitForSelector(".army-build-modal .army-triangle");
   await page.getByRole("button", { name: "Confirm army" }).click();
-  await page.waitForSelector(".allocation-controls");
+  await page.waitForSelector(".army-build-modal", { state: "detached" });
   await finishAllocationTurn(page, "red");
   await page.waitForSelector('.app-shell[data-app-phase="turnHandoff"]');
   await capture(page, "13-turn-handoff-mobile.png");
@@ -1231,9 +1240,11 @@ async function runRandomAllocationChecks(page) {
   assert(turnMapBox && turnActionBox && turnMapBox.y + turnMapBox.height <= turnActionBox.y + 1, "Turn action bar is a section below the map.");
   assert((await page.getByRole("button", { name: "Spy" }).count()) === 1, "Turn controls include the spy button.");
   assert((await page.getByRole("button", { name: "Reinforcements" }).count()) === 1, "Turn starts at reinforcements.");
+  assert((await page.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Turn action bar starts with an instruction row.");
   const opponentTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="red"]').first().getAttribute("data-territory-fill");
   assert(opponentTerritoryId, "Random draft gives the opponent at least one territory.");
   await page.getByRole("button", { name: "Spy" }).click();
+  assert((await page.locator(".turn-action-instruction").getByText("Select a territory").count()) === 1, "Spy targeting changes the action instruction.");
   await clickTerritory(page, opponentTerritoryId);
   await page.getByRole("dialog", { name: "Confirm spy" }).waitFor();
   await capture(page, "15-spy-confirm-mobile.png");
@@ -1244,9 +1255,11 @@ async function runRandomAllocationChecks(page) {
   await page.getByRole("button", { name: "Reinforcements" }).click();
   await page.waitForSelector(".army-build-modal .army-triangle");
   await capture(page, "16-reinforcement-army-mobile.png");
-  assert((await page.locator(".army-build-modal .troop-icon-count").count()) === 3, "Reinforcement army build omits leader.");
+  assert((await page.locator(".army-build-modal .troop-icon-count").count()) === 4, "Reinforcement army build keeps the leader slot at zero.");
+  assert((await page.locator(".army-build-modal .troop-count-bubble").last().textContent())?.trim() === "0", "Reinforcement leader slot shows zero.");
   await page.getByRole("button", { name: "Confirm army" }).click();
-  await page.waitForSelector(".reinforcement-panel .allocation-controls");
+  await page.waitForSelector(".army-build-modal", { state: "detached" });
+  assert((await page.locator(".reinforcement-panel").count()) === 0, "Reinforcement troop section is hidden before selecting a territory.");
   const reinforcementTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="yellow"]').first().getAttribute("data-territory-fill");
   assert(reinforcementTerritoryId, "Current player still owns a territory for reinforcements.");
   await clickTerritory(page, reinforcementTerritoryId);
@@ -1258,6 +1271,10 @@ async function runRandomAllocationChecks(page) {
   const reinforcementBottomCounts = (await page.locator(".reinforcement-panel .troop-action-row").nth(1).locator(".troop-count-bubble").allTextContents()).map(Number);
   assert(reinforcementBottomCounts.reduce((sum, count) => sum + count, 0) > 0, "Reinforcement remove row shows existing territory troops.");
   assert((await page.locator(".reinforcement-panel .troop-action-row").nth(1).locator(".troop-icon-button:not(:disabled)").count()) === 0, "Existing troops shown during reinforcement cannot be removed.");
+  await clickTerritory(page, reinforcementTerritoryId);
+  assert((await page.locator(".reinforcement-panel").count()) === 0, "Pressing the selected reinforcement territory again hides the troop section.");
+  await clickTerritory(page, reinforcementTerritoryId);
+  await page.waitForSelector(".reinforcement-panel .allocation-target");
   await finishReinforcementPlacement(page);
   await page.waitForSelector(".turn-action-panel");
   await capture(page, "18-turn-actions-mobile.png");
@@ -1326,16 +1343,29 @@ async function runReadOnlyVisibilityChecks(page) {
   assert((await page.locator('[data-troop-marker="nurn"]').count()) === 0, "Read-only map hides distant opponent troop total.");
   await clickTerritory(page, "shire");
   assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Read-only map shows own territory breakdown.");
+  await clickTerritory(page, "shire");
+  assert((await page.locator(".game-map-panel").count()) === 0, "Pressing the selected read-only territory again hides the troop section.");
   await clickTerritory(page, "bree");
   assert((await page.locator(".game-map-panel .selected-territory-name").getByText("Bree").count()) === 1, "Read-only map shows connected opponent territory name.");
-  assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 0, "Read-only map hides connected opponent breakdown.");
+  await assertUnknownTroopRow(page, "Read-only map shows connected opponent troop icons as unknown.");
   await clickTerritory(page, "nurn");
   assert((await page.locator(".game-map-panel .selected-territory-name").getByText("Nurn").count()) === 1, "Read-only map shows distant opponent territory name.");
-  assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 0, "Read-only map hides distant opponent breakdown.");
+  await assertUnknownTroopRow(page, "Read-only map shows distant opponent troop icons as unknown.");
+  await clickTerritory(page, "nurn");
+  assert((await page.locator(".game-map-panel").count()) === 0, "Pressing the selected opponent territory again hides the troop section.");
   await page.getByRole("button", { name: "Change viewer" }).click();
   assert((await page.locator('[data-troop-marker="nurn"]').count()) === 1, "Cycling local viewer shows that player's own distant territory total.");
   await clickTerritory(page, "nurn");
   assert((await page.locator(".game-map-panel .troop-icon-count").count()) === 4, "Cycling local viewer reveals that player's own distant breakdown.");
+}
+
+async function assertUnknownTroopRow(page, message) {
+  const bubbles = await page.locator(".game-map-panel .troop-count-bubble").evaluateAll((nodes) =>
+    nodes.map((node) => (node.textContent ?? "").trim()),
+  );
+
+  assert(bubbles.length === 4 && bubbles.every((text) => text === "?"), message);
+  assert((await page.locator('.game-map-panel .troop-icon-count[data-muted="true"]').count()) === 4, `${message} Unknown troop icons are muted.`);
 }
 
 async function dismissQueuedNotifications(page) {
@@ -1353,12 +1383,17 @@ async function runTurnSpyOutcomeChecks(browser) {
 
   await loadTurnSpyFixture(success, 0.99);
   assert((await success.locator('[data-troop-marker="rivendell"]').count()) === 0, "Spy fixture starts with non-adjacent same-owner total hidden.");
+  assert((await success.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Turn spy fixture starts with the default action instruction.");
   await success.getByRole("button", { name: "Spy" }).click();
+  assert((await success.locator(".turn-action-instruction").getByText("Select a territory").count()) === 1, "Spy targeting updates the action instruction.");
   assert((await success.locator('.turn-spy-button[data-selected="true"]').count()) === 1, "Spy button shows selected state while choosing a spy target.");
   await success.getByRole("button", { name: "Spy" }).click();
+  assert((await success.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Toggling spy off restores the default action instruction.");
   await clickTerritory(success, "shire");
   assert((await success.locator(".game-map-panel .selected-territory-name").getByText("Shire").count()) === 1, "Toggling spy off returns territory taps to normal inspection.");
   assert((await success.locator(".game-map-panel .troop-icon-count").count()) === 4, "Normal inspection still shows own troop breakdown after spy is toggled off.");
+  await clickTerritory(success, "shire");
+  assert((await success.locator(".game-map-panel").count()) === 0, "Pressing the selected turn-inspection territory again hides the troop section.");
   await success.getByRole("button", { name: "Spy" }).click();
   await clickTerritory(success, "bree");
   await success.getByRole("dialog", { name: "Confirm spy" }).getByText("20% captured").waitFor();
@@ -1837,7 +1872,8 @@ async function runSyncReadyPageChecks(browser) {
   await host.getByRole("button", { name: "Start game" }).click();
   await host.waitForSelector(".army-build-modal .army-triangle", { timeout: 15000 });
   await host.getByRole("button", { name: "Confirm army" }).click();
-  await host.waitForSelector(".allocation-controls");
+  await host.waitForSelector(".army-build-modal", { state: "detached" });
+  assert((await host.locator(".allocation-controls").count()) === 0, "Sync allocation troop section is hidden before selecting a territory.");
   await finishAllocationTurn(host, "green");
   await host.waitForSelector(".allocation-waiting-panel .ready-columns");
   await capture(host, "16-sync-ready-page-mobile.png");
@@ -1852,7 +1888,8 @@ async function runSyncReadyPageChecks(browser) {
   await capture(joiner, "17-sync-unready-allocation-mobile.png");
   assert((await joiner.locator(".allocation-waiting-panel").count()) === 0, "Unready sync player does not see ready page.");
   await joiner.getByRole("button", { name: "Confirm army" }).click();
-  await joiner.waitForSelector(".allocation-controls");
+  await joiner.waitForSelector(".army-build-modal", { state: "detached" });
+  assert((await joiner.locator(".allocation-controls").count()) === 0, "Sync joiner allocation troop section is hidden before selecting a territory.");
   await finishAllocationTurn(joiner, "red");
   await host.getByRole("button", { name: "Start game" }).waitFor({ timeout: 15000 });
   await host.getByRole("button", { name: "Start game" }).click();

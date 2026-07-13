@@ -189,6 +189,8 @@ Troop and spy icon rendering lives in `src/game/troopIcons.tsx`. Screens should 
 
 Troop rows and captured-spy rows live in `src/ui/TroopControls.tsx`. Allocation, reinforcement, army build, and map-inspection screens should import `TroopPlacementRows`, `TroopCountRow`, and `CapturedSpyRow` instead of defining local add/remove row markup or captured-spy layouts.
 
+Army build modal UI and triangle marker math live in `src/ui/ArmyBuildModal.tsx`. `App.tsx` passes the current player, marker, projected troop counts, and submit handler into that component; it should not define triangle geometry or marker conversion inline.
+
 QR display and scanning UI lives in `src/sync/QrCodeUi.tsx`. `App.tsx` decides when sync QR flows are active, but QR SVG generation, camera scanning, paste-driven verification, torch support, and QR decode details stay inside that sync UI module.
 
 The `Map` section is always the main visual section. It sits below the troop section when one is visible, otherwise below the player bar. It sits above the action section when one is visible, otherwise above the bottom of the screen. Pan, zoom, return-to-map, and auto-focus controls are available only when the current screen is a map-interaction screen. Any popup, modal, sheet, handoff, pause, scanner, notification, army-build modal, or confirmation dialog hides the map camera buttons and disables manual pan/zoom until dismissed. The sync allocation waiting page is not an overlay, but it is still a waiting screen rather than a map-interaction screen, so it also hides map camera buttons.
@@ -407,7 +409,7 @@ Connected pause and reconnecting are different UI states:
 - Reconnecting is local-only. The device is not connected to host truth and must show only a simple reconnecting modal over inert stale background.
 - Disconnected is terminal on the joiner device. The joiner returns home and no longer shows the old game.
 
-Connected pause and recovery player rows should stay visually aligned in both local and sync mode: the color dot comes first, the player name is left-aligned immediately after it, the sync connection status uses a fixed right-aligned column when present, and the trash/action slot or spacer stays at the far right. Local pause uses the same grid with an empty status slot so the trash icon never shifts compared with sync pause.
+Connected pause and recovery player rows should stay visually aligned in both local and sync mode: the color dot comes first, the player name is left-aligned immediately after it, the sync connection status uses a fixed right-aligned column when present, and the trash/action slot or spacer is always the fixed far-right cell. Local pause uses the same grid with an empty status cell so its trash icon never shifts compared with sync pause.
 
 The host should always maintain enough authoritative state to resume the game after recovery. Sync should send committed game facts promptly, but not noisy transient UI:
 

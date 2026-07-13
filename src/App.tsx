@@ -17,7 +17,6 @@ import {
   ALLOCATION_STYLES,
   PICK_TIME_LIMITS,
   LOCAL_GAME_KEY,
-  MIXTURE_TROOP_TYPES,
   PLAYER_COLORS,
   TROOP_ALLOCATION_TIME_LIMITS,
   TROOP_TYPES,
@@ -32,7 +31,6 @@ import {
   applySyncPlayerQuit,
   applySyncProfileUpdate,
   applySyncTurnCommand,
-  armyCountsForMarker,
   beginAllocationTurn,
   beginAllocationTimer,
   beginDraftTimer,
@@ -117,7 +115,6 @@ import {
   saveSyncProfilePreference,
   syncProfileFromPreferences,
 } from "./game/setupPreferences";
-import { colorCss } from "./game/playerColors";
 import {
   createTroopMarkers,
   firstActiveOverlay,
@@ -136,17 +133,18 @@ import {
   type MapPressMode,
   type SyncRole,
 } from "./game/gameView";
-import { spyIconSrc, troopIconSrc, TroopIconImage } from "./game/troopIcons";
+import { spyIconSrc, TroopIconImage } from "./game/troopIcons";
 import { generatedMapData } from "./map/generated/mapData";
 import { MapView } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import type { GeneratedTerritoryData } from "./map/mapTypes";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
 import { QrPanel, QrScanner } from "./sync/QrCodeUi";
+import { ArmyBuildModal } from "./ui/ArmyBuildModal";
 import { ColorSelect, ConfigSelectSection, PanelHeader, SelectField } from "./ui/FormControls";
 import { ConfirmSheet, DecisionDialog, HandoffPanel, ModalActions, ModalIconButton, NotificationDialog } from "./ui/Overlays";
 import { PlayerBar, PlayerIdentity } from "./ui/PlayerChrome";
-import { CapturedSpyRow, TroopCountRow, TroopPlacementRows } from "./ui/TroopControls";
+import { CapturedSpyRow, TroopCountRow, TroopPlacementRows, UnknownTroopCountRow } from "./ui/TroopControls";
 import {
   SyncHostTransport,
   SyncJoinTransport,
@@ -326,8 +324,10 @@ function App() {
     syncJoinerBlocked,
   });
   const canShowConfirm = Boolean(viewerPendingTerritory && active && canControlActivePlayer);
-  const canShowAllocationSection = game.phase === "allocation" && !localAllocationReady;
-  const needsAllocationArmyBuild = Boolean(canShowAllocationSection && allocationPlayer && !allocationBuildSubmitted);
+  const canUseAllocationPhase = game.phase === "allocation" && !localAllocationReady;
+  const canShowAllocationSection = Boolean(canUseAllocationPhase && allocationBuildSubmitted && allocationSelectedTerritoryId);
+  const canShowReinforcementSection = Boolean(game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementPlace" && turnSelectedTerritory);
+  const needsAllocationArmyBuild = Boolean(canUseAllocationPhase && allocationPlayer && !allocationBuildSubmitted);
   const needsReinforcementArmyBuild = game.phase === "turn" && canControlTurnPlayer && turnActionPlayer && game.turn?.stage === "reinforcementBuild";
   const activeOverlay = firstActiveOverlay(
     syncJoinerBlocked ? { type: "syncBlocked" } : null,
@@ -356,6 +356,7 @@ function App() {
     activeOverlay,
     canControlTurnPlayer,
     canShowAllocationSection,
+    canShowReinforcementSection,
     game,
     gameMapInspection,
     localAllocationReady,
@@ -1302,7 +1303,7 @@ function App() {
     switch (mapPressMode) {
       case "allocation":
         if (allocationPlayerId && ownership[territoryId] === allocationPlayerId) {
-          setAllocationSelectedTerritoryId(territoryId);
+          setAllocationSelectedTerritoryId((current) => current === territoryId ? null : territoryId);
         }
         break;
       case "draft":
@@ -1311,11 +1312,11 @@ function App() {
         }
         break;
       case "inspect":
-        setGameMapSelectedTerritoryId(territoryId);
+        setGameMapSelectedTerritoryId((current) => current === territoryId ? null : territoryId);
         break;
       case "reinforcement":
         if (turnPlayerId && ownership[territoryId] === turnPlayerId) {
-          setTurnSelectedTerritoryId(territoryId);
+          setTurnSelectedTerritoryId((current) => current === territoryId ? null : territoryId);
         }
         break;
       case "spy":
@@ -1808,7 +1809,6 @@ function App() {
               onSubmitBuild={submitCurrentReinforcementBuild}
               player={turnActionPlayer}
               projectedTroops={turnProjectedReinforcements}
-              troopTypes={MIXTURE_TROOP_TYPES}
             />
           );
         }
@@ -2441,35 +2441,39 @@ function TurnActionPanel({
       ? "reinforcementReady"
       : stage;
   const spySelected = stage === "spyTarget";
+  const instruction = spySelected ? "Select a territory" : "Choose an action";
 
   return (
     <section className="game-section-panel turn-action-panel">
-      {spyMissing ? (
-        <span className="turn-spy-button turn-spy-spacer" aria-hidden="true" />
-      ) : (
-        <button className="troop-icon-button turn-spy-button" type="button" onClick={onSpy} disabled={!canSpy} data-selected={spySelected ? "true" : undefined} aria-label="Spy">
-          <TroopIconImage ownerColor={player.color} src={spyIconSrc(player.color)} />
-        </button>
-      )}
-      {stage === "spyIntel" ? (
-        <button className="primary icon-text-button turn-stage-button" type="button" onClick={onDismissSpy}>
-          <Check size={18} />
-          Dismiss
-        </button>
-      ) : actionStage === "reinforcementReady" ? (
-        <button className="primary icon-text-button turn-stage-button" type="button" onClick={onReinforce} disabled={stage === "reinforcementBuild" || stage === "reinforcementPlace"}>
-          Reinforcements
-        </button>
-      ) : (
-        <>
-          <button className="secondary icon-text-button turn-stage-button" type="button" disabled>
-            Attack
+      <p className="turn-action-instruction">{instruction}</p>
+      <div className="turn-action-buttons">
+        {spyMissing ? (
+          <span className="turn-spy-button turn-spy-spacer" aria-hidden="true" />
+        ) : (
+          <button className="troop-icon-button turn-spy-button" type="button" onClick={onSpy} disabled={!canSpy} data-selected={spySelected ? "true" : undefined} aria-label="Spy">
+            <TroopIconImage ownerColor={player.color} src={spyIconSrc(player.color)} />
           </button>
-          <button className="primary icon-text-button turn-stage-button" type="button" onClick={onFortify}>
-            Fortify
+        )}
+        {stage === "spyIntel" ? (
+          <button className="primary icon-text-button turn-stage-button" type="button" onClick={onDismissSpy}>
+            <Check size={18} />
+            Dismiss
           </button>
-        </>
-      )}
+        ) : actionStage === "reinforcementReady" ? (
+          <button className="primary icon-text-button turn-stage-button" type="button" onClick={onReinforce} disabled={stage === "reinforcementBuild" || stage === "reinforcementPlace"}>
+            Reinforcements
+          </button>
+        ) : (
+          <>
+            <button className="secondary icon-text-button turn-stage-button" type="button" disabled>
+              Attack
+            </button>
+            <button className="primary icon-text-button turn-stage-button" type="button" onClick={onFortify}>
+              Fortify
+            </button>
+          </>
+        )}
+      </div>
     </section>
   );
 }
@@ -2503,6 +2507,10 @@ function ReinforcementPanel({
   const canAddType = (troopType: TroopType) => selectedTroops !== null && remaining[troopType] > 0;
   const canRemoveType = (troopType: TroopType) => Boolean(selectedReinforcementTroops && selectedReinforcementTroops[troopType] > 0);
 
+  if (!selectedTerritory || !selectedTroops) {
+    return null;
+  }
+
   return (
     <section className="game-section-panel allocation-panel reinforcement-panel">
       <div className="allocation-controls">
@@ -2513,7 +2521,7 @@ function ReinforcementPanel({
           player={player}
           remaining={remaining}
           selectedTroops={selectedTroops}
-          territoryName={selectedTerritory?.name ?? null}
+          territoryName={selectedTerritory.name}
         />
         {selectedTerritory && selectedTroops ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
         <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Finish reinforcements">
@@ -2547,6 +2555,10 @@ function AllocationControls({
   const canAddType = (troopType: TroopType) => Boolean(selectedTerritoryId && canAddTroop(allocation, ownership, player.id, selectedTerritoryId, troopType));
   const canRemoveType = (troopType: TroopType) => Boolean(selectedTroops && selectedTroops[troopType] > 0);
 
+  if (!selectedTerritory || !selectedTroops) {
+    return null;
+  }
+
   return (
     <div className="allocation-controls">
       <TroopPlacementRows
@@ -2556,109 +2568,12 @@ function AllocationControls({
         player={player}
         remaining={remaining}
         selectedTroops={selectedTroops}
-        territoryName={selectedTerritory?.name ?? null}
+        territoryName={selectedTerritory.name}
       />
       <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Ready">
         <Check size={20} />
       </button>
     </div>
-  );
-}
-
-function ArmyBuildModal({
-  allocation,
-  marker,
-  onArmyMarkerChange,
-  onSubmitBuild,
-  player,
-  projectedTroops,
-  troopTypes = TROOP_TYPES,
-}: {
-  allocation?: GameState["allocation"];
-  marker?: ArmyMarker;
-  onArmyMarkerChange: (marker: ArmyMarker) => void;
-  onSubmitBuild: () => void;
-  player: GamePlayer;
-  projectedTroops?: TroopCounts | null;
-  troopTypes?: TroopType[];
-}) {
-  const playerAllocation = allocation?.playerAllocations[player.id] ?? null;
-  const modalMarker = marker ?? playerAllocation?.marker ?? null;
-  const modalTroops = projectedTroops ?? (playerAllocation ? armyCountsForMarker(playerAllocation.marker, player.color, allocation?.originalPlayerCount ?? 2) : null);
-
-  return (
-    <div className="modal-scrim army-build-scrim">
-      <section className="modal-panel army-build-modal" role="dialog" aria-label="Build army">
-        {modalTroops ? <TroopCountRow counts={modalTroops} player={player} troopTypes={troopTypes} variant="large" /> : null}
-        {modalMarker ? <ArmyTriangle marker={modalMarker} onChange={onArmyMarkerChange} player={player} /> : null}
-        <button className="primary icon-text-button wide-button" type="button" onClick={onSubmitBuild} aria-label="Confirm army">
-          <Check size={20} />
-        </button>
-      </section>
-    </div>
-  );
-}
-
-function ArmyTriangle({ marker, onChange, player }: { marker: ArmyMarker; onChange: (marker: ArmyMarker) => void; player: GamePlayer }) {
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const corners = {
-    heavy: { x: 100, y: 24 },
-    cavalry: { x: 24, y: 158 },
-    elite: { x: 176, y: 158 },
-  };
-  const iconSize = 42;
-  const iconRingWidth = 4;
-  const iconOuterSize = iconSize + iconRingWidth * 2;
-  const markerPoint = markerToTrianglePoint(marker);
-
-  function updateFromPointer(clientX: number, clientY: number) {
-    const svg = svgRef.current;
-    if (!svg) {
-      return;
-    }
-
-    const bounds = svg.getBoundingClientRect();
-    const point = {
-      x: ((clientX - bounds.left) / bounds.width) * 200,
-      y: ((clientY - bounds.top) / bounds.height) * 184,
-    };
-    onChange(pointToMarker(point));
-  }
-
-  return (
-    <svg
-      className="army-triangle"
-      onPointerDown={(event) => {
-        event.currentTarget.setPointerCapture(event.pointerId);
-        updateFromPointer(event.clientX, event.clientY);
-      }}
-      onPointerMove={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          updateFromPointer(event.clientX, event.clientY);
-        }
-      }}
-      ref={svgRef}
-      viewBox="0 0 200 184"
-    >
-      <path d={`M ${corners.heavy.x} ${corners.heavy.y} L ${corners.elite.x} ${corners.elite.y} L ${corners.cavalry.x} ${corners.cavalry.y} Z`} />
-      {(["heavy", "cavalry", "elite"] as const).map((troopType) => (
-        <g className="army-triangle-icon" key={troopType}>
-          <circle cx={corners[troopType].x} cy={corners[troopType].y} r={iconOuterSize / 2 - iconRingWidth / 2} style={{ fill: "#ffffff", stroke: colorCss(player.color), strokeWidth: iconRingWidth }} />
-          <image
-            height={iconSize}
-            href={troopIconSrc(player.color, troopType)}
-            width={iconSize}
-            x={corners[troopType].x - iconSize / 2}
-            y={corners[troopType].y - iconSize / 2}
-          />
-        </g>
-      ))}
-      <g className="army-triangle-marker">
-        <circle className="army-triangle-marker-halo" cx={markerPoint.x} cy={markerPoint.y} r="16" />
-        <circle className="army-triangle-marker-handle" cx={markerPoint.x} cy={markerPoint.y} r="10" />
-        <circle className="army-triangle-marker-dot" cx={markerPoint.x} cy={markerPoint.y} r="3" />
-      </g>
-    </svg>
   );
 }
 
@@ -2728,8 +2643,12 @@ function GameMapPanel({
   return (
     <section className="game-section-panel game-map-panel">
       {selectedTerritory ? <strong className="selected-territory-name">{selectedTerritory.name}</strong> : null}
-      {selectedTerritory && troopBreakdown && troopPlayer ? <TroopCountRow counts={troopBreakdown} player={troopPlayer} /> : null}
-      {selectedTerritory ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
+      {selectedTerritory && troopPlayer ? (
+        troopBreakdown
+          ? <TroopCountRow counts={troopBreakdown} player={troopPlayer} />
+          : <UnknownTroopCountRow player={troopPlayer} />
+      ) : null}
+      {selectedTerritory && troopBreakdown ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
     </section>
   );
 }
@@ -2776,15 +2695,15 @@ function PausePanel({
           {players.map((player) => (
             <article className="player-row compact-row" data-player-status={player.connectionStatus} key={player.id}>
               <PlayerIdentity color={player.color} name={player.name} />
-              <span className="connection-label" aria-hidden={mode !== "sync"}>
+              <span className="connection-label pause-row-status" aria-hidden={mode !== "sync"}>
                 {mode === "sync" ? player.connectionStatus : ""}
               </span>
               {canRemove && player.id !== localPlayerId ? (
-                <button className="icon-button danger" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
+                <button className="icon-button danger pause-row-action" type="button" onClick={() => onRemovePlayer(player.id)} aria-label={`Remove ${player.name}`}>
                   <Trash2 size={16} />
                 </button>
               ) : (
-                <span className="icon-button-spacer" aria-hidden="true" />
+                <span className="icon-button-spacer pause-row-action" aria-hidden="true" />
               )}
             </article>
           ))}
@@ -2831,45 +2750,6 @@ function SyncSessionBlocker({ onHome, session }: { onHome?: () => void; session:
       </section>
     </div>
   );
-}
-
-function markerToTrianglePoint(marker: ArmyMarker) {
-  const corners = {
-    heavy: { x: 100, y: 24 },
-    cavalry: { x: 24, y: 158 },
-    elite: { x: 176, y: 158 },
-  };
-
-  return {
-    x: marker.heavy * corners.heavy.x + marker.cavalry * corners.cavalry.x + marker.elite * corners.elite.x,
-    y: marker.heavy * corners.heavy.y + marker.cavalry * corners.cavalry.y + marker.elite * corners.elite.y,
-  };
-}
-
-function pointToMarker(point: { x: number; y: number }): ArmyMarker {
-  const a = { x: 100, y: 24 };
-  const b = { x: 24, y: 158 };
-  const c = { x: 176, y: 158 };
-  const denominator = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
-  const heavy = ((b.y - c.y) * (point.x - c.x) + (c.x - b.x) * (point.y - c.y)) / denominator;
-  const cavalry = ((c.y - a.y) * (point.x - c.x) + (a.x - c.x) * (point.y - c.y)) / denominator;
-  const elite = 1 - heavy - cavalry;
-  const clamped = {
-    heavy: Math.max(0, heavy),
-    cavalry: Math.max(0, cavalry),
-    elite: Math.max(0, elite),
-  };
-  const total = clamped.heavy + clamped.cavalry + clamped.elite;
-
-  if (total <= 0) {
-    return { heavy: 1 / 3, cavalry: 1 / 3, elite: 1 / 3 };
-  }
-
-  return {
-    heavy: clamped.heavy / total,
-    cavalry: clamped.cavalry / total,
-    elite: clamped.elite / total,
-  };
 }
 
 const REGION_NAMES: Record<string, string> = {

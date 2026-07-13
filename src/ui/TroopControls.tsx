@@ -18,19 +18,11 @@ export function TroopPlacementRows({
   onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
   player: GamePlayer;
   remaining: TroopCounts;
-  selectedTroops: TroopCounts | null;
-  territoryName: string | null;
+  selectedTroops: TroopCounts;
+  territoryName: string;
 }) {
   const canAddAny = TROOP_TYPES.some(canAddType);
   const canRemoveAny = TROOP_TYPES.some(canRemoveType);
-
-  if (!territoryName || !selectedTroops) {
-    return (
-      <div className="allocation-target">
-        <strong>Select a territory</strong>
-      </div>
-    );
-  }
 
   return (
     <>
@@ -112,6 +104,16 @@ export function TroopCountRow({ counts, player, troopTypes = TROOP_TYPES, varian
     <div className={`troop-count-row ${variant}`}>
       {troopTypes.map((troopType) => (
         <TroopIconCount count={counts[troopType]} key={troopType} player={player} troopType={troopType} />
+      ))}
+    </div>
+  );
+}
+
+export function UnknownTroopCountRow({ player, troopTypes = TROOP_TYPES }: { player: GamePlayer; troopTypes?: TroopType[] }) {
+  return (
+    <div className="troop-count-row compact">
+      {troopTypes.map((troopType) => (
+        <TroopIconCount count="?" disabled key={troopType} label={`${troopName(player.color, troopType)}: unknown`} player={player} troopType={troopType} />
       ))}
     </div>
   );

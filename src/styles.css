@@ -305,9 +305,7 @@ button:focus-visible,
 
 .turn-action-panel {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
+  gap: 8px;
   padding:
     10px
     max(12px, env(safe-area-inset-right))
@@ -318,8 +316,24 @@ button:focus-visible,
   box-shadow: 0 -3px 14px rgba(24, 24, 27, 0.08);
 }
 
-.turn-action-panel .turn-stage-button:only-child,
-.turn-action-panel .turn-stage-button:nth-child(2):last-child {
+.turn-action-instruction {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.turn-action-buttons {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.turn-action-buttons .turn-stage-button:only-child,
+.turn-action-buttons .turn-stage-button:nth-child(2):last-child {
   grid-column: 2 / 4;
 }
 
@@ -533,15 +547,14 @@ select {
   text-align: left;
 }
 
-.player-row.compact-row > .connection-label {
+.player-row.compact-row > .pause-row-status {
   grid-area: status;
   justify-self: end;
   width: 100%;
   text-align: right;
 }
 
-.player-row.compact-row > .icon-button,
-.player-row.compact-row > .icon-button-spacer {
+.player-row.compact-row > .pause-row-action {
   grid-area: action;
   justify-self: end;
 }
@@ -794,6 +807,11 @@ select {
   opacity: 0.72;
 }
 
+.troop-icon-count[data-muted="true"] {
+  opacity: 0.48;
+  filter: grayscale(0.7);
+}
+
 .troop-icon-frame {
   position: relative;
   display: block;
@@ -848,6 +866,11 @@ select {
   font-weight: 900;
   line-height: 1;
   box-shadow: 0 1px 4px rgba(17, 17, 17, 0.18);
+}
+
+.troop-icon-count[data-muted="true"] .troop-count-bubble {
+  color: #505050;
+  background: rgba(255, 255, 255, 0.88);
 }
 
 .allocation-target {

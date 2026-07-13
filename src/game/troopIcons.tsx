@@ -18,20 +18,23 @@ export function troopName(color: PlayerColor | null, troopType: TroopType) {
 export function TroopIconCount({
   className,
   count,
+  disabled = false,
   label,
   player,
   troopType,
 }: {
   className?: string;
   count: number | string;
+  disabled?: boolean;
   label?: string;
   player: Pick<GamePlayer, "color">;
   troopType: TroopType;
 }) {
   const name = troopName(player.color, troopType);
+  const muted = disabled || count === 0 || count === "?";
 
   return (
-    <span className={`troop-icon-count${className ? ` ${className}` : ""}`} aria-label={label ?? `${name}: ${count}`}>
+    <span className={`troop-icon-count${className ? ` ${className}` : ""}`} data-muted={muted ? "true" : undefined} aria-label={label ?? `${name}: ${count}`}>
       <TroopIconImage ownerColor={player.color} src={troopIconSrc(player.color, troopType)} />
       <span className="troop-count-bubble">{count}</span>
     </span>
