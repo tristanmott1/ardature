@@ -294,7 +294,7 @@ Local mode uses the same draft engine as sync mode, but without network messages
 
 ## Map Behavior
 
-The app should be a map-first shell. During game stages, the player bar sits at the top, the optional troop section sits below it, the map fills the middle, and the optional action section sits at the bottom. Draft confirmation, pause, scanner, handoff, notifications, and decision confirmations do not remove or cover the player bar after draft has started. Overlay states may hide troop/action sections and cover the map.
+The app should be a map-first shell. During every stage, the map remains a full-screen layer. During game stages, the player bar sits at the top, the optional troop section sits below it, and the optional action section sits at the bottom as persistent UI over that map. These sections define the visible aperture for explicit focus/return actions, but showing or hiding them does not resize the SVG or mutate the current camera. Draft confirmation, pause, scanner, handoff, notifications, and decision confirmations do not remove or cover the player bar after draft has started. Overlay states may hide troop/action sections and cover the map.
 
 Reusable map modes for this milestone:
 

@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, RefObject } from "react";
 import { Pause, X } from "lucide-react";
 import type { GamePlayer, PlayerColor } from "../game/gameTypes";
 import { colorCss, isLightColor } from "../game/playerColors";
@@ -19,6 +19,7 @@ export function PlayerBar({
   onTitlePress,
   pauseLabel,
   player,
+  rootRef,
   timerRemaining,
   title,
 }: {
@@ -28,13 +29,14 @@ export function PlayerBar({
   onTitlePress?: () => void;
   pauseLabel?: string;
   player: GamePlayer | null;
+  rootRef?: RefObject<HTMLDivElement | null>;
   timerRemaining?: number | null;
   title: string;
 }) {
   const light = isLightColor(player?.color ?? null);
 
   return (
-    <div className="player-bar" data-tone={light ? "light" : "dark"} style={{ "--bar-color": colorCss(player?.color ?? null) } as CSSProperties}>
+    <div className="player-bar" data-tone={light ? "light" : "dark"} ref={rootRef} style={{ "--bar-color": colorCss(player?.color ?? null) } as CSSProperties}>
       <button className="icon-button player-bar-button" type="button" onClick={onExit} aria-label="End game">
         <X size={18} />
       </button>

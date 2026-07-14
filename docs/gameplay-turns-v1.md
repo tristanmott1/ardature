@@ -61,7 +61,7 @@ When the current viewer is not in the middle of an action, map inspection uses t
 - Captured spies are shown only when exact counts are visible.
 - Passive sync devices use this same default inspection mode during opponent turns.
 
-A compact turn action section sits below the map. It is not an overlay, so it pushes the map upward. Once the turn loop has started and a player is actively on turn, this section is normally present for the active local viewer. It hides while a modal, popup, bottom sheet, pause, scanner, handoff, notification, or decision confirmation takes over the interaction.
+A compact turn action section sits at the bottom of the screen over the full-screen map. It is persistent turn UI, not a modal overlay, so it changes the visible map aperture used by focus/return actions but does not resize the SVG or mutate the current camera. Once the turn loop has started and a player is actively on turn, this section is normally present for the active local viewer. It hides while a modal, popup, bottom sheet, pause, scanner, handoff, notification, or decision confirmation takes over the interaction.
 
 The action section has a single-line instruction row above the buttons:
 

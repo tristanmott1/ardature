@@ -356,7 +356,9 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("Maximize") && mapViewSource.includes("Return to map view"), "Map view uses a corner-only return-to-map control.");
   assert(mapViewSource.includes("Crosshair") && mapViewSource.includes("Disable automatic focus") && mapViewSource.includes("Enable automatic focus"), "Map view exposes an auto-focus toggle.");
   assert(mapViewSource.includes("{showCameraControls ? (") && !mapViewSource.includes("showCameraControls && !isAnimating") && mapViewSource.includes("aria-disabled={isAnimating}"), "Map camera controls stay mounted during camera animations.");
-  assert(mapViewSource.includes("ResizeObserver") && mapViewSource.includes("preserveViewportForResize") && mapViewSource.includes("resizeAnchor"), "Map view preserves camera continuity across layout resizes.");
+  assert(!mapViewSource.includes("ResizeObserver") && !mapViewSource.includes("flushSync") && !mapViewSource.includes("preservedResizeViewport") && !mapViewSource.includes("resizeAnchor") && !mapViewSource.includes("preserveAspectRatio={"), "Map view does not mutate camera state to correct persistent section changes.");
+  assert(appSource.includes("useMapVisibleInsets") && appSource.includes("visibleInsets={visibleInsets}") && mapViewSource.includes("visibleInsets?: MapVisibleInsets") && mapViewSource.includes("viewportForApertureTarget"), "Map focus and return-to-map use a measured visible aperture.");
+  assert(stylesSource.includes(".game-action-slot") && stylesSource.includes("position: fixed") && !stylesSource.includes(".game-layout .map-shell"), "Game-stage sections overlay the full-screen map instead of resizing it.");
   assert(mapPreferencesSource.includes("ardature.mapPreferences.v1") && mapPreferencesSource.includes("autoFocusEnabled: false"), "Map preferences persist auto-focus with a default-off state.");
   assert(territoryFillSource.includes("mixWithWhite") && territoryFillSource.includes("SELECTED_WHITE_MIX = 0.35"), "Selected territory fill blends the current color with white.");
   assert(!territoryFillSource.includes('state.status === "selected" ? "#ffffff"'), "Selected territory fill is not hard-coded to white.");
@@ -505,6 +507,71 @@ function homeViewportFromSize(size) {
   };
 }
 
+async function apertureViewBoxForTarget(page, target) {
+  return page.evaluate((targetViewport) => {
+    const svg = document.querySelector(".map-svg");
+    const background = document.querySelector("[data-background-piece]");
+
+    if (!(svg instanceof SVGSVGElement) || !(background instanceof SVGElement)) {
+      throw new Error("Missing map SVG or background.");
+    }
+
+    const svgRect = svg.getBoundingClientRect();
+    const playerBar = document.querySelector(".player-bar")?.getBoundingClientRect() ?? null;
+    const upperSection = document.querySelector(".game-upper-slot")?.getBoundingClientRect() ?? null;
+    const actionSection = document.querySelector(".game-action-slot")?.getBoundingClientRect() ?? null;
+    const top = upperSection?.bottom ?? playerBar?.bottom ?? 0;
+    const bottom = actionSection ? window.innerHeight - actionSection.top : 0;
+    const aperture = {
+      height: svgRect.height - top - bottom,
+      left: 0,
+      svgHeight: svgRect.height,
+      svgWidth: svgRect.width,
+      top,
+      width: svgRect.width,
+    };
+    const mapWidth = Number(background.getAttribute("width"));
+    const mapHeight = Number(background.getAttribute("height"));
+    const aspect = aperture.width / aperture.height;
+    const targetAspect = targetViewport.width / targetViewport.height;
+    const targetCenterX = targetViewport.x + targetViewport.width / 2;
+    const targetCenterY = targetViewport.y + targetViewport.height / 2;
+    const fitted = aspect > targetAspect
+      ? {
+        x: targetCenterX - (targetViewport.height * aspect) / 2,
+        y: targetViewport.y,
+        width: targetViewport.height * aspect,
+        height: targetViewport.height,
+      }
+      : {
+        x: targetViewport.x,
+        y: targetCenterY - (targetViewport.width / aspect) / 2,
+        width: targetViewport.width,
+        height: targetViewport.width / aspect,
+      };
+    const scale = aperture.width / fitted.width;
+    const requested = {
+      x: fitted.x - aperture.left / scale,
+      y: fitted.y - aperture.top / scale,
+      width: aperture.svgWidth / scale,
+      height: aperture.svgHeight / scale,
+    };
+    const minimumScale = Math.max(400 / requested.width, 400 / requested.height, 1);
+    const width = Math.max(Math.min(requested.width * minimumScale, mapWidth), Math.min(400, mapWidth));
+    const height = Math.max(Math.min(requested.height * minimumScale, mapHeight), Math.min(400, mapHeight));
+    const centerX = requested.x + requested.width / 2;
+    const centerY = requested.y + requested.height / 2;
+    const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
+
+    return {
+      x: clamp(centerX - width / 2, 0, Math.max(0, mapWidth - width)),
+      y: clamp(centerY - height / 2, 0, Math.max(0, mapHeight - height)),
+      width,
+      height,
+    };
+  }, target);
+}
+
 function assertViewBoxEquals(value, expected, message) {
   const viewport = parseViewBox(value);
   const epsilon = 0.001;
@@ -513,6 +580,15 @@ function assertViewBoxEquals(value, expected, message) {
   assert(Math.abs(viewport.y - expected.y) <= epsilon, message);
   assert(Math.abs(viewport.width - expected.width) <= epsilon, message);
   assert(Math.abs(viewport.height - expected.height) <= epsilon, message);
+}
+
+async function assertMapShellFullScreen(page, message) {
+  const box = await page.locator(".map-shell").boundingBox();
+  const viewport = page.viewportSize();
+
+  assert(box && viewport, message);
+  assert(Math.abs(box.x) < 1 && Math.abs(box.y) < 1, message);
+  assert(Math.abs(box.width - viewport.width) < 1 && Math.abs(box.height - viewport.height) < 1, message);
 }
 
 async function waitForViewBox(page, expected) {
@@ -554,49 +630,6 @@ async function mapPointToScreen(page, point) {
       y: screenPoint.y,
     };
   }, point);
-}
-
-async function mapCameraSnapshot(page) {
-  const rect = await page.locator(".map-svg").boundingBox();
-
-  if (!rect) {
-    throw new Error("Missing map SVG bounds.");
-  }
-
-  return {
-    rect,
-    viewport: parseViewBox(await viewBox(page)),
-  };
-}
-
-function resizeAnchor(previousRect, nextRect) {
-  const left = Math.max(previousRect.x, nextRect.x);
-  const right = Math.min(previousRect.x + previousRect.width, nextRect.x + nextRect.width);
-  const top = Math.max(previousRect.y, nextRect.y);
-  const bottom = Math.min(previousRect.y + previousRect.height, nextRect.y + nextRect.height);
-
-  if (right > left && bottom > top) {
-    return {
-      x: left + (right - left) / 2,
-      y: top + (bottom - top) / 2,
-    };
-  }
-
-  return {
-    x: nextRect.x + nextRect.width / 2,
-    y: nextRect.y + nextRect.height / 2,
-  };
-}
-
-function mapPointAtScreen(snapshot, point) {
-  return {
-    x: snapshot.viewport.x + ((point.x - snapshot.rect.x) / snapshot.rect.width) * snapshot.viewport.width,
-    y: snapshot.viewport.y + ((point.y - snapshot.rect.y) / snapshot.rect.height) * snapshot.viewport.height,
-  };
-}
-
-function mapPointDistance(left, right) {
-  return Math.hypot(left.x - right.x, left.y - right.y);
 }
 
 function touchPoint(point, id) {
@@ -970,7 +1003,8 @@ async function runLocalDraftChecks(page) {
   assert((await page.locator("[data-territory-hit]").count()) === 42, "Draft renders 42 hit targets.");
   const controlsBox = await page.locator(".player-bar").boundingBox();
   const mapBox = await page.locator(".map-shell").boundingBox();
-  assert(controlsBox && mapBox && mapBox.y >= controlsBox.y + controlsBox.height - 1, "Draft player bar sits above the map.");
+  await assertMapShellFullScreen(page, "Draft map stays full-screen under the player bar.");
+  assert(controlsBox && mapBox && controlsBox.y >= mapBox.y && controlsBox.y + controlsBox.height <= mapBox.y + mapBox.height, "Draft player bar overlays the full-screen map.");
   assert((await page.locator(".player-bar").count()) === 1, "Draft uses the shared player bar.");
   assert((await page.locator(".player-bar .player-dot").count()) === 0, "Player bar does not use player dots.");
   const playerBarBox = await page.locator(".player-bar").boundingBox();
@@ -1085,7 +1119,7 @@ async function runLocalDraftChecks(page) {
   await page.getByRole("button", { name: "Resume" }).click();
   await page.getByText("1 / 21").waitFor();
   await page.getByRole("button", { name: "Return to map view" }).click();
-  await waitForViewBox(page, homeViewport);
+  await waitForViewBox(page, await apertureViewBoxForTarget(page, homeViewport));
 
   const box = await page.locator(".map-svg").boundingBox();
   assert(box, "Map SVG has a bounding box.");
@@ -1102,6 +1136,7 @@ async function runLocalDraftChecks(page) {
   assert(zoomedOutViewport.width > homeViewport.width, "Manual wheel zoom can zoom out past the home viewport.");
   assertViewBoxInside(await viewBox(page), size, "Wheel zoom keeps the viewBox inside the framed map.");
   await page.getByRole("button", { name: "Return to map view" }).click();
+  const expectedHomeAperture = await apertureViewBoxForTarget(page, homeViewport);
   await page.waitForFunction(
     (expected) => {
       const value = document.querySelector(".map-svg")?.getAttribute("viewBox");
@@ -1115,7 +1150,7 @@ async function runLocalDraftChecks(page) {
         Math.abs(parts[2] - expected.width) < 0.001 &&
         Math.abs(parts[3] - expected.height) < 0.001;
     },
-    homeViewport,
+    expectedHomeAperture,
   );
 }
 
@@ -1275,9 +1310,10 @@ async function runMobileMapInteractionChecks(page) {
   await page.waitForFunction(() => document.querySelector(".map-svg")?.getAttribute("data-map-animating") === "false");
   const size = await mapSize(page);
   const homeViewport = homeViewportFromSize(size);
-  await waitForViewBox(page, homeViewport);
+  const expectedHomeAperture = await apertureViewBoxForTarget(page, homeViewport);
+  await waitForViewBox(page, expectedHomeAperture);
   await page.waitForTimeout(140);
-  assertViewBoxEquals(await viewBox(page), homeViewport, "Return-to-map cancels touch momentum.");
+  assertViewBoxEquals(await viewBox(page), expectedHomeAperture, "Return-to-map cancels touch momentum.");
 
   // A fast edge swipe remains constrained and settles without bouncing.
   await touchDrag(client, center, { x: center.x + 170, y: center.y, id: 9 });
@@ -1300,7 +1336,7 @@ async function runMobileMapInteractionChecks(page) {
     return Boolean(button);
   });
   assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Auto-focus press is inert during camera animation.");
-  await waitForViewBox(page, homeViewport);
+  await waitForViewBox(page, expectedHomeAperture);
 
   // Confirm sheets freeze map selection until the sheet is dismissed.
   await page.getByRole("button", { name: "Enable automatic focus" }).click();
@@ -1391,7 +1427,8 @@ async function runRandomAllocationChecks(page) {
   await capture(page, "14-turn-ready-mobile.png");
   const turnMapBox = await page.locator(".map-shell").boundingBox();
   const turnActionBox = await page.locator(".turn-action-panel").boundingBox();
-  assert(turnMapBox && turnActionBox && turnMapBox.y + turnMapBox.height <= turnActionBox.y + 1, "Turn action bar is a section below the map.");
+  await assertMapShellFullScreen(page, "Turn map stays full-screen under the action section.");
+  assert(turnMapBox && turnActionBox && turnActionBox.y < turnMapBox.y + turnMapBox.height, "Turn action bar overlays the full-screen map.");
   assert((await page.getByRole("button", { name: "Spy" }).count()) === 1, "Turn controls include the spy button.");
   assert((await page.getByRole("button", { name: "Reinforcements" }).count()) === 1, "Turn starts at reinforcements.");
   assert((await page.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Turn action bar starts with an instruction row.");
@@ -1421,14 +1458,18 @@ async function runRandomAllocationChecks(page) {
   await page.waitForSelector(".army-build-modal", { state: "detached" });
   assert((await page.locator(".troop-section-reinforcement").count()) === 0, "Reinforcement troop section is hidden before selecting a territory.");
   assert((await page.locator(".turn-action-instruction").getByText("Select a territory").count()) === 1, "Reinforcement placement asks for a territory before selection.");
-  const beforeShrinkCamera = await mapCameraSnapshot(page);
+  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Map camera controls are available before reinforcement territory selection.");
+  await assertMapShellFullScreen(page, "Map shell is full-screen before selecting reinforcement territory.");
+  const beforeShrinkViewBox = await viewBox(page);
   const reinforcementTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="yellow"]').first().getAttribute("data-territory-fill");
   assert(reinforcementTerritoryId, "Current player still owns a territory for reinforcements.");
   await clickTerritory(page, reinforcementTerritoryId);
   await page.waitForSelector(".troop-section-reinforcement .allocation-target");
-  const afterShrinkCamera = await mapCameraSnapshot(page);
-  const shrinkAnchor = resizeAnchor(beforeShrinkCamera.rect, afterShrinkCamera.rect);
-  assert(mapPointDistance(mapPointAtScreen(beforeShrinkCamera, shrinkAnchor), mapPointAtScreen(afterShrinkCamera, shrinkAnchor)) < 140, "Showing the troop section preserves the overlap map anchor.");
+  await assertMapShellFullScreen(page, "Map shell stays full-screen when troop section appears.");
+  const afterShrinkViewBox = await viewBox(page);
+  assert(afterShrinkViewBox === beforeShrinkViewBox, "Showing the troop section does not change the current map viewBox.");
+  await page.waitForTimeout(40);
+  assert((await viewBox(page)) === afterShrinkViewBox, "Showing the troop section does not apply a delayed camera correction.");
   const reinforcementTerritoryName = (await page.locator(".troop-section-reinforcement .allocation-target").textContent())?.trim();
   assert(reinforcementTerritoryName, "Selected reinforcement territory shows its name.");
   assert((await page.locator(".turn-action-instruction").getByText(`Add troops to ${reinforcementTerritoryName}`).count()) === 1, "Reinforcement placement instruction names the selected territory.");
@@ -1439,12 +1480,14 @@ async function runRandomAllocationChecks(page) {
   const reinforcementBottomCounts = (await page.locator(".troop-section-reinforcement .troop-action-row").nth(1).locator(".troop-count-bubble").allTextContents()).map(Number);
   assert(reinforcementBottomCounts.reduce((sum, count) => sum + count, 0) > 0, "Reinforcement remove row shows existing territory troops.");
   assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(1).locator(".troop-icon-button:not(:disabled)").count()) === 0, "Existing troops shown during reinforcement cannot be removed.");
-  const beforeExpandCamera = await mapCameraSnapshot(page);
+  const beforeExpandViewBox = await viewBox(page);
   await clickTerritory(page, reinforcementTerritoryId);
   assert((await page.locator(".troop-section-reinforcement").count()) === 0, "Pressing the selected reinforcement territory again hides the troop section.");
-  const afterExpandCamera = await mapCameraSnapshot(page);
-  const expandAnchor = resizeAnchor(beforeExpandCamera.rect, afterExpandCamera.rect);
-  assert(mapPointDistance(mapPointAtScreen(beforeExpandCamera, expandAnchor), mapPointAtScreen(afterExpandCamera, expandAnchor)) < 140, "Hiding the troop section preserves the overlap map anchor.");
+  await assertMapShellFullScreen(page, "Map shell stays full-screen when troop section hides.");
+  const afterExpandViewBox = await viewBox(page);
+  assert(afterExpandViewBox === beforeExpandViewBox, "Hiding the troop section does not change the current map viewBox.");
+  await page.waitForTimeout(40);
+  assert((await viewBox(page)) === afterExpandViewBox, "Hiding the troop section does not apply a delayed camera correction.");
   await clickTerritory(page, reinforcementTerritoryId);
   await page.waitForSelector(".troop-section-reinforcement .allocation-target");
   await finishReinforcementPlacement(page);

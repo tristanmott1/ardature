@@ -1,4 +1,4 @@
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocalPauseRecovery } from "./app/useLocalPauseRecovery";
 import {
   addSetupPlayer,
@@ -113,7 +113,7 @@ import {
   type SyncRole,
 } from "./game/gameView";
 import { generatedMapData } from "./map/generated/mapData";
-import { MapView } from "./map/components/MapView";
+import { MapView, type MapVisibleInsets } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import { territoryForId } from "./map/territoryLookup";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
@@ -147,6 +147,91 @@ const EMPTY_MAP_SELECTIONS: MapSelectionState = {
   pendingSpyTerritoryId: null,
   turnSelectedTerritoryId: null,
 };
+const EMPTY_MAP_VISIBLE_INSETS: MapVisibleInsets = {
+  bottom: 0,
+  left: 0,
+  right: 0,
+  top: 0,
+};
+
+type MapInsetRefs = {
+  actionSectionRef: RefObject<HTMLDivElement | null>;
+  hasActionSection: boolean;
+  hasPlayerBar: boolean;
+  hasUpperSection: boolean;
+  playerBarRef: RefObject<HTMLDivElement | null>;
+  upperSectionRef: RefObject<HTMLDivElement | null>;
+};
+
+function useMapVisibleInsets({
+  actionSectionRef,
+  hasActionSection,
+  hasPlayerBar,
+  hasUpperSection,
+  playerBarRef,
+  upperSectionRef,
+}: MapInsetRefs) {
+  const [visibleInsets, setVisibleInsets] = useState<MapVisibleInsets>(EMPTY_MAP_VISIBLE_INSETS);
+
+  const measureInsets = useCallback(() => {
+    const nextInsets = {
+      ...EMPTY_MAP_VISIBLE_INSETS,
+      bottom: hasActionSection ? sectionBottomInset(actionSectionRef.current) : 0,
+      top: hasUpperSection
+        ? upperSectionRef.current?.getBoundingClientRect().bottom ?? 0
+        : hasPlayerBar
+          ? playerBarRef.current?.getBoundingClientRect().bottom ?? 0
+          : 0,
+    };
+
+    setVisibleInsets((current) => sameVisibleInsets(current, nextInsets) ? current : nextInsets);
+  }, [actionSectionRef, hasActionSection, hasPlayerBar, hasUpperSection, playerBarRef, upperSectionRef]);
+
+  useLayoutEffect(() => {
+    measureInsets();
+
+    const observer = new ResizeObserver(measureInsets);
+    const playerBar = playerBarRef.current;
+    const upperSection = upperSectionRef.current;
+    const actionSection = actionSectionRef.current;
+
+    if (playerBar) {
+      observer.observe(playerBar);
+    }
+
+    if (upperSection) {
+      observer.observe(upperSection);
+    }
+
+    if (actionSection) {
+      observer.observe(actionSection);
+    }
+
+    window.addEventListener("resize", measureInsets);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measureInsets);
+    };
+  }, [hasActionSection, hasPlayerBar, hasUpperSection, measureInsets]);
+
+  return visibleInsets;
+}
+
+function sectionBottomInset(element: HTMLElement | null) {
+  if (!element) {
+    return 0;
+  }
+
+  const rect = element.getBoundingClientRect();
+  return Math.max(0, window.innerHeight - rect.top);
+}
+
+function sameVisibleInsets(left: MapVisibleInsets, right: MapVisibleInsets) {
+  return Math.abs(left.top - right.top) < 0.5 &&
+    Math.abs(left.right - right.right) < 0.5 &&
+    Math.abs(left.bottom - right.bottom) < 0.5 &&
+    Math.abs(left.left - right.left) < 0.5;
+}
 
 function App() {
   const initialSyncHostRef = useRef<ReturnType<typeof readSyncHostGame> | undefined>(undefined);
@@ -183,6 +268,9 @@ function App() {
   const lastSentAllocationRef = useRef("");
   const syncRevisionRef = useRef(restoredSyncHost?.revision ?? 0);
   const lastSnapshotRevisionRef = useRef(0);
+  const playerBarRef = useRef<HTMLDivElement | null>(null);
+  const upperSectionRef = useRef<HTMLDivElement | null>(null);
+  const actionSectionRef = useRef<HTMLDivElement | null>(null);
   const {
     allocationSelectedTerritoryId,
     gameMapSelectedTerritoryId,
@@ -308,6 +396,14 @@ function App() {
     turnActionPlayer,
     turnMapInspection,
     turnSelectedTerritoryId,
+  });
+  const visibleInsets = useMapVisibleInsets({
+    actionSectionRef,
+    hasActionSection: Boolean(layout.actionSection),
+    hasPlayerBar: layout.showPlayerBar,
+    hasUpperSection: Boolean(layout.upperSection),
+    playerBarRef,
+    upperSectionRef,
   });
 
   useLocalPauseRecovery(game);
@@ -1634,12 +1730,17 @@ function App() {
           onTitlePress={playerBarControls.canCycleViewer ? cycleGameMapViewer : undefined}
           pauseLabel={playerBarControls.pauseLabel}
           player={playerBarPlayer}
+          rootRef={playerBarRef}
           timerRemaining={timerRemaining}
           title={playerBarPlayer?.name ?? "Game"}
         />
       ) : null}
 
-      {upperSectionElement}
+      {upperSectionElement ? (
+        <div className="game-upper-slot" ref={upperSectionRef}>
+          {upperSectionElement}
+        </div>
+      ) : null}
 
       <MapView
         autoFocusEnabled={autoFocusEnabled}
@@ -1652,9 +1753,14 @@ function App() {
         showCameraControls={layout.canUseMapCameraControls}
         territoryStates={territoryStates}
         troopMarkers={troopMarkers}
+        visibleInsets={visibleInsets}
       />
 
-      {actionSectionElement}
+      {actionSectionElement ? (
+        <div className="game-action-slot" ref={actionSectionRef}>
+          {actionSectionElement}
+        </div>
+      ) : null}
 
       {game.phase === "home" && !syncEntryOpen ? (
         <HomePanel onStartLocal={startLocalSetup} onStartSync={openSyncEntry} />

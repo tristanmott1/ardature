@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent,
   useEffect,
@@ -40,11 +41,18 @@ type ViewportPoint = {
   y: number;
 };
 
-type MapRect = {
+export type MapVisibleInsets = {
   bottom: number;
-  height: number;
   left: number;
   right: number;
+  top: number;
+};
+
+type MapVisibleAperture = {
+  height: number;
+  left: number;
+  svgHeight: number;
+  svgWidth: number;
   top: number;
   width: number;
 };
@@ -61,6 +69,13 @@ const PAN_MOMENTUM_MAX_SPEED = 2.5;
 const PAN_MOMENTUM_STOP_SPEED = 0.02;
 const PAN_MOMENTUM_DECAY_MS = 300;
 const PAN_MOMENTUM_MAX_MS = 900;
+const CAMERA_CONTROL_OFFSET = 14;
+const EMPTY_VISIBLE_INSETS: MapVisibleInsets = {
+  bottom: 0,
+  left: 0,
+  right: 0,
+  top: 0,
+};
 
 export function MapView({
   frozen = false,
@@ -74,6 +89,7 @@ export function MapView({
   showCameraControls = true,
   territoryStates,
   troopMarkers = [],
+  visibleInsets = EMPTY_VISIBLE_INSETS,
 }: {
   frozen?: boolean;
   mapData: GeneratedMapData;
@@ -86,6 +102,7 @@ export function MapView({
   showCameraControls?: boolean;
   territoryStates: Record<string, TerritoryState>;
   troopMarkers?: readonly TroopMarker[];
+  visibleInsets?: MapVisibleInsets;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const pointersRef = useRef(new Map<number, PointerPoint>());
@@ -95,10 +112,12 @@ export function MapView({
   const isAnimatingRef = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
   const previousSelectedTerritoryIdRef = useRef<string | null>(null);
-  const previousRectRef = useRef<MapRect | null>(null);
   const viewportRef = useRef<MapViewport>(mapData.homeViewport);
   const [isAnimating, setIsAnimatingState] = useState(false);
   const [viewport, setViewportState] = useState<MapViewport>(viewportRef.current);
+  const cameraControlStyle = {
+    "--map-camera-control-bottom": `${Math.max(CAMERA_CONTROL_OFFSET, visibleInsets.bottom + CAMERA_CONTROL_OFFSET)}px`,
+  } as CSSProperties;
 
   function setViewport(nextViewport: MapViewport) {
     const next = constrainViewport(nextViewport, mapData.width, mapData.height);
@@ -136,7 +155,7 @@ export function MapView({
     };
   }
 
-  function mapRect() {
+  function visibleAperture() {
     const svg = svgRef.current;
 
     if (!svg) {
@@ -149,14 +168,41 @@ export function MapView({
       return null;
     }
 
+    const left = clamp(visibleInsets.left, 0, rect.width - 1);
+    const right = clamp(visibleInsets.right, 0, rect.width - left - 1);
+    const top = clamp(visibleInsets.top, 0, rect.height - 1);
+    const bottom = clamp(visibleInsets.bottom, 0, rect.height - top - 1);
+
     return {
-      bottom: rect.bottom,
-      height: rect.height,
-      left: rect.left,
-      right: rect.right,
-      top: rect.top,
-      width: rect.width,
+      height: rect.height - top - bottom,
+      left,
+      svgHeight: rect.height,
+      svgWidth: rect.width,
+      top,
+      width: rect.width - left - right,
     };
+  }
+
+  function apertureTargetForBounds(bounds: MapBounds) {
+    const aperture = visibleAperture();
+
+    if (!aperture) {
+      return fitBoundsToAspect(bounds, mapData.width / mapData.height);
+    }
+
+    return viewportForApertureTarget(
+      fitBoundsToAspect(bounds, aperture.width / aperture.height),
+      aperture,
+    );
+  }
+
+  function apertureTargetForViewport(target: MapViewport) {
+    return apertureTargetForBounds({
+      maxX: target.x + target.width,
+      maxY: target.y + target.height,
+      minX: target.x,
+      minY: target.y,
+    });
   }
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
@@ -284,10 +330,18 @@ export function MapView({
     }
 
     if (pointer.territoryId) {
-      onTerritoryPress?.(pointer.territoryId);
+      handleTerritoryPress(pointer.territoryId);
       return;
     }
 
+    handleMapPress();
+  }
+
+  function handleTerritoryPress(territoryId: string) {
+    onTerritoryPress?.(territoryId);
+  }
+
+  function handleMapPress() {
     onMapPress?.();
   }
 
@@ -355,7 +409,7 @@ export function MapView({
   }
 
   function returnToMapView() {
-    startFocusAnimation(mapData.homeViewport);
+    startFocusAnimation(apertureTargetForViewport(mapData.homeViewport));
   }
 
   function toggleAutoFocus() {
@@ -535,73 +589,10 @@ export function MapView({
     return result;
   }
 
-  function preserveViewportForResize(previousRect: MapRect, nextRect: MapRect, previousViewport: MapViewport) {
-    if (previousRect.width <= 0 || previousRect.height <= 0 || nextRect.width <= 0 || nextRect.height <= 0) {
-      return;
-    }
-
-    const anchor = resizeAnchor(previousRect, nextRect);
-    const anchorMapX = previousViewport.x + ((anchor.x - previousRect.left) / previousRect.width) * previousViewport.width;
-    const anchorMapY = previousViewport.y + ((anchor.y - previousRect.top) / previousRect.height) * previousViewport.height;
-    const nextWidth = previousViewport.width * (nextRect.width / previousRect.width);
-    const nextHeight = previousViewport.height * (nextRect.height / previousRect.height);
-
-    setViewport({
-      width: nextWidth,
-      height: nextHeight,
-      x: anchorMapX - ((anchor.x - nextRect.left) / nextRect.width) * nextWidth,
-      y: anchorMapY - ((anchor.y - nextRect.top) / nextRect.height) * nextHeight,
-    });
-  }
-
   useLayoutEffect(() => {
     stopPanMomentum();
     setViewport(mapData.homeViewport);
-    previousRectRef.current = mapRect();
   }, [mapData.homeViewport]);
-
-  useLayoutEffect(() => {
-    previousRectRef.current = mapRect();
-  }, [showCameraControls]);
-
-  useLayoutEffect(() => {
-    const svg = svgRef.current;
-
-    if (!svg) {
-      return;
-    }
-
-    previousRectRef.current = mapRect();
-
-    const observer = new ResizeObserver(() => {
-      const previousRect = previousRectRef.current;
-      const nextRect = mapRect();
-
-      if (!nextRect) {
-        return;
-      }
-
-      if (!showCameraControls) {
-        previousRectRef.current = nextRect;
-        return;
-      }
-
-      if (!previousRect) {
-        previousRectRef.current = nextRect;
-        return;
-      }
-
-      // Preserve the visible camera when layout sections resize the SVG.
-      if (!isAnimatingRef.current) {
-        preserveViewportForResize(previousRect, nextRect, viewportRef.current);
-      }
-
-      previousRectRef.current = nextRect;
-    });
-
-    observer.observe(svg);
-    return () => observer.disconnect();
-  }, [mapData.width, mapData.height, showCameraControls]);
 
   useEffect(() => {
     const previousSelectedTerritoryId = previousSelectedTerritoryIdRef.current;
@@ -624,19 +615,13 @@ export function MapView({
     }
 
     const selectedTerritory = mapData.territories.find((territory) => territory.id === selectedTerritoryId);
-    const svg = svgRef.current;
 
-    if (!selectedTerritory || !svg) {
+    if (!selectedTerritory) {
       return;
     }
 
-    const bounds = svg.getBoundingClientRect();
-    const aspect = bounds.width > 0 && bounds.height > 0
-      ? bounds.width / bounds.height
-      : mapData.width / mapData.height;
-
-    startFocusAnimation(fitBoundsToAspect(selectedTerritory.focusBounds, aspect));
-  }, [autoFocusEnabled, mapData, selectedTerritoryId]);
+    startFocusAnimation(apertureTargetForBounds(selectedTerritory.focusBounds));
+  }, [autoFocusEnabled, mapData, selectedTerritoryId, visibleInsets]);
 
   useEffect(() => {
     if (resetCameraKey > 0) {
@@ -679,7 +664,7 @@ export function MapView({
   }, []);
 
   return (
-    <div className="map-shell">
+    <div className="map-shell" style={cameraControlStyle}>
       <svg
         aria-label="Ardatúrë map"
         className="map-svg"
@@ -709,7 +694,7 @@ export function MapView({
           {onTerritoryPress ? (
             <HitTargetLayer
               mapData={mapData}
-              onTerritoryPress={onTerritoryPress}
+              onTerritoryPress={handleTerritoryPress}
             />
           ) : null}
         </g>
@@ -818,27 +803,26 @@ function constrainViewport(viewport: MapViewport, mapWidth: number, mapHeight: n
   };
 }
 
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.max(minimum, Math.min(maximum, value));
-}
+function viewportForApertureTarget(target: MapViewport, aperture: MapVisibleAperture): MapViewport {
+  const scale = aperture.width / target.width;
 
-function resizeAnchor(previousRect: MapRect, nextRect: MapRect): ViewportPoint {
-  const left = Math.max(previousRect.left, nextRect.left);
-  const right = Math.min(previousRect.right, nextRect.right);
-  const top = Math.max(previousRect.top, nextRect.top);
-  const bottom = Math.min(previousRect.bottom, nextRect.bottom);
-
-  if (right > left && bottom > top) {
-    return {
-      x: left + (right - left) / 2,
-      y: top + (bottom - top) / 2,
-    };
+  if (!Number.isFinite(scale) || scale <= 0) {
+    return target;
   }
 
+  const width = aperture.svgWidth / scale;
+  const height = aperture.svgHeight / scale;
+
   return {
-    x: nextRect.left + nextRect.width / 2,
-    y: nextRect.top + nextRect.height / 2,
+    height,
+    width,
+    x: target.x - aperture.left / scale,
+    y: target.y - aperture.top / scale,
   };
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
 }
 
 function focusAnimationDuration(start: MapViewport, target: MapViewport) {
