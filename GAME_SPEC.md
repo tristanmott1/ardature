@@ -54,9 +54,8 @@ The app should follow the sibling `../qwixx/` structure where practical:
 - Border: an adjacency edge between two territories.
 - Troop: a unit in a territory. Each player has three mixture troop classes plus one leader troop in their base army.
 - Spy: a non-troop, player-owned capability used in the spy phase.
-- Preparedness: a player's predicted mixture of the opponent's troop classes, selected on a triangle interface.
-- Effectiveness: a score from 0 to 10 derived from prediction accuracy and arrow challenge performance.
-- Attack: one locked commitment from one owned territory into one adjacent enemy territory.
+- Combat score: a score from 0 to 10 derived from the battle troop mixture, either deterministically in regular mode or by challenge sampling in challenge mode.
+- Attack: one locked commitment from one owned territory into one connected enemy territory.
 - Encounter: one die-vs-die comparison inside a battle round.
 
 ## Players, Sides, and Colors
@@ -79,9 +78,9 @@ Each side has three mixture troop classes. The classes correspond exactly across
 
 | Light troop | Dark troop | Role |
 | --- | --- | --- |
-| Dwarf | Orc | Numerous, hardest arrow challenge |
-| Rohirrim | Warg | Middle quantity, middle arrow challenge |
-| Elf | Uruk-hai | Fewest, easiest arrow challenge |
+| Dwarf | Orc | Heavy: numerous, low score |
+| Rohirrim | Warg | Cavalry: middle quantity, middle score |
+| Elf | Uruk-hai | Elite: fewer, high score |
 
 Rules that use troop mixtures should refer internally to the three abstract mixture classes:
 
@@ -89,7 +88,7 @@ Rules that use troop mixtures should refer internally to the three abstract mixt
 - Cavalry: rohirrim/warg.
 - Elite: elf/uruk-hai.
 
-Each player also has a leader troop: wizard for light-side colors and witch-king for dark-side colors. The leader is allocated like a troop, but it is not part of mixture prediction or the heavy/cavalry/elite triangle.
+Each player also has a leader troop: wizard for light-side colors and witch-king for dark-side colors. The leader is allocated like a troop and fights like a troop, but it is not part of the heavy/cavalry/elite army-build triangle.
 
 The UI should render the appropriate side-specific names and art for each player.
 
@@ -143,11 +142,12 @@ The setup state should allow:
 - Draft pick time limit for round robin and snake: none, 5 seconds, 10 seconds, or 15 seconds.
 - Troop allocation style: manual or random.
 - Troop allocation time limit for manual allocation: none, 1 minute, 2 minutes, 3 minutes, 4 minutes, or 5 minutes.
+- Attack style: challenge or regular.
 - Starting troop budget by original player count.
 - Reinforcement formula constants.
 - Region bonus definitions.
 
-The setup/draft milestone exposes player colors, turn order, territory draft style, draft pick timer, troop allocation style, and troop allocation timer. Random draft forces pick time to unlimited. Random troop allocation forces allocation time to unlimited. The troop allocation milestone uses the configured allocation style/timer and the starting troop budget rules documented below. The turn-loop milestone uses the reinforcement constants and region bonus values documented in `docs/gameplay-turns-v1.md`.
+The setup/draft milestone exposes player colors, turn order, territory draft style, draft pick timer, troop allocation style, troop allocation timer, and attack style. Random draft forces pick time to unlimited. Random troop allocation forces allocation time to unlimited. The troop allocation milestone uses the configured allocation style/timer and the starting troop budget rules documented below. The turn-loop milestone uses the reinforcement constants, region bonus values, and attack rules documented in `docs/gameplay-turns-v1.md`.
 
 ### Territory Assignment
 
@@ -279,7 +279,7 @@ Each turn has three ordered stages:
 
 Spy is an optional action that can be used during the turn only when the active player is not in the middle of another action. The winner is the first player to own all 42 playable territories, or equivalently the last remaining player with territories.
 
-The first turn-loop implementation is documented in `docs/gameplay-turns-v1.md`. In that implementation, reinforcements and spy are active, attack is disabled, and fortify simply ends the turn.
+The turn-loop implementation is documented in `docs/gameplay-turns-v1.md`. Reinforcements, spy, and attack are active. Fortify currently ends the turn without moving troops.
 
 There is no normal turn timer in the first turn-loop implementation. Draft timers and allocation timers remain as documented, but spy, reinforcements, attack choice, and fortify/end-turn do not use a turn timer.
 
@@ -289,7 +289,7 @@ Spy is optional and can be used at any point during the active player's turn whe
 
 - before starting reinforcements
 - after reinforcements and before attack or fortify
-- before or after completed attacks in the later combat milestone
+- before or after completed attacks
 
 Spy cannot be used during reinforcement placement, during an attack, during fortify, or after fortify ends the turn.
 
@@ -431,13 +431,9 @@ During sync reinforcements, the active player sees local reinforcement edits imm
 
 ## Phase 3: Attack
 
-Attack is disabled in the first turn-loop implementation. The full rules below remain the design target for the later combat milestone.
+The active player may make any number of attacks after reinforcements and before fortify. The active player may also skip attacking and choose fortify.
 
-The active player may make any number of attacks during the attack phase.
-
-Each attack is a locked commitment from one owned source territory into one adjacent opponent-owned target territory.
-
-The active player may end the attack phase without attacking.
+Each attack is a locked commitment from one owned source territory into one connected opponent-owned target territory.
 
 ### Attack Restrictions
 
@@ -445,135 +441,214 @@ To declare an attack:
 
 - The target territory must be owned by an opponent.
 - The source territory must be owned by the active player.
-- The source territory must be adjacent to the target territory.
+- The source territory must be connected to the target territory by gameplay connection.
+- Land and ship gameplay connections both count.
 - The source territory must contain at least two total troops before committing.
+- The attack must commit at least one troop.
 - The committed attacking troops must leave at least one troop behind in the source territory.
-- The committed attacking troops may be any mixture of troop classes present in the source territory.
+- The committed attacking troops may be any mixture of heavy, cavalry, elite, and leader troops present in the source territory.
+- Captured spies do not count as troops and cannot attack.
 - The same source-target pair cannot be attacked more than once in the same turn.
 
-The source-target pair restriction applies even if the attacker gives up, loses, or fails to conquer the territory.
+The source-target pair restriction applies even if the attacker retreats, loses, or fails to conquer the territory.
 
-### Attack Lock
+### Attack Setup
 
-Once the attacker submits:
+Attack setup is local UI until committed attacking troops are confirmed. It can be canceled at any point before confirmation.
 
-- Source territory.
-- Target territory.
-- Committed attacking troops.
+Once the active player presses `Attack`, the action bar buttons are replaced with a single cancel button. That cancel button is the only way to cancel the attack before troop confirmation. Canceling clears the selected source, selected target, committed troops, and default map inspection selection.
 
-The attack is locked and must happen.
+The setup steps are:
 
-There is no separate "original attack mixture" beyond the committed troops. The committed troops define the attacker's battle force and troop mixture. Uncommitted troops in the source territory are not part of the attack.
+1. Select attacking territory.
+2. Select target territory.
+3. Choose attacking troops.
+4. Confirm the attack.
 
-The defender's battle force is all troops currently in the target territory at the moment the attack locks.
+After the source is selected, it remains highlighted and the action immediately advances to target selection. There is no source confirmation sheet. After the target is selected, both source and target remain highlighted and the action immediately advances to troop commitment. There is no target confirmation sheet.
 
-### Private Battle Preparation
+During troop commitment, the troop section uses the same visual structure as reinforcement placement:
 
-Before battle rolls begin, both players complete two private steps:
+- The top row has the add symbol and shows troops on the attacking territory that are still available to commit.
+- The bottom row has the remove symbol and shows committed attacking troops.
+- The text between rows is `{source territory} to {target territory}`.
+- The confirm/check button is disabled until at least one troop is committed and at least one troop remains behind in the source.
 
-1. Predict the opposing troop mixture.
-2. Complete the arrow challenge.
+Once committed troops are confirmed, the attack is locked and must happen. The troop section and action section hide, the challenge/battle modal appears, the player bar remains visible, the map freezes, and camera buttons hide.
 
-In local mode, the phone should be passed between players with interstitial screens so each player can complete private preparation without exposing hidden information.
+### Attack Style
 
-In sync mode, each player completes preparation on their own device. The host waits until both preparation payloads are submitted before resolving battle.
+Setup includes an `ATTACK STYLE` section with one dropdown:
 
-### Prediction Triangle
+- `Challenge`
+- `Regular`
 
-The prediction UI is a triangle with one troop class at each corner.
+Both options are selectable.
+The default is `Regular`.
 
-The player moves a marker inside the triangle to indicate what mixture of opposing troop classes they believe they are facing.
+In `Regular` mode, both sides receive deterministic scores from their battle troop mixture.
 
-The corners are softened so no troop class can ever receive 0% preparedness.
+In `Challenge` mode:
 
-Preparedness should be computed as:
+- The attacker always receives a challenge modal.
+- In sync mode, the defender also receives a challenge modal.
+- In local mode, the defender receives a deterministic score.
+- The temporary challenge modal contains one centered button.
+- Pressing the button immediately samples and submits that player's score from the beta score distribution.
+- The player cannot preview the score before submission.
+- Once submitted, the score is fixed for the battle.
+- If either score is missing, the battle modal shows a waiting message and dice controls are disabled.
+
+Future challenge mechanics should make player skill naturally produce a sample from the same beta score distribution. The placeholder button exists only to sample that distribution directly.
+
+### Authoritative Battle State
+
+Confirmed battle state is authoritative game state.
+
+The battle state must include:
+
+- attack id
+- attacker player id
+- defender player id
+- source territory id
+- target territory id
+- committed attacking troop counts
+- defender troop counts at lock
+- current surviving attacking troop counts
+- current surviving defending troop counts
+- attacker score, once submitted or computed
+- defender score, once submitted or computed
+- latest dice roll, if any
+- whether at least one roll has happened
+- terminal result, if the battle has ended
+
+The active turn also stores source-target pairs already attacked this turn.
+
+Committed troops define the attacker's battle force. Uncommitted troops in the source territory have no bearing on the attack score, dice, or casualties. The defender's battle force is all troops in the target territory at attack lock.
+
+Scores are fixed at battle lock/challenge submission and do not change as troops die.
+
+Committed attacking troops still visually count on the source territory while the battle is active. Casualties reduce the source territory total live. If the attacker retreats, surviving committed troops remain on the source. If the attacker captures the target, surviving committed troops move from source to target at battle end.
+
+### Battle Modal
+
+The battle modal is centered and is a task modal.
+
+The modal shows:
+
+- defender dice and troop breakdown on top
+- attacker dice and troop breakdown on bottom
+- latest roll only
+- both numeric scores, once available, displayed with one decimal
+- a short message section, which may be empty or say things like `Waiting...`, `{attacker} won`, or `{defender} won`
+- dice rendered as the roll button
+- a button below the dice for retreat or final confirmation
+
+Both sides' troop breakdowns are visible in the battle modal. Everyone who sees the modal sees the same battle contents and sees which troop types die.
+
+In sync mode, only the attacker and defender see the battle modal. Only the attacker can roll, retreat, or dismiss the final result. Other connected players do not see the battle modal, but they do see committed map facts such as live territory troop totals and ownership changes. Non-participants stay in normal explore mode, but the battle source and target territories flash between selected and unselected visual states while the battle is active. The source/attacking territory flashes at a higher frequency, while the target/defending territory uses a slower pulse. Non-participants may still select any territory, including the source or target. If the selected territory is one of the flashing battle territories, the battle flash overrides the normal selected-fill color.
+
+In local mode, only the active attacker sees the battle modal. The defender does not receive a handoff.
+
+The attacker must roll at least once before retreating. Before the first roll, the retreat button is disabled. After at least one roll, the attacker may press retreat. Retreat asks for confirmation. If retreat is confirmed, the attack ends immediately.
+
+When battle ends by conquest, attacker elimination, or confirmed retreat, the dice are disabled, the retreat button becomes a check/confirm button, and the message section says who won or that the attacker retreated. Nothing else may happen until the attacker dismisses that final result.
+
+### Combat Score
+
+Each side receives one score from `0` to `10`. The score determines that side's die distribution. It does not directly change troop counts or the Risk-like comparison rules.
+
+Troop score values:
+
+| Troop type | Score value |
+| --- | ---: |
+| Heavy | 2.5 |
+| Cavalry | 5 |
+| Elite | 7.5 |
+| Leader | 9 |
+
+The leader is stronger than elite but below the endpoint score `10`, so leader-only challenge distributions remain valid.
+
+For battle troop counts:
 
 ```text
-preparedness = floor per class + marker-derived remaining distribution
+H = heavy count
+C = cavalry count
+E = elite count
+L = leader count
 ```
 
-The exact floor value is intentionally not fixed yet. A likely shape is:
+The mean score is:
 
 ```text
-minimum preparedness per class = 5% to 10%
-remaining preparedness = 70% to 85%, distributed by marker position
+mu = (2.5H + 5C + 7.5E + 9L) / (H + C + E + L)
 ```
 
-The three preparedness percentages must sum to 100%.
+This requires at least one battle troop.
 
-### Arrow Challenge
-
-After prediction, each player fires one arrow at a target.
-
-Each troop class has an associated challenge difficulty:
+In regular mode:
 
 ```text
-elite easiest < cavalry middle < heavy hardest
+S = mu
 ```
 
-The active challenge difficulty is a weighted average based on the player's own battle force mixture:
-
-- The attacker faces a difficulty based on the committed attacking troops.
-- The defender faces a difficulty based on the troops defending the target territory.
-
-Exact target geometry, scoring bands, and touch/motion mechanics are intentionally not fixed yet.
-
-The arrow challenge returns a normalized performance score suitable for combining with prediction accuracy.
-
-### Effectiveness
-
-Each side receives an effectiveness score from 0 to 10.
-
-Effectiveness is based on:
-
-- Prediction accuracy against the opponent's actual battle force mixture.
-- Arrow challenge performance.
-
-The exact formula is intentionally not fixed yet.
-
-The midpoint is 5:
-
-- 5 means average effectiveness and fair dice.
-- Less than 5 skews dice toward lower rolls.
-- Greater than 5 skews dice toward higher rolls.
-
-The formula should keep effectiveness bounded:
+In challenge mode:
 
 ```text
-effectiveness = clamp(0, 10, function(prediction accuracy, arrow performance))
+p = mu / 10
+kappa = 20
+alpha = kappa * p
+beta = kappa * (1 - p)
+Y ~ Beta(alpha, beta)
+S = 10Y
 ```
 
-### Weighted Dice
+The beta distribution has mean `mu`. A leader-only force has `p = 0.9`, `alpha = 18`, and `beta = 2`.
 
-Battle dice are six-sided but not necessarily fair.
+### Score To Dice
 
-For each side:
+First center the score:
 
 ```text
-die face probabilities = function(effectiveness)
+q(S) = (S - 5) / 5
 ```
 
-At effectiveness 5, each face should have equal probability.
+Attacker tilt:
 
-At effectiveness below 5:
+```text
+tA(S) =
+  kAminus * q(S), if 0 <= S <= 5
+  kAplus  * q(S), if 5 < S <= 10
+```
 
-- Lower die faces become more likely.
-- Higher die faces become less likely.
+Defender tilt:
 
-At effectiveness above 5:
+```text
+tD(S) =
+  kDminus * q(S), if 0 <= S <= 5
+  kDplus  * q(S), if 5 < S <= 10
+```
 
-- Higher die faces become more likely.
-- Lower die faces become less likely.
+Constants:
 
-The exact distribution curve is intentionally not fixed yet.
+| Constant | Value |
+| --- | ---: |
+| `kAminus` | 0.14331904306524929 |
+| `kAplus` | 0.27527774317548487 |
+| `kDminus` | 0.11630715538926006 |
+| `kDplus` | 0.21211393558380784 |
 
-The combat log may describe advantage qualitatively, but the game should preserve the die-roll feel rather than showing only deterministic modifiers.
+For die face `j` in `{1, 2, 3, 4, 5, 6}`:
 
-### Battle Round
+```text
+P_t(j) = exp(t * (j - 3.5)) / sum(r = 1..6) exp(t * (r - 3.5))
+```
 
-After both players complete preparation, battle proceeds in repeated rounds.
+Score `5` produces fair dice. Scores above `5` make high faces more likely. Scores below `5` make low faces more likely.
 
-For each round:
+### Dice Rolls
+
+For each roll:
 
 - Attacker rolls up to 3 dice.
 - Attacker dice are capped by the number of surviving committed attacking troops.
@@ -584,99 +659,66 @@ For each round:
 - Compare the top dice in order.
 - The number of encounters is `min(attacker dice count, defender dice count)`.
 - For each encounter, exactly one troop dies.
-- Higher die wins the encounter.
+- Attacker kills one defender when the attacker die is strictly greater.
+- Otherwise the attacker loses one troop.
 - Defender wins ties.
 
-Rounds continue until:
-
-- All committed attacking troops are dead.
-- All defending troops in the target territory are dead.
-- The attacker gives up after at least one battle round.
-
-The attacker must roll at least once before giving up.
+The number of troops that die in one roll is always the number of encounters.
 
 ### Casualty Selection
 
-When a side loses an encounter, the troop class that dies is randomly sampled.
+When a troop dies, randomly sample one troop from that side's remaining battle force.
 
-The sampling probabilities are proportional to both:
+Rules:
 
-- The losing side's actual surviving troop ratio.
-- The opposing side's preparedness ratio.
+- Heavy, cavalry, and elite troops are sampled uniformly by individual troop.
+- Leaders are excluded from casualty sampling while any non-leader troop remains.
+- A leader can die only if it is the last remaining troop on that side.
+- Captured spies are never casualty candidates.
 
-For example, if the defender has 2 elite troops and 8 heavy troops, the actual ratio is:
+For example, if a force has `2 heavy` and `1 elite`, a casualty has a `2/3` chance to be heavy and a `1/3` chance to be elite. If a force has `1 heavy` and `1 leader`, the heavy must die before the leader can die.
 
-```text
-elite = 20%
-heavy = 80%
-```
+When an attacking troop dies, subtract it from surviving committed attackers and from the source territory. When a defending troop dies, subtract it from surviving defenders and from the target territory.
 
-If the attacker's preparedness is:
+### Battle End
 
-```text
-elite = 60%
-heavy = 40%
-```
+Battle ends when:
 
-Then the probability of an elite casualty is:
-
-```text
-(0.2 * 0.6) / ((0.2 * 0.6) + (0.8 * 0.4)) = 27.27%
-```
-
-The same rule applies in both directions:
-
-- When a defending troop dies, sample from surviving defending troops using the attacker's preparedness.
-- When an attacking troop dies, sample from surviving committed attacking troops using the defender's preparedness.
-
-Troop classes with no surviving troops cannot be selected.
-
-Because prediction corners are softened, preparedness should never be exactly 0 for any troop class.
-
-### Conquest
+- all defending troops are dead
+- all committed attacking troops are dead
+- the attacker retreats after at least one roll and confirmation
 
 If all defending troops die:
 
 - The attacker conquers the target territory.
 - All surviving committed attacking troops move into the conquered territory.
-- No committed survivors may remain in the source territory.
 - Uncommitted source troops remain in the source territory.
 - The target territory changes owner to the attacker.
-
-The attacker may continue attacking afterward if they have valid attacks remaining.
-
-### Attacker Defeat
+- Captured-spy custody/release rules run for the conquered territory.
+- Region control changes and elimination checks run after ownership changes.
 
 If all committed attacking troops die:
 
 - The target territory remains owned by the defender.
 - The source territory keeps only the uncommitted troops that were left behind.
-- The attacker may continue attacking elsewhere if they have valid attacks remaining.
+- The attacker may continue attacking elsewhere after dismissing the final result.
 
-### Giving Up
+If the attacker retreats:
 
-After at least one battle round, the attacker may give up.
-
-If the attacker gives up:
-
-- Surviving committed attackers return to the source territory.
+- Surviving committed attackers remain on the source territory.
 - The target territory remains owned by the defender.
 - The same source-target pair may not be attacked again this turn.
-- The attacker may continue attacking elsewhere.
+- The attacker may continue attacking elsewhere after dismissing the final result.
 
-### Post-Battle Reveals
+### Pause, Refresh, And Removal During Battle
 
-After an attack ends, the game reveals hidden troop mixture information only in these cases:
+Pause must preserve locked attacks.
 
-- If the defender survives because the attacker gives up or all committed attackers die, the defender is shown the committed attacking mixture that attacked them.
-- If the defender is conquered, the defender is not shown the mixture that defeated them.
-- If the attacker conquers the target, the attacker is shown the defending mixture that they defeated.
-- If the attacker gives up, the attacker is shown the defending mixture they withdrew from.
-- If all committed attacking troops die, the attacker is not shown the defending mixture that defeated them.
+Snapshots must preserve source, target, committed attacking troops, surviving attacking troops, surviving defending troops, submitted/computed scores, latest roll, whether at least one roll has happened, terminal result, and used source-target pairs.
 
-The reveal refers to the battle force at attack lock time, not to later surviving troop counts.
+Completed scores persist through pause, refresh, and reconnect. If the game pauses while a player is still inside an unfinished challenge, that unfinished challenge restarts on resume. The score is not sampled until the challenge button is pressed and submitted.
 
-The UI should make these reveals available at the end of battle, then return to normal fog-of-war rules.
+The normal pause button is disabled while this device is actively doing a challenge interaction. Forced pause can still happen because of refresh/close or sync disconnect.
 
 ## Phase 4: Fortify
 
@@ -788,11 +830,10 @@ Expected top-level views:
 10. Spy phase.
 11. Reinforcement phase.
 12. Attack planner.
-13. Prediction triangle.
-14. Arrow challenge.
-15. Battle resolution.
-16. Fortify phase.
-17. Game over.
+13. Attack challenge.
+14. Battle resolution.
+15. Fortify phase.
+16. Game over.
 
 These do not need to become separate routes. They can be page states inside the app.
 
@@ -1021,11 +1062,11 @@ During another player's turn, inactive sync devices show only a read-only/explor
 Sync devices update from committed host facts only:
 
 - after reinforcements are finalized
-- after future attacks resolve or otherwise commit
+- after attack lock, battle rolls, casualties, retreat, conquest, or final battle dismissal commit
 - after fortify/end-turn commits
 - after player removal and redistribution commits
 
-The active player's provisional reinforcement edits are local to that player until commit. Spy target selection, spy confirmation sheets, and successful spy intel are also local/private. The only defender-facing spy event is the failed-spy captured notification.
+The active player's provisional reinforcement edits are local to that player until commit. Spy target selection, spy confirmation sheets, successful spy intel, and attack setup selections are also local/private. The only defender-facing spy event is the failed-spy captured notification. Locked battle state is shared only with the attacker and defender; other sync players see committed map facts but not the battle modal.
 
 ### Pause And Player Removal
 
@@ -1164,7 +1205,8 @@ The completed sync contract through troop allocation separates authoritative gam
 - Heartbeat defines whether a session is connected. A stale snapshot is not enough.
 - Host-to-joiner updates are revisioned snapshots: `{ type: "snapshot", revision, game }`.
 - Joiners ignore stale snapshots.
-- Joiner-to-host commands are limited to `profileUpdate`, `draftConfirm`, `allocationUpdate`, and `quit`.
+- Joiner-to-host commands are limited to `profileUpdate`, `draftConfirm`, `allocationUpdate`, `turnCommand`, and `quit`.
+- Turn commands carry committed turn facts only: spy confirmation/dismissal, notification dismissal, committed reinforcements, locked attacks, challenge score submissions, battle rolls, retreat, final battle dismissal, and fortify/end-turn.
 - The host validates every command against the current game state before applying it.
 - Host intentional end uses `hostEnded`.
 - Host player removal uses `removed` when the peer is still reachable.
@@ -1179,7 +1221,7 @@ Sync frequency should follow a resume-safety rule:
 - Draft confirmations, army-build submission, ready, timeout completion, pause, resume, removal, and phase advance are immediate committed facts.
 - Allocation troop placement is committed game data. It may be batched or lightly throttled, but must be flushed on ready, pause, visibility change, or page unload where practical.
 - Turn-loop facts follow the same pattern: turn start, spy result, captured-spy state, queued spy/region notifications, finalized reinforcement placements, fortify/end-turn, elimination, and game-over are committed facts.
-- Future attack and battle events should also follow this pattern: host must receive enough committed data to resume; local previews and controls remain local.
+- Attack and battle events follow this pattern: host must receive enough committed data to resume; local setup previews and controls remain local.
 - Never sync map camera, focus animation, selected inspection territory, open modal state, hover/press state, local pending draft preview, provisional reinforcement edits, successful spy intel view state, or other purely visual state.
 
 Because this is for personal use, hidden state may exist client-side. However, the UI should still render strictly from the local player's viewer perspective. When practical, the host may send redacted player-specific views to make accidental spoilers less likely.
@@ -1197,9 +1239,8 @@ Host-to-player events should include:
 - Spy result.
 - Reinforcement result.
 - Attack locked notification.
-- Preparation request.
+- Challenge score request.
 - Battle resolution update.
-- Post-battle reveal, if applicable.
 - Fortify result.
 - Player eliminated.
 - Game over.
@@ -1217,9 +1258,10 @@ Player-to-host events should include:
 - Spy target or skip.
 - Reinforcement troop choice and placement.
 - Attack declaration.
-- Prediction submission.
-- Arrow challenge submission.
-- Battle give-up request.
+- Challenge score submission.
+- Battle roll request.
+- Battle retreat request.
+- Battle result dismissal.
 - Continue attack or end attack phase.
 - Fortify submission or skip.
 - Exit game.
@@ -1237,30 +1279,23 @@ The pending attack state should include:
 - Target territory id.
 - Committed attacking troop counts.
 - Defending troop counts at attack lock.
-- Attacker prediction payload, once submitted.
-- Defender prediction payload, once submitted.
-- Attacker arrow payload, once submitted.
-- Defender arrow payload, once submitted.
-- Attacker effectiveness, once computed.
-- Defender effectiveness, once computed.
+- Attacker score, once submitted or computed.
+- Defender score, once submitted or computed.
 - Current surviving attacking troops.
 - Current surviving defending troops.
-- Battle log.
+- Latest dice roll.
 - Whether at least one round has been rolled.
 - Terminal outcome, when finished.
 
-The host should not resolve battle dice until both players have submitted their private preparation.
+The host should not enable battle dice until both required scores are present.
 
 ### Local Pass-and-Play Privacy
 
 Local mode should use explicit pass screens before private information appears.
 
-Examples:
+Example:
 
 - "Pass to Frodo" before Frodo allocates starting troops.
-- "Pass to the defender" before defender prediction.
-- "Pass to the attacker" before attacker prediction.
-- "Pass back to active player" after battle reveal.
 
 Pass screens should hide the map and any private troop data.
 
@@ -1446,11 +1481,8 @@ The following decisions are intentionally open:
 - Final app name and displayed title.
 - Future tuning of starting troop budgets and troop costs.
 - Future tuning of reinforcement troop costs and region bonus values.
-- Preparedness floor value.
-- Prediction accuracy formula.
-- Arrow challenge mechanics and scoring.
-- Effectiveness formula.
-- Weighted die probability curve.
+- Future challenge interaction mechanics beyond the temporary sample button.
+- Future tuning of combat score constants, tilt constants, and beta concentration.
 - Fortify cavalry radius final value.
 - Future combat-specific sync message names and payload schemas.
 
@@ -1476,20 +1508,19 @@ Suggested build order:
 14. Implement sync troop allocation, ready/waiting state, host-authoritative timeout completion, and allocation pause/reconnect.
 15. Implement allocation player-removal redistribution for local and sync.
 16. Implement read-only game map with viewer-specific troop visibility.
-17. Implement turn phases without combat minigames.
-18. Implement attack declaration and battle state.
-19. Implement prediction triangle.
-20. Implement arrow challenge.
-21. Implement effectiveness and weighted dice.
-22. Implement casualty sampling and post-battle reveals.
-23. Implement full fortify.
-24. Implement elimination and game over.
+17. Implement turn phases without battle resolution.
+18. Implement attack declaration and locked battle state.
+19. Implement regular/challenge score generation.
+20. Implement tilted dice, casualties, retreat, conquest, and battle dismissal.
+21. Implement sync battle modal visibility and attacker-only battle controls.
+22. Implement full fortify.
+23. Implement elimination and game over.
 
 Current implementation status:
 
-- Steps 1 through 17 are implemented for the current setup, draft, troop allocation, read-only map, and first turn-loop scope.
+- Steps 1 through 21 are implemented for the current setup, draft, troop allocation, read-only map, turn-loop, spy, reinforcements, attack setup, battle scoring, dice resolution, retreat, conquest, and sync battle visibility scope.
 - Sync mode now uses the cleaned contract documented above: revisioned host snapshots, validated joiner commands, explicit `hostEnded` and `removed`, blocked joiner play during host reconnecting, QR disconnected-player recovery from host pause, and separate sync-host active game persistence.
-- Step 17 is documented in `docs/gameplay-turns-v1.md`: turn order, spy, reinforcements, attack disabled, fortify ends turn, and gameplay player removal redistribution.
+- Steps 17 through 21 are documented in `docs/gameplay-turns-v1.md`: turn order, spy, reinforcements, attack setup/battle resolution, fortify placeholder, and gameplay player removal redistribution.
 
 ## Verification Checklist
 
@@ -1514,16 +1545,17 @@ Before considering the first playable version complete:
 - Verify read-only game map visibility for own territories, connected opponent territories, and distant opponent territories, using all gameplay connections including ship connections.
 - Verify spy success, spy failure, spy loss, and spy intel clearing after the spy phase.
 - Verify reinforcements can be placed only on owned territories.
-- Verify attacks enforce adjacency, leave-one-behind, and source-target once-per-turn rules.
-- Verify both players complete private prediction and arrow challenge steps before battle.
-- Verify weighted dice respond to effectiveness.
-- Verify casualties are sampled from actual troop ratio weighted by opponent preparedness.
+- Verify attacks enforce gameplay connection, leave-one-behind, commit-at-least-one, and source-target once-per-turn rules.
+- Verify regular attacks compute deterministic scores from committed attacker troops and locked defender troops.
+- Verify challenge attacks immediately submit sampled beta scores and restart unfinished challenges after pause.
+- Verify tilted dice respond to attacker/defender combat scores.
+- Verify casualties are sampled uniformly from eligible non-leader troops, with leaders dying only when last.
 - Verify conquest moves all committed survivors into the target.
 - Verify giving up is unavailable before the first roll and returns committed survivors afterward.
-- Verify post-battle reveal rules for all outcomes.
+- Verify battle modal is visible only to attacker and defender in sync, while other players see live committed map totals.
 - Verify fortify allows one adjacent mixed-source move and additional cavalry movement through owned territory.
 - Verify eliminated players are skipped and cannot act.
 - Verify game over triggers when one player owns all territories.
 - Verify sync host-authoritative state updates include committed game facts promptly enough to resume, without syncing transient visual UI state.
-- Verify sync private battle preparation works on separate devices.
+- Verify sync challenge/battle state preserves locked attacks through pause, refresh, reconnect, and snapshots.
 - Verify PWA installability and GitHub Pages build output.

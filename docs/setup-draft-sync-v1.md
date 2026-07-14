@@ -90,6 +90,12 @@ Setup options controlled by the host/local device:
   - Allocation-time dropdown: `1m`, `2m`, `3m`, `4m`, `5m`, or `Unlimited`.
   - Default: `Manual` and `Unlimited`.
   - When allocation style is `Random`, allocation time is forced to `Unlimited` and the allocation-time control is locked while displaying that value.
+- `ATTACK STYLE` settings:
+  - Attack style dropdown: `Challenge` or `Regular`.
+  - Both options are selectable.
+  - Default: `Regular`.
+  - `Regular` uses deterministic combat scores from troop mixtures.
+  - `Challenge` uses the challenge-score flow documented in `gameplay-turns-v1.md`.
 
 Once setup advances into the draft, names, colors, turn order, and configuration are frozen except for pause/removal behavior described below.
 
@@ -204,7 +210,8 @@ The completed sync contract separates authoritative game facts from connection/s
 - `App` owns sync session state such as connecting, connected, reconnecting, disconnected, and host-ended.
 - Host-to-joiner updates are revisioned snapshots: `{ type: "snapshot", revision, game }`.
 - Joiners ignore stale snapshots.
-- Joiner-to-host commands are limited to `profileUpdate`, `draftConfirm`, `allocationUpdate`, and `quit`.
+- Joiner-to-host commands are limited to `profileUpdate`, `draftConfirm`, `allocationUpdate`, `turnCommand`, and `quit`.
+- Turn commands cover committed turn facts only: spy confirmation/dismissal, notification dismissal, committed reinforcements, locked attacks, challenge score submissions, battle rolls, retreat, final battle dismissal, and fortify/end-turn.
 - Host intentional end sends `hostEnded`; joiners return home.
 - Host removal sends `removed`; that joiner returns home through the same path as host-ended.
 - Lost host connection blocks joiner gameplay during the 10-second reconnecting grace period. If automatic reconnect fails, the joiner returns home.

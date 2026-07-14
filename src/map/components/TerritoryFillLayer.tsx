@@ -14,7 +14,9 @@ export function TerritoryFillLayer({
       {mapData.territories.map((territory) => {
         const state = territoryStates[territory.id];
         const baseColor = territory.skins[state.skin];
-        const color = state.status === "selected" ? mixWithWhite(baseColor, SELECTED_WHITE_MIX) : baseColor;
+        const color = state.status === "selected" || state.status === "battleSource" || state.status === "battleTarget"
+          ? mixWithWhite(baseColor, SELECTED_WHITE_MIX)
+          : baseColor;
 
         return (
           <g

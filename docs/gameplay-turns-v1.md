@@ -1,8 +1,8 @@
 # Gameplay Turns V1
 
-This milestone starts after initial troop allocation is complete. It replaces the temporary read-only map endpoint with the first real turn loop: spy, reinforcements, attack placeholder, and fortify placeholder.
+This milestone starts after initial troop allocation is complete. It replaces the temporary read-only map endpoint with the real turn loop: spy, reinforcements, attack, and fortify placeholder.
 
-The goal for this pass is to build the turn shell and the non-combat gameplay that is already well defined. Attack combat remains disabled until the later combat milestone.
+The current pass adds the attack action on top of the existing turn shell. Fortify remains a placeholder until the later fortify milestone.
 
 ## Phase Order
 
@@ -39,10 +39,10 @@ Spy cannot be used:
 - during fortify
 - after fortify, because the turn is already over
 
-For the first gameplay implementation:
+For the current gameplay implementation:
 
 - Reinforcements are fully implemented.
-- Attack is visible but disabled.
+- Attack is implemented with source/target selection, committed attacking troops, attack-style scoring, tilted dice, live casualties, retreat, conquest, and a final dismiss button.
 - Fortify is available but simply ends the turn without moving troops.
 - Local mode uses the existing handoff popup between turns.
 
@@ -68,6 +68,9 @@ The action section has a single-line instruction row above the buttons:
 - When no action is selected, the instruction is `Choose an action`.
 - When spy targeting is selected, the instruction is `Select a territory`.
 - During reinforcement placement, the instruction is `Select a territory` until an owned territory is selected, then `Add troops to {territory}`.
+- During attack source selection, the instruction is `Select attacking territory`.
+- During attack target selection, the instruction is `Select target territory`.
+- During attack troop commitment, the instruction is `Choose attacking troops`.
 
 The turn action section indicates the active turn options:
 
@@ -86,7 +89,7 @@ There is no gameplay distinction between land and ship connections. Both count f
 - spy distance
 - same-opponent adjacent troop totals revealed by spy
 - read-only troop total visibility
-- future attacks and fortification where applicable
+- attacks and fortification where applicable
 
 Physical shared borders from generated geometry are visual map data only. Mountains, forests, coastlines, and dotted ship-route art do not define gameplay adjacency in the app.
 
@@ -256,16 +259,351 @@ If a player removal cancels the current reinforcement action, the entire reinfor
 
 ## Attack
 
-Attack is part of the turn structure, but it is disabled in the first gameplay-turn implementation.
+After reinforcements are complete, the active player may make any number of attacks before fortifying. The active player may also skip attacking and go directly to fortify.
 
-The later attack milestone will implement the full source/target selection, committed attackers, prediction triangle, arrow challenge, weighted dice, casualty sampling, conquest, give-up, and post-battle reveal rules from `GAME_SPEC.md`.
+An attack is a locked commitment from one owned source territory into one connected opponent-owned target territory.
 
-Until then:
+### Attack Style
 
-- the attack button is visible after reinforcements
-- the attack button is disabled
-- no attack state is created
-- players advance by choosing fortify
+Setup includes an `ATTACK STYLE` configuration section with one dropdown:
+
+- `Challenge`
+- `Regular`
+
+`Challenge` and `Regular` are both selectable.
+The default is `Regular`.
+
+In `Regular` mode, both sides receive deterministic combat scores from their committed battle troop mixture.
+
+In `Challenge` mode:
+
+- The attacker always receives a challenge modal.
+- In sync mode, the defender also receives a challenge modal.
+- In local mode, the defender receives a deterministic score even when attack style is `Challenge`.
+- The temporary challenge modal contains one centered button.
+- Pressing the challenge button immediately samples and submits that player's score from the configured beta score distribution.
+- The player does not see their challenge score before submission.
+- Once submitted, that score is fixed for the battle.
+- If one side is still waiting on a challenge score, the battle modal shows a waiting message and the dice controls remain disabled.
+
+The future skill challenge must produce or evaluate a score from the same beta distribution. The current placeholder button exists only to sample that distribution directly.
+
+### Attack Setup
+
+Pressing `Attack` begins local attack setup.
+
+Attack setup is local UI until the attacking troop commitment is confirmed. It can be canceled at any point before confirmation.
+
+Once `Attack` is pressed, the action bar buttons are replaced with one cancel button. That cancel button is the only way to cancel attack setup. Canceling clears the attack source, target, committed troops, and default map inspection selection.
+
+The setup steps are:
+
+1. Select attacking territory.
+2. Select target territory.
+3. Choose attacking troops.
+4. Confirm the attack.
+
+Rules:
+
+- The source territory must be owned by the active player.
+- The target territory must be owned by an opponent.
+- The source and target must be connected by gameplay connection.
+- All gameplay connections from `maps/territory-key.md` count, including ship connections.
+- Physical generated borders do not define attack legality.
+- The source territory must contain at least two troops.
+- The attack must commit at least one troop.
+- The attack must leave at least one troop behind in the source territory.
+- Any subset and mixture of heavy, cavalry, elite, and leader troops may be committed.
+- Captured spies on a territory do not count as troops and cannot attack.
+- The same source-target pair may not be attacked more than once in the same turn.
+
+The source-target restriction is not meaningfully directional in normal play because the active player cannot attack their own territories and cannot lose territories during their own turn. Once a source-target pair is committed, that pair is blocked for the rest of the turn even if the attacker retreats, loses, or captures the target.
+
+During setup:
+
+- After the source is selected, it remains highlighted.
+- Selecting the source does not open a confirmation sheet; the action immediately advances to target selection.
+- After the target is selected, both source and target remain highlighted.
+- Selecting the target does not open a confirmation sheet; the action immediately advances to troop commitment.
+- During troop commitment, the troop section uses allocation mode.
+- The top row has the add symbol and shows troops currently on the attacking territory that are still available to commit.
+- The bottom row shows committed attacking troops.
+- The text between rows is `{source territory} to {target territory}`.
+- The troop-section confirm/check button is disabled until at least one troop is committed and at least one troop remains behind in the source.
+- The action bar remains visible and shows the setup instruction plus the cancel button.
+
+Once attacking troops are confirmed, the attack is locked and must proceed. The troop section and action section hide. The challenge/battle modal appears as the active task modal. The player bar remains visible. The map is frozen, camera buttons are hidden, and no other action may happen until the battle is dismissed.
+
+### Authoritative Battle State
+
+Confirmed battle state is authoritative game state, not local presentation state.
+
+The battle state must include:
+
+- attack id
+- attacker player id
+- defender player id
+- source territory id
+- target territory id
+- committed attacking troop counts
+- defender troop counts at lock
+- current surviving attacking troop counts
+- current surviving defending troop counts
+- attacker score, once submitted or computed
+- defender score, once submitted or computed
+- latest dice roll, if any
+- whether at least one roll has happened
+- terminal result, if the battle has ended
+
+The active turn should also store the source-target pairs already attacked this turn.
+
+Once a battle locks, scores are computed from the troop mixture at lock time and do not change as troops die. Uncommitted troops left behind in the source territory have no bearing on the attack score, dice, or casualties.
+
+Committed attacking troops still visually count on the source territory while battle is active. Casualties reduce the source territory total live. If the attacker retreats, surviving committed troops remain on the source territory. If the attacker captures the target, surviving committed troops move from source to target at battle end.
+
+The defender's battle force is every troop currently occupying the target territory at attack lock.
+
+### Battle Modal
+
+The battle modal is centered and uses the task-modal overlay role.
+
+The modal layout is:
+
+- defender dice and troop breakdown on top
+- attacker dice and troop breakdown on bottom
+- latest roll only, not a full roll history
+- numeric scores shown once submitted/computed, displayed with one decimal
+- a short message section, which may be empty or say things like `Waiting...`, `{attacker} won`, or `{defender} won`
+- dice rendered as the roll button
+- a button below the dice for retreat or final confirmation
+
+Both sides' troop breakdowns are visible during the battle. Everyone who can see the battle modal sees the same battle contents and sees which troop types die.
+
+In sync mode:
+
+- The attacker and defender see the same battle modal.
+- Only the attacker can roll, retreat, or dismiss the final battle result.
+- Other connected players do not see the battle modal.
+- Other connected players stay in normal explore mode.
+- Other connected players still see committed live map facts, such as territory troop totals changing after each roll and ownership changing after conquest.
+- While the battle is active, other connected players see both the source territory and target territory flashing between selected and unselected visual states.
+- The source/attacking territory flashes at a higher frequency.
+- The target/defending territory uses a slower pulse.
+- Non-participants may still select any territory in explore mode, including the source or target territory.
+- If a non-participant selects the source or target territory while it is flashing, the battle flash overrides the regular selected-fill color for that territory.
+
+In local mode, only the active attacker sees the battle modal. The defender does not receive a handoff or challenge because local challenge mode uses deterministic defender score.
+
+The attacker must roll at least once. Before the first roll, the retreat button is disabled. After at least one roll, the attacker may retreat. Pressing retreat opens a confirmation decision. If retreat is confirmed, the attack ends immediately.
+
+If the battle ends by conquest, attacker elimination, or confirmed retreat, the dice are disabled, the retreat button becomes a check/confirm button, and the message section says who won or that the attacker retreated. Nothing else may happen until the attacker presses that final check button.
+
+After battle dismissal, the active player returns to the normal post-reinforcement action choice with `Attack` and `Fortify` available, unless the game has ended. The active player may attack again if a legal source-target pair remains and the pair has not already been used this turn.
+
+### Combat Score
+
+Every battle side receives one score between `0` and `10`.
+
+The score affects only that side's die distribution. It does not directly change troop count, casualty count, or the Risk-like comparison rules.
+
+Troop score values are:
+
+| Troop type | Score value |
+| --- | ---: |
+| Heavy | 2.5 |
+| Cavalry | 5 |
+| Elite | 7.5 |
+| Leader | 9 |
+
+The leader is intentionally better than elite but below the endpoint score of `10`, so a leader-only challenge distribution remains valid.
+
+For troop counts:
+
+```text
+H = heavy count
+C = cavalry count
+E = elite count
+L = leader count
+```
+
+The mean score is:
+
+```text
+mu = (2.5H + 5C + 7.5E + 9L) / (H + C + E + L)
+```
+
+This requires at least one troop in the battle force.
+
+In regular mode, the battle score is deterministic:
+
+```text
+S = mu
+```
+
+In challenge mode, the battle force defines a beta distribution over scores. Let:
+
+```text
+p = mu / 10
+kappa = 20
+alpha = kappa * p
+beta = kappa * (1 - p)
+Y ~ Beta(alpha, beta)
+S = 10Y
+```
+
+With leader score `9`, a leader-only force has:
+
+```text
+p = 0.9
+alpha = 18
+beta = 2
+```
+
+The beta score distribution has mean `mu`. Larger `kappa` would make challenge scores cluster more tightly around `mu`; smaller `kappa` would make challenge outcomes more variable. The current implementation target is `kappa = 20`.
+
+### Score To Dice
+
+Scores are converted into role-specific tilted six-sided dice.
+
+First center the score:
+
+```text
+q(S) = (S - 5) / 5
+```
+
+Attacker tilt:
+
+```text
+tA(S) =
+  kAminus * q(S), if 0 <= S <= 5
+  kAplus  * q(S), if 5 < S <= 10
+```
+
+Defender tilt:
+
+```text
+tD(S) =
+  kDminus * q(S), if 0 <= S <= 5
+  kDplus  * q(S), if 5 < S <= 10
+```
+
+Calibrated constants:
+
+| Constant | Value |
+| --- | ---: |
+| `kAminus` | 0.14331904306524929 |
+| `kAplus` | 0.27527774317548487 |
+| `kDminus` | 0.11630715538926006 |
+| `kDplus` | 0.21211393558380784 |
+
+For a die face `j` in `{1, 2, 3, 4, 5, 6}`:
+
+```text
+P_t(j) = exp(t * (j - 3.5)) / sum(r = 1..6) exp(t * (r - 3.5))
+```
+
+At score `5`, tilt is `0` and the die is fair. Above `5`, higher faces become more likely. Below `5`, lower faces become more likely.
+
+The tilt constants are role-specific because attackers can roll up to three dice, defenders can roll up to two dice, and ties favor the defender.
+
+### Dice Rolls
+
+For each battle roll:
+
+```text
+attackerDice = min(3, surviving committed attacking troops)
+defenderDice = min(2, surviving defending troops)
+comparisonCount = min(attackerDice, defenderDice)
+```
+
+Roll all dice from the appropriate tilted distribution. Sort attacker dice high-to-low and defender dice high-to-low. Compare the highest dice side by side.
+
+For each comparison:
+
+- if the attacker die is strictly greater, the defender loses one troop
+- otherwise, the attacker loses one troop
+
+Ties favor the defender.
+
+The number of troops that die in one roll is always `comparisonCount`.
+
+### Casualties
+
+When a troop is lost, randomly sample one troop from that side's remaining battle force.
+
+Rules:
+
+- Heavy, cavalry, and elite troops are sampled uniformly by individual troop.
+- Leaders are excluded from casualty sampling while any non-leader troop remains on that side.
+- A leader can die only if it is the last remaining troop on that side.
+- Captured spies are not troops and are never casualty candidates.
+
+Examples:
+
+- If a force has `2 heavy`, `1 elite`, and no leader, a casualty has a `2/3` chance to be heavy and `1/3` chance to be elite.
+- If a force has `1 heavy` and `1 leader`, the heavy must die before the leader can die.
+- If a force has only `1 leader`, the leader can die.
+
+When an attacking troop dies, subtract it from the surviving committed attackers and from the source territory. When a defending troop dies, subtract it from the surviving defenders and from the target territory.
+
+### Battle End
+
+Battle ends in one of three ways:
+
+1. All defending troops die.
+2. All committed attacking troops die.
+3. The attacker retreats after at least one roll and confirmation.
+
+If all defending troops die:
+
+- the attacker conquers the target territory
+- all surviving committed attacking troops move from source to target
+- uncommitted source troops remain in source
+- the target territory changes owner to the attacker
+- captured-spy custody/release rules run for the conquered territory
+- region control changes and elimination checks run after ownership changes
+
+If all committed attacking troops die:
+
+- the target remains owned by the defender
+- the source keeps only the troops that were left behind
+- the attacker may continue attacking elsewhere after dismissing the final result
+
+If the attacker retreats:
+
+- surviving committed attacking troops remain on the source territory
+- the target remains owned by the defender
+- the same source-target pair remains blocked for the turn
+- the attacker may continue attacking elsewhere after dismissing the final result
+
+### Pause, Refresh, And Removal During Battle
+
+Pause must preserve locked attacks.
+
+Snapshots must preserve:
+
+- source territory
+- target territory
+- committed attacking troops
+- surviving attacking troops
+- surviving defending troops
+- attacker score, if already submitted/computed
+- defender score, if already submitted/computed
+- latest roll
+- whether at least one roll has happened
+- terminal result, if present
+- used source-target pairs for the turn
+
+Completed scores persist through pause, refresh, and reconnect. If the game pauses while a player is still inside an unfinished challenge, that unfinished challenge is restarted on resume. The score is not sampled until the challenge button is pressed and submitted.
+
+The normal pause button is disabled while this device is actively doing its challenge interaction. Forced pause can still happen because of refresh/close or sync disconnect. Local refresh/close during a challenge restores into pause. Sync disconnect during a challenge pauses the host game like any other disconnect.
+
+If a player is removed during gameplay while an attack is active:
+
+- active attacks are not canceled
+- if the removed player is not participating in the active battle, the battle continues from its locked state after redistribution/pause handling
+- if the removed player is the attacker or defender in the active battle, the implementation must resolve this explicitly before resume; the host must not leave a battle requiring input from a removed player
+- if fewer than two players remain, the game ends
 
 ## Fortify
 
@@ -297,11 +635,13 @@ During another player's turn, inactive sync devices show only the map using the 
 Sync devices update from committed host facts only. Host snapshots are viewer-specific during turns: the active player may receive their private spy intel or active action sub-state, while passive viewers receive the same committed map facts with private turn sub-state removed. Verification should include live connected active-turn and passive-turn sync screenshots so this privacy boundary remains visible.
 
 - after reinforcements are finalized
-- after future attacks resolve or otherwise commit
+- after attack lock, battle rolls, casualties, retreat, conquest, or final battle dismissal commit
 - after fortify/end-turn commits
 - after player removal and redistribution commits
 
 The active player's provisional reinforcement edits are local to that player until commit. Spy target selection, spy confirmation sheets, and successful spy intel are also local/private. The only defender-facing spy event is the failed-spy captured notification.
+
+Attack setup selections are local until the attacker confirms committed troops. Once an attack is locked, the host/shared game state owns the battle. In sync mode, the attacker and defender receive the battle modal; other players receive only committed map facts such as live troop totals and ownership changes.
 
 ## Player Removal During Gameplay
 
@@ -367,7 +707,7 @@ Action cancellation rules:
 - active spy intel is canceled and the spy survives
 - active reinforcements are canceled and undone
 - active fortify is canceled
-- active attacks are not canceled when attacks exist later; they continue from their locked state
+- active locked attacks are not canceled; they continue from their preserved battle state unless the removed player is a battle participant and the implementation resolves that special case before resume
 
 If a territory containing captured spies is assigned during redistribution, custody of those spies transfers to the new territory owner. Any captured spy owned by the new territory owner is released immediately.
 
@@ -386,7 +726,7 @@ Committed gameplay facts should be sent promptly enough that the host can resume
 - finalized reinforcement troop placements
 - fortify/end-turn result
 - player removal and redistribution
-- future attack lock and battle state
+- attack lock, battle scores, latest dice roll, casualties, retreat, conquest, and final battle dismissal
 
 Transient presentation state remains local:
 

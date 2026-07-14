@@ -104,6 +104,22 @@ function isTurnCommand(value: unknown): value is TurnCommand {
     return isReinforcement(command.reinforcement);
   }
 
+  if (command.type === "commitAttack") {
+    return typeof command.sourceTerritoryId === "string" &&
+      typeof command.targetTerritoryId === "string" &&
+      isTroopCounts(command.attackingTroops);
+  }
+
+  if (command.type === "submitBattleScore") {
+    return typeof command.battleId === "string" &&
+      typeof command.score === "number" &&
+      Number.isFinite(command.score);
+  }
+
+  if (command.type === "rollBattle" || command.type === "retreatBattle" || command.type === "dismissBattle") {
+    return typeof command.battleId === "string";
+  }
+
   if (command.type === "dismissNotification") {
     return typeof command.notificationId === "string";
   }

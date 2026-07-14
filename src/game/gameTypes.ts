@@ -8,6 +8,8 @@ export type DraftStyle = "random" | "roundRobin" | "snake";
 
 export type AllocationStyle = "manual" | "random";
 
+export type AttackStyle = "challenge" | "regular";
+
 export type PickTimeLimit = 0 | 5 | 10 | 15;
 
 export type TroopAllocationTimeLimit = 0 | 60 | 120 | 180 | 240 | 300;
@@ -28,6 +30,7 @@ export type GameConfig = {
   pickTimeLimit: PickTimeLimit;
   allocationStyle: AllocationStyle;
   troopAllocationTimeLimit: TroopAllocationTimeLimit;
+  attackStyle: AttackStyle;
 };
 
 export type TerritoryOwnerMap = Record<string, string | null>;
@@ -70,7 +73,7 @@ export type AllocationState = {
   playerAllocations: Record<string, PlayerAllocation>;
 };
 
-export type TurnStage = "reinforcementReady" | "reinforcementBuild" | "reinforcementPlace" | "actions" | "spyTarget" | "spyIntel";
+export type TurnStage = "reinforcementReady" | "reinforcementBuild" | "reinforcementPlace" | "actions" | "spyTarget" | "spyIntel" | "battle";
 
 export type SpyStatus = {
   status: "available" | "captured" | "dead";
@@ -91,6 +94,41 @@ export type ReinforcementState = {
   territories: Record<string, TroopCounts>;
 };
 
+export type BattleDiceRoll = {
+  attackerDice: number[];
+  defenderDice: number[];
+  attackerLosses: TroopType[];
+  defenderLosses: TroopType[];
+};
+
+export type BattleResult =
+  | {
+      type: "attackerWon";
+    }
+  | {
+      type: "defenderWon";
+    }
+  | {
+      type: "retreated";
+    };
+
+export type BattleState = {
+  id: string;
+  attackerPlayerId: string;
+  defenderPlayerId: string;
+  sourceTerritoryId: string;
+  targetTerritoryId: string;
+  committedAttackingTroops: TroopCounts;
+  initialDefendingTroops: TroopCounts;
+  attackingTroops: TroopCounts;
+  defendingTroops: TroopCounts;
+  attackerScore: number | null;
+  defenderScore: number | null;
+  latestRoll: BattleDiceRoll | null;
+  hasRolled: boolean;
+  result: BattleResult | null;
+};
+
 export type TurnCommand =
   | {
       type: "confirmSpy";
@@ -106,6 +144,29 @@ export type TurnCommand =
   | {
       type: "commitReinforcements";
       reinforcement: ReinforcementState;
+    }
+  | {
+      type: "commitAttack";
+      sourceTerritoryId: string;
+      targetTerritoryId: string;
+      attackingTroops: TroopCounts;
+    }
+  | {
+      type: "submitBattleScore";
+      battleId: string;
+      score: number;
+    }
+  | {
+      type: "rollBattle";
+      battleId: string;
+    }
+  | {
+      type: "retreatBattle";
+      battleId: string;
+    }
+  | {
+      type: "dismissBattle";
+      battleId: string;
     }
   | {
       type: "fortify";
@@ -143,6 +204,8 @@ export type TurnState = {
   spies: Record<string, SpyStatus>;
   spyIntel: SpyIntelState | null;
   reinforcement: ReinforcementState | null;
+  battle: BattleState | null;
+  completedAttacks: string[];
 };
 
 export type GameState = {

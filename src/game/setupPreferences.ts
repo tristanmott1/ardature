@@ -1,5 +1,5 @@
 import type { GameConfig, GamePlayer, PlayerColor } from "./gameTypes";
-import { ALLOCATION_STYLES, PICK_TIME_LIMITS, PLAYER_COLORS, TROOP_ALLOCATION_TIME_LIMITS, createPlayer } from "./gameState";
+import { ALLOCATION_STYLES, ATTACK_STYLES, PICK_TIME_LIMITS, PLAYER_COLORS, TROOP_ALLOCATION_TIME_LIMITS, createPlayer } from "./gameState";
 
 export type SetupPreferences = {
   localPlayers: SetupPreferencePlayer[];
@@ -24,6 +24,7 @@ const DEFAULT_CONFIG: GameConfig = {
   pickTimeLimit: 0,
   allocationStyle: "manual",
   troopAllocationTimeLimit: 0,
+  attackStyle: "regular",
 };
 
 const DEFAULT_PREFERENCES: SetupPreferences = {
@@ -141,12 +142,16 @@ function normalizeConfig(value: unknown): GameConfig {
   const troopAllocationTimeLimit = TROOP_ALLOCATION_TIME_LIMITS.includes(config?.troopAllocationTimeLimit as GameConfig["troopAllocationTimeLimit"])
     ? config.troopAllocationTimeLimit as GameConfig["troopAllocationTimeLimit"]
     : DEFAULT_CONFIG.troopAllocationTimeLimit;
+  const attackStyle = ATTACK_STYLES.includes(config?.attackStyle as GameConfig["attackStyle"])
+    ? config.attackStyle as GameConfig["attackStyle"]
+    : DEFAULT_CONFIG.attackStyle;
 
   return {
     draftStyle,
     pickTimeLimit: draftStyle === "random" ? 0 : pickTimeLimit,
     allocationStyle,
     troopAllocationTimeLimit: allocationStyle === "random" ? 0 : troopAllocationTimeLimit,
+    attackStyle,
   };
 }
 

@@ -1,10 +1,12 @@
-import { Check } from "lucide-react";
+import { Check, X } from "lucide-react";
 import {
   addTroops,
   canAddTroop,
   remainingReinforcementTroops,
   remainingTroops,
+  subtractTroops,
   territoryTroops,
+  troopTotal,
 } from "../game/gameState";
 import type { GamePlayer, GameState, ReinforcementState, TerritoryOwnerMap, TroopCounts, TroopType } from "../game/gameTypes";
 import type { CapturedSpyView } from "../game/gameView";
@@ -45,6 +47,17 @@ type TroopSectionProps =
       selectedTerritory: GeneratedTerritoryData | null;
     }
   | {
+      canFinish: boolean;
+      committedTroops: TroopCounts;
+      mode: "attack";
+      onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
+      onFinish: () => void;
+      player: GamePlayer;
+      sourceTerritory: GeneratedTerritoryData;
+      sourceTroops: TroopCounts;
+      targetTerritory: GeneratedTerritoryData;
+    }
+  | {
       capturedSpies: CapturedSpyView[];
       mode: "info";
       players: GamePlayer[];
@@ -60,6 +73,8 @@ export function TroopSection(props: TroopSectionProps) {
       return <InitialAllocationTroopSection {...props} />;
     case "reinforcement":
       return <ReinforcementTroopSection {...props} />;
+    case "attack":
+      return <AttackTroopSection {...props} />;
     case "info":
       return <InfoTroopSection {...props} />;
   }
@@ -98,16 +113,22 @@ export function TurnActionPanel({
   instruction,
   spyMissing,
   onDismissSpy,
+  onAttack,
+  onCancelAttack,
   onFortify,
   onReinforce,
   onSpy,
   player,
   stage,
   spyReturnStage,
+  attackSetupActive,
 }: {
+  attackSetupActive: boolean;
   canSpy: boolean;
   instruction: string;
   spyMissing: boolean;
+  onAttack: () => void;
+  onCancelAttack: () => void;
   onDismissSpy: () => void;
   onFortify: () => void;
   onReinforce: () => void;
@@ -127,6 +148,13 @@ export function TurnActionPanel({
     <section className="game-section-panel turn-action-panel">
       <p className="turn-action-instruction">{instruction}</p>
       <div className="turn-action-buttons">
+        {attackSetupActive ? (
+          <button className="secondary icon-text-button turn-stage-button" type="button" onClick={onCancelAttack}>
+            <X size={18} />
+            Cancel
+          </button>
+        ) : (
+          <>
         {spyMissing ? (
           <span className="turn-spy-button turn-spy-spacer" aria-hidden="true" />
         ) : (
@@ -145,12 +173,14 @@ export function TurnActionPanel({
           </button>
         ) : (
           <>
-            <button className="secondary icon-text-button turn-stage-button" type="button" disabled>
+            <button className="secondary icon-text-button turn-stage-button" type="button" onClick={onAttack}>
               Attack
             </button>
             <button className="primary icon-text-button turn-stage-button" type="button" onClick={onFortify}>
               Fortify
             </button>
+          </>
+        )}
           </>
         )}
       </div>
@@ -195,6 +225,40 @@ function ReinforcementTroopSection({
         />
         {selectedTerritory && selectedTroops ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
         <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Finish reinforcements">
+          <Check size={20} />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function AttackTroopSection({
+  canFinish,
+  committedTroops,
+  onAdjustTroop,
+  onFinish,
+  player,
+  sourceTerritory,
+  sourceTroops,
+  targetTerritory,
+}: Extract<TroopSectionProps, { mode: "attack" }>) {
+  const remaining = subtractTroops(sourceTroops, committedTroops);
+  const canAddType = (troopType: TroopType) => remaining[troopType] > 0 && troopTotal(remaining) > 1;
+  const canRemoveType = (troopType: TroopType) => committedTroops[troopType] > 0;
+
+  return (
+    <section className="game-section-panel troop-section troop-section-allocation troop-section-attack">
+      <div className="troop-placement-controls">
+        <TroopPlacementRows
+          canAddType={canAddType}
+          canRemoveType={canRemoveType}
+          onAdjustTroop={onAdjustTroop}
+          player={player}
+          remaining={remaining}
+          selectedTroops={committedTroops}
+          territoryName={`${sourceTerritory.name} to ${targetTerritory.name}`}
+        />
+        <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Confirm attack">
           <Check size={20} />
         </button>
       </div>

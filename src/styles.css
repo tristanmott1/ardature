@@ -121,6 +121,34 @@ button:focus-visible,
     opacity 140ms ease;
 }
 
+.territory-fill.battleSource {
+  animation: battle-source-pulse 520ms ease-in-out infinite alternate;
+}
+
+.territory-fill.battleTarget {
+  animation: battle-target-pulse 920ms ease-in-out infinite alternate;
+}
+
+@keyframes battle-source-pulse {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.42;
+  }
+}
+
+@keyframes battle-target-pulse {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.48;
+  }
+}
+
 .static-map-ink {
   pointer-events: none;
 }
@@ -337,7 +365,10 @@ button:focus-visible,
   align-items: center;
 }
 
-.turn-action-buttons .turn-stage-button:only-child,
+.turn-action-buttons .turn-stage-button:only-child {
+  grid-column: 1 / 4;
+}
+
 .turn-action-buttons .turn-stage-button:nth-child(2):last-child {
   grid-column: 2 / 4;
 }
@@ -1211,6 +1242,81 @@ select {
 
 .notification-modal .modal-actions {
   justify-content: center;
+}
+
+.battle-modal {
+  width: min(360px, calc(100vw - 32px));
+  gap: 14px;
+}
+
+.battle-army {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.battle-army-heading {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.battle-center {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+.battle-message {
+  min-height: 1.1rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.battle-dice-button {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.battle-dice-button:disabled {
+  opacity: 0.56;
+}
+
+.battle-dice-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.battle-die {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 2px solid #111111;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #111111;
+  font-weight: 900;
+}
+
+.battle-die[data-empty="true"] {
+  opacity: 0.28;
+}
+
+.battle-challenge-button {
+  width: 100%;
 }
 
 .decision-modal {

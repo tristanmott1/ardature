@@ -449,7 +449,7 @@ The host should always maintain enough authoritative state to resume the game af
 - Army build submitted: immediate.
 - Ready/unready-by-rule and phase advance: immediate.
 - Allocation add/remove changes: send as real allocation data, batched or lightly throttled as needed, and flushed on ready, pause, visibility change, or page unload where practical.
-- Turn-loop committed facts: immediate. This includes turn start, spy result, captured-spy territory, reinforcement army submission, finalized reinforcement placements, fortify/end-turn result, player removal/redistribution, and future attack locks.
+- Turn-loop committed facts: immediate. This includes turn start, spy result, captured-spy territory, reinforcement army submission, finalized reinforcement placements, attack lock, challenge score submissions, battle rolls, casualties, retreat, conquest, final battle dismissal, fortify/end-turn result, and player removal/redistribution.
 - Local selected territory, map focus, camera position, open modal, draft pending preview, read-only inspection, spy target preview before confirmation, successful spy intel view state, and provisional reinforcement placement edits: never synced.
 
 This principle should continue through future phases: the host needs the latest committed model needed to resume, while temporary presentation state remains device-local.
@@ -458,7 +458,9 @@ Local map-selection UI state is one explicit model, not a set of phase-specific 
 
 Player names and colors travel together in QR answers and host-authored snapshots. UI should not render a known player name with an unknown or guessed color. Shared color helpers live in `src/game/playerColors.ts`; player bars, dots, troop icon owner rings, and setup controls should use those helpers rather than defining separate color mappings.
 
-During sync gameplay turns, inactive devices render only a read-only/explore-style map from their own viewer perspective. They do not see another player's pending selections, automatic focus, confirmation sheets, provisional reinforcement edits, or successful spy intel. They receive visible updates only when the host broadcasts committed facts, such as finalized reinforcements, future resolved attacks, fortify/end-turn, or player removal. A failed spy is the one defender-facing spy event: the defender receives a local notification that they captured the active player's spy in the target territory.
+During sync gameplay turns, inactive devices render only a read-only/explore-style map from their own viewer perspective. They do not see another player's pending selections, automatic focus, confirmation sheets, provisional reinforcement edits, attack setup selections, or successful spy intel. They receive visible updates only when the host broadcasts committed facts, such as finalized reinforcements, battle casualties, conquest, fortify/end-turn, or player removal. A failed spy is the one defender-facing spy event: the defender receives a local notification that they captured the active player's spy in the target territory.
+
+Locked battles are authoritative game state. Attack source/target selection and committed-troop drafting are local UI until the attacker confirms the attack. After lock, sync shows the battle modal only to the attacker and defender; other connected players see committed map facts plus public battle location cues. For non-participants, the source/attacking territory flashes at a higher frequency and the target/defending territory uses a slower pulse. Non-participants remain in explore mode and may still select territories, but the battle flash overrides the normal selected-fill color on the flashing source/target territories. The attacker is the only device that may roll, retreat, or dismiss the final battle result. Challenge scores are submitted immediately when the challenge button is pressed. Scores already submitted or computed persist through pause/reconnect; unfinished challenges restart on resume.
 
 Turn action helpers in `src/game/gameState.ts` should own composed game-state cleanup. For example, starting reinforcements and ending the turn with fortify both clear transient spy selection inside game-state helpers; `App.tsx` should call those complete actions rather than composing `cancelSpySelection(...)` with another state transition inline.
 
@@ -480,11 +482,11 @@ This structure now supports the next turn-loop milestone:
 - viewer-specific troop visibility rules
 - spy targeting and temporary intel
 - reinforcement army build and placement
-- attack button shown but disabled
+- attack setup and locked battle resolution
 - fortify button ending the turn
 - gameplay player removal and redistribution
 - troop-count markers
 - local pass-and-play
 - WebRTC sync mode with pause/reconnect
 
-The setup/draft milestone solves player setup, sync connection, draft ownership, persistence, and map interaction. The troop allocation milestone adds army building, troop placement, viewer-specific read-only troop visibility, and troop-count markers. The gameplay-turns milestone adds the first actual turn loop, spy, reinforcements, and turn advancement while leaving combat and real fortification for later milestones.
+The setup/draft milestone solves player setup, sync connection, draft ownership, persistence, and map interaction. The troop allocation milestone adds army building, troop placement, viewer-specific read-only troop visibility, and troop-count markers. The gameplay-turns milestone adds the turn loop, spy, reinforcements, attack setup/battle, and turn advancement while leaving real fortification for a later milestone.

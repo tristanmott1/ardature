@@ -3,11 +3,14 @@ import { generatedMapConnections } from "../map/generated/mapConnections";
 import type { MapSkin, TerritoryState } from "../map/mapTypes";
 import { territoriesInRegion } from "../map/territoryLookup";
 import { MIXTURE_TROOP_TYPES, armyCountsForMarker, reinforcementCountsForMarker } from "./armyBuild";
+import { challengeScoreForTroops, combatScoreForTroops, rollCombatDice, sampleCasualty } from "./combat";
 import type {
   AllocationStyle,
   AllocationState,
   ArmyMarker,
   AppPhase,
+  AttackStyle,
+  BattleState,
   DraftState,
   DraftStyle,
   GameNotification,
@@ -29,6 +32,7 @@ import type {
 
 export const PLAYER_COLORS: PlayerColor[] = ["green", "blue", "yellow", "red", "purple", "black"];
 export const ALLOCATION_STYLES: AllocationStyle[] = ["manual", "random"];
+export const ATTACK_STYLES: AttackStyle[] = ["regular", "challenge"];
 export const PICK_TIME_LIMITS: PickTimeLimit[] = [5, 10, 15, 0];
 export const TROOP_ALLOCATION_TIME_LIMITS: TroopAllocationTimeLimit[] = [60, 120, 180, 240, 300, 0];
 export const LOCAL_GAME_KEY = "ardature.localGame.v1";
@@ -41,6 +45,7 @@ const DEFAULT_CONFIG: GameConfig = {
   pickTimeLimit: 0,
   allocationStyle: "manual",
   troopAllocationTimeLimit: 0,
+  attackStyle: "regular",
 };
 
 const TERRITORY_IDS = generatedMapData.territories.map((territory) => territory.id);
@@ -216,6 +221,7 @@ export function updateSetupConfig(state: GameState, updates: Partial<GameConfig>
       ...config,
       pickTimeLimit: config.draftStyle === "random" ? 0 : config.pickTimeLimit,
       troopAllocationTimeLimit: config.allocationStyle === "random" ? 0 : config.troopAllocationTimeLimit,
+      attackStyle: config.attackStyle,
     },
   };
 }
@@ -244,17 +250,31 @@ export function createRegionControl(): Record<string, string | null> {
   return Object.fromEntries(REGION_IDS.map((regionId) => [regionId, null]));
 }
 
-export function createTerritoryStates(players: GamePlayer[], ownership: TerritoryOwnerMap | null, selectedTerritoryId: string | null): Record<string, TerritoryState> {
+export function createTerritoryStates(
+  players: GamePlayer[],
+  ownership: TerritoryOwnerMap | null,
+  selectedTerritoryId: string | string[] | null,
+  battleCue: { sourceTerritoryId: string; targetTerritoryId: string } | null = null,
+): Record<string, TerritoryState> {
   const playerById = new Map(players.map((player) => [player.id, player]));
+  const selectedTerritoryIds = new Set(Array.isArray(selectedTerritoryId) ? selectedTerritoryId : selectedTerritoryId ? [selectedTerritoryId] : []);
 
   return Object.fromEntries(
     TERRITORY_IDS.map((territoryId) => {
       const ownerId = ownership?.[territoryId] ?? null;
+      const status = battleCue?.sourceTerritoryId === territoryId
+        ? "battleSource"
+        : battleCue?.targetTerritoryId === territoryId
+          ? "battleTarget"
+          : selectedTerritoryIds.has(territoryId)
+            ? "selected"
+            : "unselected";
+
       return [
         territoryId,
         {
           skin: colorForPlayer(ownerId ? playerById.get(ownerId) : undefined),
-          status: selectedTerritoryId === territoryId ? "selected" : "unselected",
+          status,
         },
       ];
     }),
@@ -981,6 +1001,258 @@ export function finishReinforcements(state: GameState, playerId: string): GameSt
   };
 }
 
+export function canAttackFromTerritory(state: GameState, playerId: string, territoryId: string) {
+  const ownership = state.draft?.ownership;
+  return Boolean(
+    state.phase === "turn" &&
+      state.turn?.currentPlayerId === playerId &&
+      state.turn.stage === "actions" &&
+      ownership?.[territoryId] === playerId &&
+      territoryTroopTotal(state.allocation, territoryId) > 1,
+  );
+}
+
+export function canAttackTargetTerritory(state: GameState, playerId: string, sourceTerritoryId: string, targetTerritoryId: string) {
+  const ownership = state.draft?.ownership;
+  const connections: readonly string[] = generatedMapConnections[sourceTerritoryId as keyof typeof generatedMapConnections] ?? [];
+
+  return Boolean(
+    canAttackFromTerritory(state, playerId, sourceTerritoryId) &&
+      ownership?.[targetTerritoryId] &&
+      ownership[targetTerritoryId] !== playerId &&
+      connections.includes(targetTerritoryId),
+  );
+}
+
+export function canCommitAttack(state: GameState, playerId: string, sourceTerritoryId: string, targetTerritoryId: string, attackingTroops: TroopCounts) {
+  if (!validTroopCounts(attackingTroops) || !canAttackTargetTerritory(state, playerId, sourceTerritoryId, targetTerritoryId)) {
+    return false;
+  }
+
+  if (state.turn?.completedAttacks.includes(attackPairKey(sourceTerritoryId, targetTerritoryId))) {
+    return false;
+  }
+
+  const sourceTroops = territoryTroops(state.allocation, sourceTerritoryId);
+  const leftBehind = subtractTroops(sourceTroops, attackingTroops);
+
+  return troopTotal(attackingTroops) > 0 &&
+    troopTotal(leftBehind) > 0 &&
+    validTroopCounts(leftBehind);
+}
+
+export function commitAttack(state: GameState, playerId: string, sourceTerritoryId: string, targetTerritoryId: string, attackingTroops: TroopCounts): GameState {
+  const turn = state.turn;
+  const ownership = state.draft?.ownership;
+  const defenderPlayerId = ownership?.[targetTerritoryId] ?? null;
+
+  if (!turn || !defenderPlayerId || !canCommitAttack(state, playerId, sourceTerritoryId, targetTerritoryId, attackingTroops)) {
+    return state;
+  }
+
+  const defendingTroops = territoryTroops(state.allocation, targetTerritoryId);
+  const usesChallenge = state.config.attackStyle === "challenge";
+
+  return {
+    ...state,
+    turn: {
+      ...turn,
+      stage: "battle",
+      spyIntel: null,
+      spyReturnStage: null,
+      reinforcement: null,
+      battle: {
+        id: crypto.randomUUID(),
+        attackerPlayerId: playerId,
+        defenderPlayerId,
+        sourceTerritoryId,
+        targetTerritoryId,
+        committedAttackingTroops: createTroopCounts(attackingTroops),
+        initialDefendingTroops: createTroopCounts(defendingTroops),
+        attackingTroops: createTroopCounts(attackingTroops),
+        defendingTroops: createTroopCounts(defendingTroops),
+        attackerScore: usesChallenge ? null : combatScoreForTroops(attackingTroops),
+        defenderScore: usesChallenge && state.mode === "sync" ? null : combatScoreForTroops(defendingTroops),
+        latestRoll: null,
+        hasRolled: false,
+        result: null,
+      },
+      completedAttacks: [
+        ...turn.completedAttacks,
+        attackPairKey(sourceTerritoryId, targetTerritoryId),
+      ],
+    },
+  };
+}
+
+export function submitBattleScore(state: GameState, playerId: string, battleId: string, score: number): GameState {
+  const turn = state.turn;
+  const battle = turn?.battle;
+  if (state.phase !== "turn" || !turn || turn.stage !== "battle" || !battle || battle.id !== battleId || !Number.isFinite(score)) {
+    return state;
+  }
+
+  const boundedScore = Math.max(0, Math.min(10, score));
+  if (playerId === battle.attackerPlayerId && battle.attackerScore === null) {
+    return {
+      ...state,
+      turn: {
+        ...turn,
+        battle: {
+          ...battle,
+          attackerScore: boundedScore,
+        },
+      },
+    };
+  }
+
+  if (playerId === battle.defenderPlayerId && battle.defenderScore === null) {
+    return {
+      ...state,
+      turn: {
+        ...turn,
+        battle: {
+          ...battle,
+          defenderScore: boundedScore,
+        },
+      },
+    };
+  }
+
+  return state;
+}
+
+export function rollBattle(state: GameState, playerId: string, battleId: string, random = Math.random): GameState {
+  const turn = state.turn;
+  const battle = turn?.battle;
+  const allocation = state.allocation;
+  if (
+    state.phase !== "turn" ||
+    !turn ||
+    turn.stage !== "battle" ||
+    !battle ||
+    battle.id !== battleId ||
+    battle.attackerPlayerId !== playerId ||
+    battle.result ||
+    battle.attackerScore === null ||
+    battle.defenderScore === null ||
+    !allocation
+  ) {
+    return state;
+  }
+
+  const attackerDice = rollCombatDice(battle.attackerScore, "attacker", Math.min(3, troopTotal(battle.attackingTroops)), random);
+  const defenderDice = rollCombatDice(battle.defenderScore, "defender", Math.min(2, troopTotal(battle.defendingTroops)), random);
+  const comparisonCount = Math.min(attackerDice.length, defenderDice.length);
+  const attackerLosses: TroopType[] = [];
+  const defenderLosses: TroopType[] = [];
+  let attackingTroops = battle.attackingTroops;
+  let defendingTroops = battle.defendingTroops;
+  let nextAllocation = allocation;
+
+  // Compare the highest dice side by side, with ties going to the defender.
+  for (let index = 0; index < comparisonCount; index += 1) {
+    if (attackerDice[index] > defenderDice[index]) {
+      const casualty = sampleCasualty(defendingTroops, random);
+      if (casualty) {
+        defenderLosses.push(casualty);
+        defendingTroops = subtractOneTroop(defendingTroops, casualty);
+        nextAllocation = adjustCommittedTerritoryTroop(nextAllocation, battle.defenderPlayerId, battle.targetTerritoryId, casualty, -1);
+      }
+    } else {
+      const casualty = sampleCasualty(attackingTroops, random);
+      if (casualty) {
+        attackerLosses.push(casualty);
+        attackingTroops = subtractOneTroop(attackingTroops, casualty);
+        nextAllocation = adjustCommittedTerritoryTroop(nextAllocation, battle.attackerPlayerId, battle.sourceTerritoryId, casualty, -1);
+      }
+    }
+  }
+
+  const rolledBattle = {
+    ...battle,
+    attackingTroops,
+    defendingTroops,
+    latestRoll: {
+      attackerDice,
+      defenderDice,
+      attackerLosses,
+      defenderLosses,
+    },
+    hasRolled: true,
+    result: troopTotal(defendingTroops) === 0
+      ? { type: "attackerWon" as const }
+      : troopTotal(attackingTroops) === 0
+        ? { type: "defenderWon" as const }
+        : null,
+  };
+  const rolledState = {
+    ...state,
+    allocation: nextAllocation,
+    turn: {
+      ...turn,
+      battle: rolledBattle,
+    },
+  };
+
+  return rolledBattle.result?.type === "attackerWon"
+    ? finishBattleConquest(rolledState, rolledBattle)
+    : rolledState;
+}
+
+export function retreatBattle(state: GameState, playerId: string, battleId: string): GameState {
+  const turn = state.turn;
+  const battle = turn?.battle;
+  if (state.phase !== "turn" || !turn || turn.stage !== "battle" || !battle || battle.id !== battleId || battle.attackerPlayerId !== playerId || !battle.hasRolled || battle.result) {
+    return state;
+  }
+
+  return {
+    ...state,
+    turn: {
+      ...turn,
+      battle: {
+        ...battle,
+        result: { type: "retreated" },
+      },
+    },
+  };
+}
+
+export function dismissBattle(state: GameState, playerId: string, battleId: string): GameState {
+  const turn = state.turn;
+  const battle = turn?.battle;
+  if (state.phase !== "turn" || !turn || turn.stage !== "battle" || !battle || battle.id !== battleId || battle.attackerPlayerId !== playerId || !battle.result) {
+    return state;
+  }
+
+  return {
+    ...state,
+    turn: {
+      ...turn,
+      stage: "actions",
+      battle: null,
+    },
+  };
+}
+
+export function sampleBattleChallengeScore(state: GameState, playerId: string, battleId: string) {
+  const battle = state.turn?.battle;
+  if (!battle || battle.id !== battleId) {
+    return null;
+  }
+
+  if (playerId === battle.attackerPlayerId && battle.attackerScore === null) {
+    return challengeScoreForTroops(battle.attackingTroops);
+  }
+
+  if (playerId === battle.defenderPlayerId && battle.defenderScore === null) {
+    return challengeScoreForTroops(battle.defendingTroops);
+  }
+
+  return null;
+}
+
 export function commitReinforcements(state: GameState, playerId: string, reinforcement: ReinforcementState): GameState {
   const turn = state.turn;
   if (state.phase !== "turn" || !turn || turn.currentPlayerId !== playerId || !validCommittedReinforcement(state, playerId, reinforcement)) {
@@ -1138,6 +1410,26 @@ export function applySyncTurnCommand(state: GameState, playerId: string, command
 
   if (command.type === "commitReinforcements") {
     return commitReinforcements(state, playerId, command.reinforcement);
+  }
+
+  if (command.type === "commitAttack") {
+    return commitAttack(state, playerId, command.sourceTerritoryId, command.targetTerritoryId, command.attackingTroops);
+  }
+
+  if (command.type === "submitBattleScore") {
+    return submitBattleScore(state, playerId, command.battleId, command.score);
+  }
+
+  if (command.type === "rollBattle") {
+    return rollBattle(state, playerId, command.battleId);
+  }
+
+  if (command.type === "retreatBattle") {
+    return retreatBattle(state, playerId, command.battleId);
+  }
+
+  if (command.type === "dismissBattle") {
+    return dismissBattle(state, playerId, command.battleId);
   }
 
   return finishTurnWithFortify(cancelSpySelection(state), playerId);
@@ -1475,6 +1767,11 @@ function removePlayerFromGameplay(state: GameState, playerId: string): GameState
   const removedTerritories = shuffle(ownedTerritoryIds(state.draft.ownership, playerId));
   const removedTroops = shuffle(expandRemovedTroops(gameplayRemovedTroopPool(state, removedPlayer)));
   const populatedTerritories = Object.fromEntries(removedTerritories.map((territoryId) => [territoryId, createTroopCounts()]));
+  const battle = state.turn.battle &&
+    state.turn.battle.attackerPlayerId !== playerId &&
+    state.turn.battle.defenderPlayerId !== playerId
+    ? state.turn.battle
+    : null;
 
   // Spread the removed troop pool across the removed territories first.
   if (removedTerritories.length > 0) {
@@ -1522,10 +1819,11 @@ function removePlayerFromGameplay(state: GameState, playerId: string): GameState
       currentPlayerId: state.turn.currentPlayerId === playerId
         ? nextTurnPlayerId(players, state.turn.originalTurnOrder, playerId) ?? players[0].id
         : state.turn.currentPlayerId,
-      stage: state.turn.stage === "actions" ? "actions" : "reinforcementReady",
+      stage: battle ? "battle" : state.turn.stage === "actions" ? "actions" : "reinforcementReady",
       spyReturnStage: null,
       spyIntel: null,
       reinforcement: null,
+      battle,
       spies: Object.fromEntries(Object.entries(state.turn.spies).filter(([spyPlayerId]) => spyPlayerId !== playerId)),
     },
   }), state.mode === "sync" ? "immediate" : "turnStart", state.mode === "sync" ? undefined : (state.turn.turnNumber + 1));
@@ -1615,6 +1913,8 @@ function createTurnState(players: GamePlayer[], originalTurnOrder: string[], cur
     spies: Object.fromEntries(players.map((player) => [player.id, createAvailableSpy()])),
     spyIntel: null,
     reinforcement: null,
+    battle: null,
+    completedAttacks: [],
   };
 }
 
@@ -1637,6 +1937,8 @@ function advanceTurn(state: GameState): GameState {
     spyReturnStage: null,
     spyIntel: null,
     reinforcement: null,
+    battle: null,
+    completedAttacks: [],
   };
 
   return applyRegionControlChanges({
@@ -2206,7 +2508,7 @@ function gameplayRemovedTroopPool(state: GameState, player: GamePlayer): TroopCo
 }
 
 function turnHasPendingReinforcement(turn: TurnState) {
-  if (turn.stage === "actions") {
+  if (turn.stage === "actions" || turn.stage === "battle") {
     return false;
   }
 
@@ -2442,11 +2744,131 @@ function randomMixtureTroop() {
   return MIXTURE_TROOP_TYPES[Math.floor(Math.random() * MIXTURE_TROOP_TYPES.length)];
 }
 
+function finishBattleConquest(state: GameState, battle: BattleState): GameState {
+  if (!state.draft || !state.allocation || !state.turn) {
+    return state;
+  }
+
+  const attackerAllocation = state.allocation.playerAllocations[battle.attackerPlayerId];
+  const defenderAllocation = state.allocation.playerAllocations[battle.defenderPlayerId];
+  if (!attackerAllocation || !defenderAllocation) {
+    return state;
+  }
+
+  const sourceTroops = attackerAllocation.territories[battle.sourceTerritoryId] ?? createTroopCounts();
+  const attackingTerritories = {
+    ...attackerAllocation.territories,
+    [battle.sourceTerritoryId]: subtractTroops(sourceTroops, battle.attackingTroops),
+    [battle.targetTerritoryId]: createTroopCounts(battle.attackingTroops),
+  };
+  const defendingTerritories = { ...defenderAllocation.territories };
+  delete defendingTerritories[battle.targetTerritoryId];
+
+  const conqueredState = restoreCapturedSpies(markDeadSpiesForEliminatedPlayers({
+    ...state,
+    draft: {
+      ...state.draft,
+      ownership: {
+        ...state.draft.ownership,
+        [battle.targetTerritoryId]: battle.attackerPlayerId,
+      },
+    },
+    allocation: {
+      ...state.allocation,
+      playerAllocations: {
+        ...state.allocation.playerAllocations,
+        [battle.attackerPlayerId]: {
+          ...attackerAllocation,
+          territories: attackingTerritories,
+        },
+        [battle.defenderPlayerId]: {
+          ...defenderAllocation,
+          territories: defendingTerritories,
+        },
+      },
+    },
+  }));
+
+  return applyRegionControlChanges(conqueredState, state.mode === "sync" ? "immediate" : "turnStart", state.turn.turnNumber + 1);
+}
+
+function markDeadSpiesForEliminatedPlayers(state: GameState): GameState {
+  const turn = state.turn;
+  const ownership = state.draft?.ownership;
+  if (!turn || !ownership) {
+    return state;
+  }
+
+  let spies = turn.spies;
+  for (const player of state.players) {
+    if (ownedTerritoryIds(ownership, player.id).length > 0 || spies[player.id]?.status === "dead") {
+      continue;
+    }
+
+    spies = {
+      ...spies,
+      [player.id]: {
+        status: "dead",
+        territoryId: null,
+        custodianPlayerId: null,
+      },
+    };
+  }
+
+  return spies === turn.spies
+    ? state
+    : {
+        ...state,
+        turn: {
+          ...turn,
+          spies,
+        },
+      };
+}
+
+function adjustCommittedTerritoryTroop(allocation: AllocationState, playerId: string, territoryId: string, troopType: TroopType, delta: 1 | -1): AllocationState {
+  const playerAllocation = allocation.playerAllocations[playerId];
+  if (!playerAllocation) {
+    return allocation;
+  }
+
+  const currentTroops = playerAllocation.territories[territoryId] ?? createTroopCounts();
+  const nextTroops = {
+    ...currentTroops,
+    [troopType]: Math.max(0, currentTroops[troopType] + delta),
+  };
+
+  return {
+    ...allocation,
+    playerAllocations: {
+      ...allocation.playerAllocations,
+      [playerId]: {
+        ...playerAllocation,
+        territories: {
+          ...playerAllocation.territories,
+          [territoryId]: nextTroops,
+        },
+      },
+    },
+  };
+}
+
 function addOneTroop(counts: TroopCounts, troopType: TroopType): TroopCounts {
   return {
     ...counts,
     [troopType]: counts[troopType] + 1,
   };
+}
+
+function subtractOneTroop(counts: TroopCounts, troopType: TroopType): TroopCounts {
+  return {
+    ...counts,
+    [troopType]: Math.max(0, counts[troopType] - 1),
+  };
+}
+
+function attackPairKey(sourceTerritoryId: string, targetTerritoryId: string) {
+  return `${sourceTerritoryId}->${targetTerritoryId}`;
 }
 
 function shuffle<T>(items: T[]) {
@@ -2490,12 +2912,14 @@ function normalizeConfig(value: unknown): GameConfig {
   const troopAllocationTimeLimit = TROOP_ALLOCATION_TIME_LIMITS.includes(config.troopAllocationTimeLimit as TroopAllocationTimeLimit)
     ? config.troopAllocationTimeLimit as TroopAllocationTimeLimit
     : 0;
+  const attackStyle = ATTACK_STYLES.includes(config.attackStyle as AttackStyle) ? config.attackStyle as AttackStyle : "regular";
 
   return {
     draftStyle,
     pickTimeLimit: draftStyle === "random" ? 0 : pickTimeLimit,
     allocationStyle,
     troopAllocationTimeLimit: allocationStyle === "random" ? 0 : troopAllocationTimeLimit,
+    attackStyle,
   };
 }
 
@@ -2686,6 +3110,10 @@ function normalizeTurn(value: unknown): TurnState | null {
     spies,
     spyIntel: normalizeSpyIntel(turn.spyIntel),
     reinforcement: normalizeReinforcement(turn.reinforcement),
+    battle: normalizeBattle(turn.battle),
+    completedAttacks: Array.isArray(turn.completedAttacks)
+      ? turn.completedAttacks.filter((value): value is string => typeof value === "string")
+      : [],
   };
 }
 
@@ -2727,9 +3155,76 @@ function normalizeTurnStage(value: unknown): TurnStage {
     value === "reinforcementPlace" ||
     value === "actions" ||
     value === "spyTarget" ||
-    value === "spyIntel"
+    value === "spyIntel" ||
+    value === "battle"
     ? value
     : "reinforcementReady";
+}
+
+function normalizeBattle(value: unknown): BattleState | null {
+  const battle = value as Partial<BattleState>;
+  if (
+    !battle ||
+    typeof battle !== "object" ||
+    typeof battle.id !== "string" ||
+    typeof battle.attackerPlayerId !== "string" ||
+    typeof battle.defenderPlayerId !== "string" ||
+    typeof battle.sourceTerritoryId !== "string" ||
+    typeof battle.targetTerritoryId !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: battle.id,
+    attackerPlayerId: battle.attackerPlayerId,
+    defenderPlayerId: battle.defenderPlayerId,
+    sourceTerritoryId: battle.sourceTerritoryId,
+    targetTerritoryId: battle.targetTerritoryId,
+    committedAttackingTroops: normalizeTroopCounts(battle.committedAttackingTroops ?? battle.attackingTroops),
+    initialDefendingTroops: normalizeTroopCounts(battle.initialDefendingTroops ?? battle.defendingTroops),
+    attackingTroops: normalizeTroopCounts(battle.attackingTroops),
+    defendingTroops: normalizeTroopCounts(battle.defendingTroops),
+    attackerScore: finiteScore(battle.attackerScore),
+    defenderScore: finiteScore(battle.defenderScore),
+    latestRoll: normalizeBattleRoll(battle.latestRoll),
+    hasRolled: battle.hasRolled === true,
+    result: battle.result?.type === "attackerWon" || battle.result?.type === "defenderWon" || battle.result?.type === "retreated"
+      ? { type: battle.result.type }
+      : null,
+  };
+}
+
+function normalizeBattleRoll(value: unknown) {
+  const roll = value as Partial<NonNullable<BattleState["latestRoll"]>>;
+  if (!roll || typeof roll !== "object" || !Array.isArray(roll.attackerDice) || !Array.isArray(roll.defenderDice)) {
+    return null;
+  }
+
+  return {
+    attackerDice: normalizeDice(roll.attackerDice),
+    defenderDice: normalizeDice(roll.defenderDice),
+    attackerLosses: normalizeTroopTypeList(roll.attackerLosses),
+    defenderLosses: normalizeTroopTypeList(roll.defenderLosses),
+  };
+}
+
+function normalizeDice(value: unknown[]) {
+  return value
+    .filter((die): die is number => typeof die === "number" && Number.isInteger(die) && die >= 1 && die <= 6)
+    .slice(0, 3);
+}
+
+function normalizeTroopTypeList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((troopType): troopType is TroopType => TROOP_TYPES.includes(troopType as TroopType))
+    : [];
+}
+
+function finiteScore(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.min(10, value))
+    : null;
 }
 
 function normalizeSpyIntel(value: unknown) {

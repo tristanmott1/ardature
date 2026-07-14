@@ -48,7 +48,7 @@ Triangle rules:
 - The marker is draggable anywhere inside the triangle for army building.
 - The marker position is converted to troop percentages with barycentric coordinates.
 - Army building allows true `0%` for a troop class.
-- The same triangle component will later be reused for opponent prediction. Prediction mode will prevent the marker from getting too close to a corner so no troop class can be `0%`, even though the triangle should look visually the same.
+- Future challenge UI may reuse the triangle visual language, but the current attack model does not use an opponent-prediction triangle.
 
 Budget rules:
 

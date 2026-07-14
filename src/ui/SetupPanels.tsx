@@ -2,6 +2,7 @@ import { type PointerEvent as ReactPointerEvent } from "react";
 import { Check, GripVertical, Plus, ScanLine, Shuffle, Trash2, Unlock, Users, Wifi } from "lucide-react";
 import {
   ALLOCATION_STYLES,
+  ATTACK_STYLES,
   PICK_TIME_LIMITS,
   TROOP_ALLOCATION_TIME_LIMITS,
   formatTimerOption,
@@ -9,6 +10,7 @@ import {
 } from "../game/gameState";
 import type {
   AllocationStyle,
+  AttackStyle,
   DraftStyle,
   GameConfig,
   GamePlayer,
@@ -31,6 +33,11 @@ const DRAFT_STYLE_LABELS: Record<DraftStyle, string> = {
 const ALLOCATION_STYLE_LABELS: Record<AllocationStyle, string> = {
   manual: "Manual",
   random: "Random",
+};
+
+const ATTACK_STYLE_LABELS: Record<AttackStyle, string> = {
+  challenge: "Challenge",
+  regular: "Regular",
 };
 
 export function HomePanel({ onStartLocal, onStartSync }: { onStartLocal: () => void; onStartSync: () => void }) {
@@ -319,6 +326,16 @@ export function SetupPanel({
             options={TROOP_ALLOCATION_TIME_LIMITS.map((value) => ({ value: String(value), label: formatTroopTimerOption(value) }))}
             value={String(config.troopAllocationTimeLimit)}
             onChange={(value) => onUpdateConfig({ troopAllocationTimeLimit: Number(value) as TroopAllocationTimeLimit })}
+          />
+        </ConfigSelectSection>
+        <ConfigSelectSection headingId="attack-style-heading" title="Attack Style">
+          <SelectField
+            disabled={!canControl}
+            hideLabel
+            label="Attack style"
+            options={ATTACK_STYLES.map((value) => ({ value, label: ATTACK_STYLE_LABELS[value] }))}
+            value={config.attackStyle}
+            onChange={(value) => onUpdateConfig({ attackStyle: value as AttackStyle })}
           />
         </ConfigSelectSection>
       </div>

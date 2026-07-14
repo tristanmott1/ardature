@@ -21,14 +21,15 @@ export type SyncSessionStatus = "idle" | "connecting" | "connected" | "reconnect
 export type ActiveOverlay =
   | { type: "syncBlocked" }
   | { type: "scanner" }
-  | { type: "decision"; decision: "exit" | "restart" }
+  | { type: "decision"; decision: "exit" | "restart" | "retreat" }
   | { type: "pause" }
   | { type: "handoff"; handoff: "allocation" | "turn" }
   | { type: "armyBuild"; build: "allocation" | "reinforcement" }
+  | { type: "battle" }
   | { type: "notification" }
   | { type: "confirm"; confirm: "draft" | "spy" };
 
-export type DecisionPrompt = "exit" | "restart" | null;
+export type DecisionPrompt = "exit" | "restart" | "retreat" | null;
 
 export type CapturedSpyView = ReturnType<typeof capturedSpiesOnTerritory>[number];
 
@@ -50,7 +51,7 @@ export type MapSelectionState = {
 };
 
 export type TroopSectionMode =
-  | { type: "allocation"; source: "initial" | "reinforcement" }
+  | { type: "allocation"; source: "initial" | "reinforcement" | "attack" }
   | { type: "info"; source: "gameMap" | "turn" };
 
 export type UpperGameSectionMode =
@@ -185,6 +186,7 @@ type ActiveOverlayContext = {
   decisionPrompt: DecisionPrompt;
   game: GameState;
   hasCurrentNotification: boolean;
+  hasVisibleBattle: boolean;
   localAllocationReady: boolean;
   pendingDraftTerritoryId: string | null;
   pendingSpyTerritoryId: string | null;
@@ -200,6 +202,7 @@ type GameStageLayoutContext = {
   canControlTurnPlayer: boolean;
   game: GameState;
   gameMapInspection: TerritoryInspection;
+  hasAttackTroopSection: boolean;
   localAllocationReady: boolean;
   playerBarPlayer: GamePlayer | null;
   turnActionPlayer: GamePlayer | null;
@@ -215,6 +218,7 @@ export function activeOverlayForState({
   decisionPrompt,
   game,
   hasCurrentNotification,
+  hasVisibleBattle,
   localAllocationReady,
   pendingDraftTerritoryId,
   pendingSpyTerritoryId,
@@ -256,6 +260,7 @@ export function activeOverlayForState({
     game.phase === "turnHandoff" ? { type: "handoff", handoff: "turn" } : null,
     needsAllocationArmyBuild ? { type: "armyBuild", build: "allocation" } : null,
     needsReinforcementArmyBuild ? { type: "armyBuild", build: "reinforcement" } : null,
+    hasVisibleBattle ? { type: "battle" } : null,
     hasCurrentNotification ? { type: "notification" } : null,
     hasSpyConfirm ? { type: "confirm", confirm: "spy" } : null,
     canShowDraftConfirm ? { type: "confirm", confirm: "draft" } : null,
@@ -624,6 +629,7 @@ export function gameStageLayoutForState({
   canControlTurnPlayer,
   game,
   gameMapInspection,
+  hasAttackTroopSection,
   localAllocationReady,
   playerBarPlayer,
   turnActionPlayer,
@@ -640,6 +646,7 @@ export function gameStageLayoutForState({
         allocationSelectedTerritoryId,
         game,
         gameMapInspection,
+        hasAttackTroopSection,
         localAllocationReady,
         turnActionPlayer,
         turnMapInspection,
@@ -868,6 +875,7 @@ function upperSectionModeForGame({
   canControlTurnPlayer,
   game,
   gameMapInspection,
+  hasAttackTroopSection,
   localAllocationReady,
   turnActionPlayer,
   turnMapInspection,
@@ -887,6 +895,10 @@ function upperSectionModeForGame({
 
   if (game.phase !== "turn") {
     return null;
+  }
+
+  if (hasAttackTroopSection) {
+    return { type: "troop", troopSection: { type: "allocation", source: "attack" } };
   }
 
   if (

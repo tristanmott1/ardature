@@ -99,6 +99,7 @@ async function runSourceChecks() {
   const gameStateSource = await readFile(new URL("../src/game/gameState.ts", import.meta.url), "utf8");
   const gameTypesSource = await readFile(new URL("../src/game/gameTypes.ts", import.meta.url), "utf8");
   const gameViewSource = await readFile(new URL("../src/game/gameView.ts", import.meta.url), "utf8");
+  const combatSource = await readFile(new URL("../src/game/combat.ts", import.meta.url), "utf8");
   const notificationTextSource = await readFile(new URL("../src/game/notificationText.ts", import.meta.url), "utf8");
   const playerColorsSource = await readFile(new URL("../src/game/playerColors.ts", import.meta.url), "utf8");
   const troopIconsSource = await readFile(new URL("../src/game/troopIcons.tsx", import.meta.url), "utf8");
@@ -127,6 +128,7 @@ async function runSourceChecks() {
   const verifySource = await readFile(new URL("../scripts/verify-ui.mjs", import.meta.url), "utf8");
   const formControlsSource = await readFile(new URL("../src/ui/FormControls.tsx", import.meta.url), "utf8");
   const gameSectionsSource = await readFile(new URL("../src/ui/GameSections.tsx", import.meta.url), "utf8");
+  const battleModalSource = await readFile(new URL("../src/ui/BattleModal.tsx", import.meta.url), "utf8");
   const overlaysSource = await readFile(new URL("../src/ui/Overlays.tsx", import.meta.url), "utf8");
   const pausePanelSource = await readFile(new URL("../src/ui/PausePanel.tsx", import.meta.url), "utf8");
   const playerChromeSource = await readFile(new URL("../src/ui/PlayerChrome.tsx", import.meta.url), "utf8");
@@ -326,6 +328,14 @@ async function runSourceChecks() {
   assert(!gameStateSource.includes("weightedCost") && !gameStateSource.includes("adjustedCount"), "Old average-cost army rounding is removed.");
   assert(gameTypesSource.includes('export type AllocationStyle = "manual" | "random"') && gameTypesSource.includes("allocationStyle: AllocationStyle"), "Game config has explicit allocation style.");
   assert(gameStateSource.includes("export const ALLOCATION_STYLES") && gameStateSource.includes("config.allocationStyle === \"random\"") && gameStateSource.includes("advanceAfterDraft"), "Game state routes post-draft flow through allocation style.");
+  assert(gameTypesSource.includes('export type AttackStyle = "challenge" | "regular"') && gameTypesSource.includes("attackStyle: AttackStyle"), "Game config has explicit attack style.");
+  assert(gameStateSource.includes("export const ATTACK_STYLES") && setupPanelsSource.includes("Attack Style") && setupPanelsSource.includes("Challenge") && setupPanelsSource.includes("Regular"), "Setup UI exposes the attack style config section.");
+  assert(gameStateSource.includes("function commitAttack") && gameStateSource.includes("function rollBattle") && gameStateSource.includes("function retreatBattle") && gameStateSource.includes("completedAttacks"), "Attack state transitions live in game-state helpers.");
+  assert(gameTypesSource.includes("BattleState") && gameTypesSource.includes('type: "commitAttack"') && gameTypesSource.includes('type: "submitBattleScore"') && gameTypesSource.includes('type: "rollBattle"'), "Turn commands include locked battle actions.");
+  assert(gameTypesSource.includes("committedAttackingTroops: TroopCounts") && gameTypesSource.includes("initialDefendingTroops: TroopCounts") && gameTypesSource.includes("attackingTroops: TroopCounts") && gameTypesSource.includes("defendingTroops: TroopCounts"), "Battle state preserves locked original troop counts and current survivor counts.");
+  assert(syncMessagesSource.includes('command.type === "commitAttack"') && syncMessagesSource.includes('command.type === "rollBattle"') && syncMessagesSource.includes('command.type === "retreatBattle"'), "Sync message validation covers battle commands.");
+  assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)"), "Battle modal renders dice, retreat, and one-decimal scores.");
+  assert(combatSource.includes("COMBAT_SCORE_VALUES") && combatSource.includes("challengeScoreForTroops") && combatSource.includes("rollCombatDice") && combatSource.includes("sampleCasualty"), "Combat math stores centralized score, challenge, dice, and casualty helpers.");
   assert(gameStateSource.includes("function randomCompleteAllAllocations") && gameStateSource.includes("function randomArmyMarker") && gameStateSource.includes("function bordersOpponentTerritory"), "Random allocation has dedicated army and border placement helpers.");
   assert(gameStateSource.includes("generatedMapConnections[territoryId as keyof typeof generatedMapConnections]") && gameStateSource.includes("ownership[connectedId] !== playerId"), "Random allocation uses gameplay connections to find opponent borders.");
   assert(setupPanelsSource.includes("Territory Draft") && setupPanelsSource.includes("Troop Allocation") && setupPanelsSource.includes("Allocation style"), "Setup UI has draft and troop allocation config sections.");
@@ -960,6 +970,86 @@ function totalTroops(counts) {
   return (counts?.heavy ?? 0) + (counts?.cavalry ?? 0) + (counts?.elite ?? 0) + (counts?.leader ?? 0);
 }
 
+async function findAttackPair(page) {
+  return page.evaluate(async () => {
+    const { generatedMapConnections } = await import("/src/map/generated/mapConnections.ts");
+    const state = JSON.parse(localStorage.getItem("ardature.localGame.v1") ?? "null");
+    const ownership = state?.draft?.ownership ?? {};
+    const allocation = state?.allocation;
+    const attackerId = state?.turn?.currentPlayerId;
+
+    function troopsOnTerritory(territoryId) {
+      for (const playerAllocation of Object.values(allocation?.playerAllocations ?? {})) {
+        const troops = playerAllocation.territories?.[territoryId];
+        if (troops) {
+          return troops;
+        }
+      }
+
+      return { heavy: 0, cavalry: 0, elite: 0, leader: 0 };
+    }
+
+    function total(troops) {
+      return troops.heavy + troops.cavalry + troops.elite + troops.leader;
+    }
+
+    const pairs = [];
+    for (const [sourceTerritoryId, ownerId] of Object.entries(ownership)) {
+      if (ownerId !== attackerId || total(troopsOnTerritory(sourceTerritoryId)) < 2) {
+        continue;
+      }
+
+      for (const targetTerritoryId of generatedMapConnections[sourceTerritoryId] ?? []) {
+        const targetOwnerId = ownership[targetTerritoryId];
+        if (targetOwnerId && targetOwnerId !== attackerId) {
+          pairs.push({
+            sourceTerritoryId,
+            targetTerritoryId,
+            sourceTotal: total(troopsOnTerritory(sourceTerritoryId)),
+            targetTotal: total(troopsOnTerritory(targetTerritoryId)),
+          });
+        }
+      }
+    }
+
+    const preferred = pairs.find((pair) => pair.sourceTotal >= 3 && pair.targetTotal >= 2) ??
+      pairs.find((pair) => pair.sourceTotal >= 3) ??
+      pairs[0];
+
+    if (!preferred) {
+      throw new Error("No legal attack pair found.");
+    }
+
+    return preferred;
+  });
+}
+
+async function findOwnedBorderTerritory(page) {
+  return page.evaluate(async () => {
+    const { generatedMapConnections } = await import("/src/map/generated/mapConnections.ts");
+    const state = JSON.parse(localStorage.getItem("ardature.localGame.v1") ?? "null");
+    const ownership = state?.draft?.ownership ?? {};
+    const playerId = state?.turn?.currentPlayerId;
+
+    for (const [territoryId, ownerId] of Object.entries(ownership)) {
+      if (ownerId !== playerId) {
+        continue;
+      }
+
+      const bordersOpponent = (generatedMapConnections[territoryId] ?? []).some((connectedId) => {
+        const connectedOwnerId = ownership[connectedId];
+        return connectedOwnerId && connectedOwnerId !== playerId;
+      });
+
+      if (bordersOpponent) {
+        return territoryId;
+      }
+    }
+
+    return null;
+  });
+}
+
 async function startLocalSnakeDraft(page) {
   await page.getByRole("button", { name: "Local" }).click();
   await setPlayerName(page, 0, "Aragorn");
@@ -997,6 +1087,8 @@ async function runSetupPreferenceChecks(page) {
   await setPlayerColor(page, 2, "yellow");
   assert((await page.getByRole("heading", { name: "Territory Draft" }).count()) === 1, "Setup shows the Territory Draft section.");
   assert((await page.getByRole("heading", { name: "Troop Allocation" }).count()) === 1, "Setup shows the Troop Allocation section.");
+  assert((await page.getByRole("heading", { name: "Attack Style" }).count()) === 1, "Setup shows the Attack Style section.");
+  assert((await page.locator('select[aria-label="Attack style"]').inputValue()) === "regular", "Regular attack style is the setup default.");
   await page.getByLabel("Draft style").selectOption("roundRobin");
   await page.getByLabel("Pick time").selectOption("10");
   await page.getByLabel("Allocation time").selectOption("120");
@@ -1607,7 +1699,7 @@ async function runRandomAllocationChecks(page) {
   await assertMapShellFullScreen(page, "Map shell is full-screen before selecting reinforcement territory.");
   await assertCameraControlsInsideVisibleAperture(page, "Reinforcement camera controls start inside the visible map aperture.");
   const beforeShrinkViewBox = await viewBox(page);
-  const reinforcementTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="yellow"]').first().getAttribute("data-territory-fill");
+  const reinforcementTerritoryId = await findOwnedBorderTerritory(page);
   assert(reinforcementTerritoryId, "Current player still owns a territory for reinforcements.");
   await clickTerritory(page, reinforcementTerritoryId);
   await page.waitForSelector(".troop-section-reinforcement .allocation-target");
@@ -1646,7 +1738,39 @@ async function runRandomAllocationChecks(page) {
   await page.waitForSelector(".turn-action-panel");
   assert((await page.locator(".troop-section-info").count()) === 0, "Finishing reinforcements returns to the default turn view with no inspected territory.");
   await capture(page, "18-turn-actions-mobile.png");
-  assert(await page.getByRole("button", { name: "Attack" }).isDisabled(), "Attack is visible but disabled.");
+  assert(!(await page.getByRole("button", { name: "Attack" }).isDisabled()), "Attack is enabled after reinforcements.");
+  await page.getByRole("button", { name: "Attack" }).click();
+  assert((await page.locator(".turn-action-instruction").getByText("Select attacking territory").count()) === 1, "Attack setup first asks for an attacking territory.");
+  assert((await page.getByRole("button", { name: "Cancel" }).count()) === 1, "Attack setup replaces action buttons with one cancel button.");
+  const attackPair = await findAttackPair(page);
+  await clickTerritory(page, attackPair.sourceTerritoryId);
+  assert((await page.locator(".turn-action-instruction").getByText("Select target territory").count()) === 1, "Attack setup asks for a target after source selection.");
+  await clickTerritory(page, attackPair.targetTerritoryId);
+  await page.waitForSelector(".troop-section-attack .allocation-target");
+  assert((await page.locator(".turn-action-instruction").getByText("Choose attacking troops").count()) === 1, "Attack setup asks for committed troops after source and target selection.");
+  assert((await page.locator(".troop-section-attack .allocation-target").textContent())?.includes(" to "), "Attack troop section names the source and target.");
+  await page.locator(".troop-section-attack .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").first().click();
+  const secondAttackTroop = page.locator(".troop-section-attack .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").first();
+  if ((await secondAttackTroop.count()) > 0) {
+    await secondAttackTroop.click();
+  }
+  await page.getByRole("button", { name: "Confirm attack" }).click();
+  await page.getByRole("dialog", { name: "Battle" }).waitFor();
+  await capture(page, "18b-battle-modal-mobile.png");
+  assert((await page.locator(".turn-action-panel").count()) === 0, "Turn action bar hides during a locked battle.");
+  assert((await page.locator(".troop-section-attack").count()) === 0, "Attack troop section hides during a locked battle.");
+  assert((await page.getByRole("button", { name: "Roll dice" }).count()) === 1, "Battle modal exposes dice as the roll control.");
+  await page.getByRole("button", { name: "Roll dice" }).click();
+  await page.waitForSelector(".battle-die:not([data-empty])");
+  if ((await page.getByRole("button", { name: "Retreat" }).isEnabled().catch(() => false))) {
+    await page.getByRole("button", { name: "Retreat" }).click();
+    await page.getByRole("dialog", { name: "Retreat from this attack?" }).getByRole("button", { name: "Retreat" }).click();
+    await page.getByRole("button", { name: "Dismiss battle" }).click();
+  } else {
+    await page.getByRole("button", { name: "Dismiss battle" }).click();
+  }
+  await page.waitForSelector(".turn-action-panel");
+  assert((await page.locator(".troop-section-info").count()) === 0, "Dismissing battle returns to default turn view with no inspected territory.");
   await page.getByRole("button", { name: "Fortify" }).click();
   await page.waitForSelector('.app-shell[data-app-phase="turnHandoff"]');
   await waitForViewBox(page, await apertureViewBoxForTarget(page, homeViewportFromSize(await mapSize(page))));
