@@ -72,7 +72,7 @@ The action section has a single-line instruction row above the buttons:
 - During attack target selection, the instruction is `Select a territory to attack`.
 - During attack troop commitment, the instruction is `Choose attacking troops`.
 
-When spy setup is in progress, the normal action buttons are replaced by one black `Cancel Spy` button. When attack setup is in progress, they are replaced by one black `Cancel Attack` button. The action bar keeps the same height and column rhythm as the normal turn action bar by reserving the spy-button slot invisibly. When fortify later becomes a multi-step action, its setup cancel button should follow the same pattern as `Cancel Fortify`.
+When spy setup is in progress, the normal action buttons are replaced by one black, horizontally centered `Cancel Spy` button. When attack setup is in progress, they are replaced by one black, horizontally centered `Cancel Attack` button. The action bar keeps the same height as the normal turn action bar while centering the cancel control. When fortify later becomes a multi-step action, its setup cancel button should follow the same pattern as `Cancel Fortify`.
 
 The turn action section indicates the active turn options:
 
@@ -374,11 +374,11 @@ The defender is shown at the top of the modal, with the defender name centered a
 
 The dice sit between the two scores. Defender dice are white with black pips. Attacker dice are red with white pips. Dice are large raw dice controls without an enclosing card or rectangle. Before the first roll, the correct number of dice is shown as blank dice with no pips.
 
-The modal layout is a fixed vertical stack: reserved message row, defender name, defender troop row, defender score, dice, attacker score, attacker troop row, attacker name, and retreat/final-confirm button. The top message row is always present. It may be empty, say `Waiting...`, or show `{attacker} won` / `{defender} won`.
+While the battle is active, the modal layout is a fixed vertical stack: reserved message row, defender name, defender troop row, defender score, dice, attacker score, attacker troop row, attacker name, and retreat button. The top message row is always present. It may be empty or say `Waiting...`.
 
 Battle troop rows show only troop types with counts greater than zero. Remaining icons keep the normal compact icon size and recenter. If a side has no troops after the battle ends, that troop row renders no icons but still reserves the same vertical row space.
 
-Both sides' current battle troop breakdowns are visible during the battle. Everyone who can see the battle modal sees the same battle contents and sees which troop types die. The modal shows the latest roll only, not a full roll history.
+Both sides' current battle troop breakdowns are visible during the battle. Everyone who can see the battle modal sees the same battle contents and sees which troop types die. The modal shows the latest roll only, not a full roll history. The latest roll always shows exactly the dice that were rolled; casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
 
 In sync mode:
 
@@ -397,7 +397,7 @@ In local mode, only the active attacker sees the battle modal. The defender does
 
 The attacker must roll at least once. Before the first roll, the retreat button is disabled. After at least one roll, the attacker may retreat. Pressing retreat opens a confirmation decision. If retreat is confirmed, the attack ends immediately.
 
-If the battle ends by conquest or attacker elimination, the dice are disabled, the retreat button becomes a check/confirm button, and the message section says who won. Nothing else may happen until the attacker presses that final check button. If the attacker confirms a retreat, the battle ends immediately and the battle modal closes; no final retreat message is shown.
+If the battle ends by conquest or attacker elimination, the normal battle layout is replaced by a simple result layout. It shows `{winner} defeated {loser}`, the surviving winning troops centered below it, and the final check button. The result layout does not show scores, dice, the loser row, or the regular mirrored stack. Nothing else may happen until the attacker presses that final check button. If the attacker confirms a retreat, the battle ends immediately and the battle modal closes; no final retreat message is shown.
 
 After battle dismissal, the active player returns to the normal post-reinforcement action choice with `Attack` and `Fortify` available, unless the game has ended. The active player may attack again if a legal source-target pair remains and the pair has not already been used this turn.
 

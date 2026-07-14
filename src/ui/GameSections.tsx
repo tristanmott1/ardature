@@ -149,15 +149,12 @@ export function TurnActionPanel({
   return (
     <section className="game-section-panel turn-action-panel">
       <p className="turn-action-instruction">{instruction}</p>
-      <div className="turn-action-buttons">
+      <div className={`turn-action-buttons${cancelActionActive ? " action-cancel-row" : ""}`}>
         {cancelActionActive ? (
-          <>
-            <span className="turn-spy-button turn-spy-spacer" aria-hidden="true" />
-            <button className="primary icon-text-button turn-stage-button" type="button" onClick={cancelAction}>
-              <X size={18} />
-              {cancelLabel}
-            </button>
-          </>
+          <button className="primary icon-text-button turn-stage-button action-cancel-button" type="button" onClick={cancelAction}>
+            <X size={18} />
+            {cancelLabel}
+          </button>
         ) : (
           <>
             {spyMissing ? (

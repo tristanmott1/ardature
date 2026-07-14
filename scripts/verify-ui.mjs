@@ -334,7 +334,7 @@ async function runSourceChecks() {
   assert(gameTypesSource.includes("BattleState") && gameTypesSource.includes('type: "commitAttack"') && gameTypesSource.includes('type: "submitBattleScore"') && gameTypesSource.includes('type: "rollBattle"'), "Turn commands include locked battle actions.");
   assert(gameTypesSource.includes("committedAttackingTroops: TroopCounts") && gameTypesSource.includes("initialDefendingTroops: TroopCounts") && gameTypesSource.includes("attackingTroops: TroopCounts") && gameTypesSource.includes("defendingTroops: TroopCounts"), "Battle state preserves locked original troop counts and current survivor counts.");
   assert(syncMessagesSource.includes('command.type === "commitAttack"') && syncMessagesSource.includes('command.type === "rollBattle"') && syncMessagesSource.includes('command.type === "retreatBattle"'), "Sync message validation covers battle commands.");
-  assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)") && battleModalSource.includes("/ 10") && battleModalSource.includes("battle-pip"), "Battle modal renders pip dice, retreat, and one-decimal scores out of ten.");
+  assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)") && battleModalSource.includes("/ 10") && battleModalSource.includes("defeated") && battleModalSource.includes("battle-pip"), "Battle modal renders pip dice, retreat, result text, and one-decimal scores out of ten.");
   assert(combatSource.includes("COMBAT_SCORE_VALUES") && combatSource.includes("challengeScoreForTroops") && combatSource.includes("rollCombatDice") && combatSource.includes("sampleCasualty"), "Combat math stores centralized score, challenge, dice, and casualty helpers.");
   assert(gameStateSource.includes("function randomCompleteAllAllocations") && gameStateSource.includes("function randomArmyMarker") && gameStateSource.includes("function bordersOpponentTerritory"), "Random allocation has dedicated army and border placement helpers.");
   assert(gameStateSource.includes("generatedMapConnections[territoryId as keyof typeof generatedMapConnections]") && gameStateSource.includes("ownership[connectedId] !== playerId"), "Random allocation uses gameplay connections to find opponent borders.");
@@ -992,6 +992,38 @@ async function assertBattleTroopRows(page, message) {
       assert(Math.abs(icon.width - 46) <= 1 && Math.abs(icon.height - 46) <= 1, `${message}: battle troop icons keep compact size.`);
     }
   }
+}
+
+async function assertBattleResultLayout(page, { iconCount, message }) {
+  await page.getByRole("dialog", { name: "Battle result" }).waitFor();
+  assert((await page.locator(".battle-result-message").getByText(message).count()) === 1, "Battle result layout shows the winner and loser.");
+  assert((await page.locator(".battle-result-modal .battle-troops").count()) === 1, "Battle result layout shows one winning troop row.");
+  assert((await page.locator(".battle-result-modal .troop-icon-count").count()) === iconCount, "Battle result layout shows only surviving winning troop icons.");
+  assert((await page.locator(".battle-result-modal .battle-dice-row").count()) === 0, "Battle result layout does not show dice.");
+  assert((await page.locator(".battle-result-modal .battle-score").count()) === 0, "Battle result layout does not show scores.");
+  assert((await page.locator(".battle-result-modal .battle-player-name").count()) === 0, "Battle result layout does not show regular player rows.");
+}
+
+async function waitForBattleRollOrResult(page) {
+  await page.waitForFunction(() => document.querySelector(".battle-pip.visible") || document.querySelector(".battle-result-modal"));
+}
+
+async function assertActionCancelCentered(page, label) {
+  const centers = await page.locator(".turn-action-panel").evaluate((panel, buttonLabel) => {
+    const button = Array.from(panel.querySelectorAll("button")).find((candidate) => candidate.textContent?.includes(String(buttonLabel)));
+    const panelBox = panel.getBoundingClientRect();
+    const buttonBox = button?.getBoundingClientRect();
+
+    return buttonBox
+      ? {
+          buttonCenter: buttonBox.left + buttonBox.width / 2,
+          panelCenter: panelBox.left + panelBox.width / 2,
+        }
+      : null;
+  }, label);
+
+  assert(centers, `${label} is present in the action bar.`);
+  assert(Math.abs(centers.buttonCenter - centers.panelCenter) <= 1, `${label} is centered in the action bar.`);
 }
 
 async function assertReadyColumnHeadersLeftAligned(page) {
@@ -1769,7 +1801,8 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".troop-section-info").count()) === 0, "Starting spy clears the default inspected territory.");
   assert((await page.locator(".turn-action-instruction").getByText("Select a territory to spy on").count()) === 1, "Spy targeting changes the action instruction.");
   assert((await page.getByRole("button", { name: "Cancel Spy" }).count()) === 1, "Spy targeting replaces action buttons with one cancel button.");
-  assert((await page.locator(".turn-action-buttons .turn-spy-spacer").count()) === 1, "Spy targeting reserves the spy slot so the action bar keeps its normal size.");
+  await assertActionCancelCentered(page, "Cancel Spy");
+  assert((await page.locator(".turn-action-buttons.action-cancel-row").count()) === 1, "Spy targeting uses the centered cancel action row.");
   await clickTerritory(page, opponentTerritoryId);
   await page.getByRole("dialog", { name: "Confirm spy" }).waitFor();
   await capture(page, "15-spy-confirm-mobile.png");
@@ -1834,6 +1867,7 @@ async function runRandomAllocationChecks(page) {
   await page.getByRole("button", { name: "Attack" }).click();
   assert((await page.locator(".turn-action-instruction").getByText("Select a territory to attack from").count()) === 1, "Attack setup first asks for an attacking territory.");
   assert((await page.getByRole("button", { name: "Cancel Attack" }).count()) === 1, "Attack setup replaces action buttons with one cancel button.");
+  await assertActionCancelCentered(page, "Cancel Attack");
   const attackPair = await findAttackPair(page);
   await clickTerritory(page, attackPair.sourceTerritoryId);
   assert((await page.locator(".turn-action-instruction").getByText("Select a territory to attack").count()) === 1, "Attack setup asks for a target after source selection.");
@@ -1857,8 +1891,10 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".battle-die-defender").count()) > 0 && (await page.locator(".battle-die-attacker").count()) > 0, "Battle modal shows defender and attacker dice.");
   assert((await page.locator(".battle-pip.visible").count()) === 0, "Battle dice are blank before the first roll.");
   await page.getByRole("button", { name: "Roll dice" }).click();
-  await page.waitForSelector(".battle-pip.visible");
-  if ((await page.getByRole("button", { name: "Retreat" }).isEnabled().catch(() => false))) {
+  await waitForBattleRollOrResult(page);
+  if ((await page.locator(".battle-result-modal").count()) > 0) {
+    await page.getByRole("button", { name: "Dismiss battle" }).click();
+  } else if ((await page.getByRole("button", { name: "Retreat" }).isEnabled().catch(() => false))) {
     await page.getByRole("button", { name: "Retreat" }).click();
     await page.getByRole("dialog", { name: "Retreat from this attack?" }).getByRole("button", { name: "Retreat" }).click();
   } else {
@@ -2065,12 +2101,16 @@ async function runTurnAttackChecks(browser) {
   assert((await regular.locator(".battle-score").first().textContent())?.includes("/ 10"), "Regular battle shows scores out of ten.");
   assert((await regular.locator(".battle-pip.visible").count()) === 0, "Regular battle dice are blank before rolling.");
   await regular.getByRole("button", { name: "Roll dice" }).click();
-  await regular.waitForSelector(".battle-pip.visible");
+  await waitForBattleRollOrResult(regular);
   await capture(regular, "18e-regular-battle-after-roll-mobile.png");
-  await regular.getByRole("button", { name: "Retreat" }).click();
-  await regular.getByRole("dialog", { name: "Retreat from this attack?" }).getByRole("button", { name: "Retreat" }).click();
+  if ((await regular.locator(".battle-result-modal").count()) > 0) {
+    await regular.getByRole("button", { name: "Dismiss battle" }).click();
+  } else {
+    await regular.getByRole("button", { name: "Retreat" }).click();
+    await regular.getByRole("dialog", { name: "Retreat from this attack?" }).getByRole("button", { name: "Retreat" }).click();
+  }
   await regular.waitForSelector(".battle-modal", { state: "detached" });
-  assert((await regular.locator(".turn-action-panel").count()) === 1, "Confirmed retreat closes the battle modal and returns to turn actions.");
+  assert((await regular.locator(".turn-action-panel").count()) === 1, "Closing the battle modal returns to turn actions.");
 
   await loadTurnAttackFixture(challenge, { attackStyle: "challenge", randomValue: 0.5 });
   await commitFixtureAttack(challenge);
@@ -2096,16 +2136,53 @@ async function runTurnAttackChecks(browser) {
 
   await loadBattleStateFixture(challenge, {
     attackerScore: 7.3,
+    attackingTroops: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
+    defenderScore: 6.2,
+    defendingTroops: { heavy: 3, cavalry: 0, elite: 0, leader: 0 },
+    hasRolled: true,
+    latestRoll: {
+      attackerDice: [6, 5, 4],
+      attackerLosses: ["cavalry"],
+      defenderDice: [3, 2],
+      defenderLosses: [],
+    },
+    result: null,
+  });
+  assert((await challenge.locator(".battle-dice-row").nth(1).locator(".battle-die").count()) === 3, "Latest attacker roll keeps every die that was rolled even after casualties.");
+  assert((await challenge.locator(".battle-dice-row").nth(0).locator(".battle-die").count()) === 2, "Latest defender roll keeps every die that was rolled.");
+
+  await loadBattleStateFixture(challenge, {
+    attackerScore: 7.3,
+    attackingTroops: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
+    defenderScore: 6.2,
+    defendingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+    latestRoll: null,
+    result: null,
+  });
+  assert((await challenge.locator(".battle-dice-row").nth(1).locator(".battle-die").count()) === 2, "Blank next-roll attacker dice use the reduced surviving troop count.");
+  assert((await challenge.locator(".battle-dice-row").nth(0).locator(".battle-die").count()) === 1, "Blank next-roll defender dice use the reduced surviving troop count.");
+
+  await loadBattleStateFixture(challenge, {
+    attackerScore: 7.3,
+    attackingTroops: { heavy: 1, cavalry: 1, elite: 0, leader: 0 },
+    defenderScore: 6.2,
+    defendingTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
+    result: { type: "attackerWon" },
+  });
+  await capture(challenge, "18h-attacker-battle-result-mobile.png");
+  await assertBattleResultLayout(challenge, { iconCount: 2, message: "Frodo defeated Sauron" });
+  await challenge.getByRole("button", { name: "Dismiss battle" }).click();
+  await challenge.waitForSelector(".battle-modal", { state: "detached" });
+
+  await loadBattleStateFixture(challenge, {
+    attackerScore: 7.3,
     attackingTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
     defenderScore: 6.2,
     defendingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
     result: { type: "defenderWon" },
   });
-  await capture(challenge, "18h-ended-battle-empty-row-mobile.png");
-  await assertBattleLayoutSymmetric(challenge, "Ended battle modal layout with empty row");
-  await assertBattleTroopRows(challenge, "Ended battle modal troop rows");
-  assert((await challenge.locator(".battle-message").getByText("Sauron won").count()) === 1, "Battle message row shows the final battle result.");
-  assert((await challenge.locator(".battle-troops").nth(1).locator(".troop-icon-count").count()) === 0, "Empty ended-battle row omits all icons.");
+  await capture(challenge, "18i-defender-battle-result-mobile.png");
+  await assertBattleResultLayout(challenge, { iconCount: 1, message: "Sauron defeated Frodo" });
 
   await regular.close();
   await challenge.close();
@@ -2366,7 +2443,7 @@ async function loadBattleStateFixture(page, battleOverrides) {
     localStorage.setItem("ardature.localGame.v1", JSON.stringify(savedState));
   }, state);
   await page.goto(baseUrl);
-  await page.getByRole("dialog", { name: "Battle" }).waitFor();
+  await page.waitForSelector(".battle-modal");
 }
 
 async function commitFixtureAttack(page) {
@@ -2683,8 +2760,8 @@ async function runSyncReadyPageChecks(browser) {
   assert(await activeTurnPage.getByRole("button", { name: "Roll dice" }).isEnabled(), "Sync attacker can roll battle dice.");
   assert(await passiveTurnPage.getByRole("button", { name: "Roll dice" }).isDisabled(), "Sync defender can see the battle but cannot roll.");
   await activeTurnPage.getByRole("button", { name: "Roll dice" }).click();
-  await activeTurnPage.waitForSelector(".battle-pip.visible");
-  await passiveTurnPage.waitForSelector(".battle-pip.visible");
+  await waitForBattleRollOrResult(activeTurnPage);
+  await waitForBattleRollOrResult(passiveTurnPage);
 
   await host.close();
   await joiner.close();

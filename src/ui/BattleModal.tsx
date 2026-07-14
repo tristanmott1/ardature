@@ -42,8 +42,8 @@ export function BattleModal({
       : "Waiting...";
   const canRoll = canControl && scoresReady && !battle.result;
   const canRetreat = canControl && battle.hasRolled && !battle.result;
-  const defenderDice = battle.latestRoll?.defenderDice ?? emptyDice(Math.min(2, troopTotal(battle.defendingTroops)));
-  const attackerDice = battle.latestRoll?.attackerDice ?? emptyDice(Math.min(3, troopTotal(battle.attackingTroops)));
+  const defenderDice = displayedDice(battle.latestRoll?.defenderDice, Math.min(2, troopTotal(battle.defendingTroops)));
+  const attackerDice = displayedDice(battle.latestRoll?.attackerDice, Math.min(3, troopTotal(battle.attackingTroops)));
 
   if (canChallenge) {
     return (
@@ -51,6 +51,24 @@ export function BattleModal({
         <section className="modal-panel battle-modal battle-challenge-modal" role="dialog" aria-label="Battle challenge">
           <button className="primary icon-text-button battle-challenge-button" type="button" onClick={onChallenge}>
             Challenge
+          </button>
+        </section>
+      </div>
+    );
+  }
+
+  if (battle.result?.type === "attackerWon" || battle.result?.type === "defenderWon") {
+    const winner = battle.result.type === "attackerWon" ? attacker : defender;
+    const loser = battle.result.type === "attackerWon" ? defender : attacker;
+    const winningTroops = battle.result.type === "attackerWon" ? battle.attackingTroops : battle.defendingTroops;
+
+    return (
+      <div className="modal-scrim battle-scrim">
+        <section className="modal-panel battle-modal battle-result-modal" role="dialog" aria-label="Battle result">
+          <p className="battle-result-message">{winner.name} defeated {loser.name}</p>
+          <BattleTroops player={winner} troops={winningTroops} />
+          <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl} aria-label="Dismiss battle">
+            <Check size={20} />
           </button>
         </section>
       </div>
@@ -100,6 +118,10 @@ function BattleTroops({ player, troops }: { player: GamePlayer; troops: TroopCou
 
 function BattleScore({ score }: { score: number | null }) {
   return <span className="battle-score">{score !== null ? `${score.toFixed(1)} / 10` : "-- / 10"}</span>;
+}
+
+function displayedDice(latestDice: number[] | undefined, currentDiceCount: number) {
+  return latestDice ?? emptyDice(currentDiceCount);
 }
 
 function DiceRow({ dice, label, tone }: { dice: Array<number | null>; label: string; tone: "attacker" | "defender" }) {

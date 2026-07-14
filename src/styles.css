@@ -363,6 +363,11 @@ button:focus-visible,
   grid-template-columns: 48px minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   align-items: center;
+  min-height: 44px;
+}
+
+.turn-action-buttons.action-cancel-row {
+  grid-template-columns: 1fr;
 }
 
 .turn-action-buttons .turn-stage-button:only-child {
@@ -371,6 +376,11 @@ button:focus-visible,
 
 .turn-action-buttons .turn-stage-button:nth-child(2):last-child {
   grid-column: 2 / 4;
+}
+
+.turn-action-buttons .action-cancel-button {
+  justify-self: center;
+  min-width: min(220px, 100%);
 }
 
 .turn-spy-button {
@@ -1252,6 +1262,19 @@ select {
 
 .battle-challenge-modal {
   width: min(260px, calc(100vw - 48px));
+}
+
+.battle-result-modal {
+  gap: 18px;
+  text-align: center;
+}
+
+.battle-result-message {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 900;
+  line-height: 1.2;
 }
 
 .battle-troops {
