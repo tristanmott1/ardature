@@ -230,13 +230,14 @@ Visibility rules:
 - Each viewer sees total troop counts on their own territories.
 - Each viewer can select any territory to open the troop section in `info` mode.
 - Pressing the selected territory again unselects it and hides the troop section.
-- Selecting one of your own territories shows the territory name plus the heavy/cavalry/elite/leader breakdown.
-- Any troop type with count `0` is grayed out.
-- Selecting an opponent territory shows the territory name plus all four troop types disabled/grayed with `?` in the count bubbles.
+- Selecting one of your own territories shows the territory name plus exact known contents.
+- Known contents show only troop icons whose counts are greater than zero, plus captured spy icons actually present on that territory.
+- Selecting an opponent territory shows the territory name plus exactly four side-aware troop icons disabled/grayed with `?` in the count bubbles.
+- Unknown opponent rows never show captured spy icons.
 - Opponent territory breakdowns are never shown in normal read-only inspection, even when the viewer can see that territory's total troop count on the map.
 - Opponent territories that have any connection to one of the viewer's territories show total troop count only.
 - Opponent territories with no connection to the viewer's territories show ownership only.
-- Captured spies are shown only when the viewer can see the exact troop breakdown for that territory.
+- Captured spies are shown only when the viewer can see the exact contents for that territory.
 - Connections for visibility come from the territory key's gameplay connections, including both land and ship connections.
 - Visibility connections are decoupled from physical shared borders in the generated map geometry.
 

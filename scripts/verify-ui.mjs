@@ -254,7 +254,7 @@ async function runSourceChecks() {
   );
   assert(gameTypesSource.includes('status: "available" | "captured" | "dead"') && gameTypesSource.includes("custodianPlayerId: string | null") && !gameTypesSource.includes("capturedTerritoryId: string | null"), "Spy state stores explicit status, territory, and custodian.");
   assert(gameStateSource.includes("capturedSpiesOnTerritory") && gameStateSource.includes("restoreCapturedSpies") && gameStateSource.includes("custodianPlayerId: territoryOwnerId"), "Captured spies are selected by territory and custody follows ownership changes.");
-  assert(gameSectionsSource.includes("CapturedSpyRow") && troopControlsSource.includes("function CapturedSpyRow") && troopIconsSource.includes('captured ? "-captured" : ""') && troopIconsSource.includes("ownerColor={player.color}"), "Captured spies and troop icons use owner-colored circular icon rendering.");
+  assert(troopControlsSource.includes("type CapturedSpyToken") && troopControlsSource.includes("function CapturedSpyIcon") && !troopControlsSource.includes("function CapturedSpyRow") && troopIconsSource.includes('captured ? "-captured" : ""') && troopIconsSource.includes("ownerColor={player.color}"), "Captured spies render inline through the shared troop row.");
   assert(gameTypesSource.includes('type: "dismissNotification"') && gameTypesSource.includes("notificationId: string") && syncMessagesSource.includes('command.type === "dismissNotification"') && appSource.includes('sendTurnCommand({ type: "dismissNotification", notificationId: currentNotification.id })'), "Sync joiners dismiss queued notifications through the host by notification id.");
   assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && gameTypesSource.includes("minTurnNumber: number") && appSource.includes("visibleNotification") && gameViewSource.includes('game.mode === "local" && game.phase === "turnHandoff"') && gameViewSource.includes("game.turn.turnNumber >= notification.minTurnNumber"), "Queued local notifications wait until after handoff.");
   assert(gameViewSource.includes("[viewerId]: game.notifications[viewerId] ?? []"), "Sync snapshots include only the viewer's notification queue.");
@@ -409,7 +409,7 @@ async function runSourceChecks() {
   assert(!stylesSource.includes(".troop-badge") && !stylesSource.includes(".troop-chip") && !stylesSource.includes(".army-builder"), "Old troop badge styles are removed.");
   assert(!appSource.includes("troop-step-grid") && !appSource.includes("troop-stepper"), "Old troop stepper markup is removed.");
   assert(!stylesSource.includes(".troop-step-grid") && !stylesSource.includes(".troop-stepper"), "Old troop stepper styles are removed.");
-  assert(gameSectionsSource.includes('from "./TroopControls"') && troopControlsSource.includes("function TroopPlacementRows") && troopControlsSource.includes("function TroopActionRow") && (troopControlsSource.match(/className=\"troop-action-row\"/g) ?? []).length === 1 && !appSource.includes("function TroopPlacementRows"), "Initial allocation and reinforcement share one imported troop placement row component.");
+  assert(gameSectionsSource.includes('from "./TroopControls"') && troopControlsSource.includes("function TroopPlacementRows") && troopControlsSource.includes("function TroopActionRow") && troopControlsSource.includes("function visibleTroopTypes") && (troopControlsSource.match(/className=\"troop-action-row\"/g) ?? []).length === 1 && !appSource.includes("function TroopPlacementRows"), "Initial allocation and reinforcement share one filtered troop placement row component.");
   assert(!stylesSource.includes(".army-triangle text"), "Army triangle does not style text labels.");
   assert(!mapViewSource.includes("isImmediatePress") && !mapViewSource.includes("pressImmediately"), "Old immediate territory press workaround is removed.");
   assert(indexSource.includes("./app-icons/icon-192.png") && indexSource.includes("./app-icons/apple-touch-icon.png"), "Index references organized app icons.");
@@ -967,7 +967,7 @@ async function assertBattleLayoutSymmetric(page, message) {
 async function assertBattleTroopRows(page, message) {
   const rows = await page.locator(".battle-troops").evaluateAll((elements) => elements.map((row) => {
     const rowBox = row.getBoundingClientRect();
-    const icons = Array.from(row.querySelectorAll(".troop-icon-count")).map((icon) => {
+    const icons = Array.from(row.querySelectorAll(".troop-icon-count, .captured-spy-icon")).map((icon) => {
       const box = icon.getBoundingClientRect();
       return {
         height: box.height,
@@ -986,19 +986,20 @@ async function assertBattleTroopRows(page, message) {
 
   assert(rows.length === 2, `${message}: battle renders two troop slots.`);
   assert(rows.every((row) => row.height >= 54), `${message}: troop slots reserve stable height.`);
-  assert(rows.every((row) => row.centerDelta <= 1), `${message}: visible troop icons are centered.`);
+  assert(rows.every((row) => row.centerDelta <= 1), `${message}: visible battle units are centered.`);
   for (const row of rows) {
     for (const icon of row.icons) {
-      assert(Math.abs(icon.width - 46) <= 1 && Math.abs(icon.height - 46) <= 1, `${message}: battle troop icons keep compact size.`);
+      assert(Math.abs(icon.width - 46) <= 1 && Math.abs(icon.height - 46) <= 1, `${message}: battle unit icons keep compact size.`);
     }
   }
 }
 
-async function assertBattleResultLayout(page, { iconCount, message }) {
+async function assertBattleResultLayout(page, { iconCount, message, spyCount = 0 }) {
   await page.getByRole("dialog", { name: "Battle result" }).waitFor();
   assert((await page.locator(".battle-result-message").getByText(message).count()) === 1, "Battle result layout shows the winner and loser.");
   assert((await page.locator(".battle-result-modal .battle-troops").count()) === 1, "Battle result layout shows one winning troop row.");
   assert((await page.locator(".battle-result-modal .troop-icon-count").count()) === iconCount, "Battle result layout shows only surviving winning troop icons.");
+  assert((await page.locator(".battle-result-modal .captured-spy-icon").count()) === spyCount, "Battle result layout shows the expected spy icons.");
   assert((await page.locator(".battle-result-modal .battle-dice-row").count()) === 0, "Battle result layout does not show dice.");
   assert((await page.locator(".battle-result-modal .battle-score").count()) === 0, "Battle result layout does not show scores.");
   assert((await page.locator(".battle-result-modal .battle-player-name").count()) === 0, "Battle result layout does not show regular player rows.");
@@ -1744,8 +1745,9 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".player-bar").count()) === 1, "Allocation uses the shared player bar.");
   assert((await page.locator(".allocation-target span").count()) === 0, "Allocation target does not repeat the territory troop total.");
   assert((await page.locator(".troop-action-row").count()) === 2, "Territory allocation has add and remove rows.");
-  assert((await page.locator(".troop-action-row").nth(0).locator(".troop-icon-button").count()) === 4, "Add row has four troop icon buttons.");
-  assert((await page.locator(".troop-action-row").nth(1).locator(".troop-icon-button").count()) === 4, "Remove row has four troop icon buttons.");
+  assert((await page.locator(".troop-action-row").nth(0).locator(".troop-icon-button").count()) > 0, "Add row shows available troop icon buttons.");
+  assert((await page.locator(".troop-action-row").nth(1).locator(".troop-icon-button").count()) === 0, "Empty remove row hides troop icon buttons.");
+  assert((await page.locator(".troop-action-row").nth(1).locator(".troop-row-affordance").count()) === 0, "Empty remove row hides the minus affordance.");
   const allocationBox = await page.locator(".troop-placement-controls").boundingBox();
   const addIconsBox = await page.locator(".troop-action-icons").nth(0).boundingBox();
   const removeIconsBox = await page.locator(".troop-action-icons").nth(1).boundingBox();
@@ -1839,8 +1841,8 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".turn-action-instruction").getByText(`Add troops to ${reinforcementTerritoryName}`).count()) === 1, "Reinforcement placement instruction names the selected territory.");
   await capture(page, "17-reinforcement-placement-mobile.png");
   assert((await page.locator(".troop-section-reinforcement .troop-action-row").count()) === 2, "Reinforcement placement has add and remove rows.");
-  assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(0).locator(".troop-icon-button").count()) === 4, "Reinforcement add row keeps all four troop icon slots.");
-  assert(await page.locator(".troop-section-reinforcement .troop-action-row").nth(0).getByRole("button", { name: "Add leader" }).isDisabled(), "Reinforcement leader add slot is shown as zero and disabled.");
+  assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(0).locator(".troop-icon-button").count()) > 0, "Reinforcement add row shows nonzero available troop icons.");
+  assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(0).getByRole("button", { name: "Add leader" }).count()) === 0, "Reinforcement add row omits the zero leader slot.");
   const reinforcementBottomCounts = (await page.locator(".troop-section-reinforcement .troop-action-row").nth(1).locator(".troop-count-bubble").allTextContents()).map(Number);
   assert(reinforcementBottomCounts.reduce((sum, count) => sum + count, 0) > 0, "Reinforcement remove row shows existing territory troops.");
   assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(1).locator(".troop-icon-button:not(:disabled)").count()) === 0, "Existing troops shown during reinforcement cannot be removed.");
@@ -1966,7 +1968,7 @@ async function runReadOnlyVisibilityChecks(page) {
   assert((await page.locator('[data-troop-marker="minhiriath"]').count()) === 1, "Read-only map shows Minhiriath as a connected opponent troop total.");
   assert((await page.locator('[data-troop-marker="nurn"]').count()) === 0, "Read-only map hides distant opponent troop total.");
   await clickTerritory(page, "shire");
-  assert((await page.locator(".troop-section-info .troop-icon-count").count()) === 4, "Read-only map shows own territory breakdown.");
+  await assertKnownTroopRow(page, "Read-only map shows own nonzero territory breakdown.");
   await clickTerritory(page, "shire");
   assert((await page.locator(".troop-section-info").count()) === 0, "Pressing the selected read-only territory again hides the troop section.");
   await clickTerritory(page, "bree");
@@ -1980,7 +1982,7 @@ async function runReadOnlyVisibilityChecks(page) {
   await page.getByRole("button", { name: "Change viewer" }).click();
   assert((await page.locator('[data-troop-marker="nurn"]').count()) === 1, "Cycling local viewer shows that player's own distant territory total.");
   await clickTerritory(page, "nurn");
-  assert((await page.locator(".troop-section-info .troop-icon-count").count()) === 4, "Cycling local viewer reveals that player's own distant breakdown.");
+  await assertKnownTroopRow(page, "Cycling local viewer reveals that player's own nonzero distant breakdown.");
 }
 
 async function assertUnknownTroopRow(page, message, expectedHeavyIcon = null) {
@@ -1990,10 +1992,20 @@ async function assertUnknownTroopRow(page, message, expectedHeavyIcon = null) {
 
   assert(bubbles.length === 4 && bubbles.every((text) => text === "?"), message);
   assert((await page.locator('.troop-section-info .troop-icon-count[data-muted="true"]').count()) === 4, `${message} Unknown troop icons are muted.`);
+  assert((await page.locator(".troop-section-info .captured-spy-icon").count()) === 0, `${message} Unknown rows never show captured spies.`);
   if (expectedHeavyIcon) {
     const heavyIconSrc = await page.locator(".troop-section-info .troop-icon-count").first().locator("img").getAttribute("src");
     assert(heavyIconSrc?.includes(`/troops/icons/${expectedHeavyIcon}.png`), `${message} Unknown troop icons use the territory owner's side.`);
   }
+}
+
+async function assertKnownTroopRow(page, message) {
+  const bubbles = await page.locator(".troop-section-info .troop-count-bubble").evaluateAll((nodes) =>
+    nodes.map((node) => (node.textContent ?? "").trim()),
+  );
+
+  assert(bubbles.length > 0 && bubbles.every((text) => text !== "?" && Number(text) > 0), message);
+  assert((await page.locator('.troop-section-info .troop-icon-count[data-muted="true"]').count()) === 0, `${message} Known nonzero troop icons are not muted.`);
 }
 
 async function assertNoBrokenTroopIconImages(page, message) {
@@ -2036,7 +2048,7 @@ async function runTurnSpyOutcomeChecks(browser) {
   assert((await success.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Toggling spy off restores the default action instruction.");
   await clickTerritory(success, "shire");
   assert((await success.locator(".troop-section-info .selected-territory-name").getByText("Shire").count()) === 1, "Toggling spy off returns territory taps to normal inspection.");
-  assert((await success.locator(".troop-section-info .troop-icon-count").count()) === 4, "Normal inspection still shows own troop breakdown after spy is toggled off.");
+  await assertKnownTroopRow(success, "Normal inspection shows own nonzero troop breakdown after spy is toggled off.");
   await clickTerritory(success, "shire");
   assert((await success.locator(".troop-section-info").count()) === 0, "Pressing the selected turn-inspection territory again hides the troop section.");
   await success.getByRole("button", { name: "Spy" }).click();
@@ -2046,7 +2058,7 @@ async function runTurnSpyOutcomeChecks(browser) {
   await success.getByRole("button", { name: "Dismiss" }).waitFor();
   await capture(success, "13c-spy-success-mobile.png");
   assert((await success.locator(".troop-section-info .selected-territory-name").getByText("Bree").count()) === 1, "Successful spy shows the target territory name.");
-  assert((await success.locator(".troop-section-info .troop-icon-count").count()) === 4, "Successful spy shows the target troop breakdown.");
+  assert((await success.locator(".troop-section-info .troop-icon-count").count()) === 1, "Successful spy shows only nonzero target troop types.");
   assert((await success.locator(".troop-section-info .captured-spy-icon").count()) === 1, "Successful spy shows captured spies imprisoned on the target.");
   await assertNoBrokenTroopIconImages(success, "Successful spy troop and captured-spy icons are loaded.");
   const capturedSpySource = await success.locator(".troop-section-info .captured-spy-icon img").first().getAttribute("src");
@@ -2054,10 +2066,7 @@ async function runTurnSpyOutcomeChecks(browser) {
   const spyIconSources = await success.locator(".troop-section-info .troop-icon-count img").evaluateAll((images) =>
     images.map((image) => image.getAttribute("src") ?? ""),
   );
-  assert(
-    ["orc", "warg", "uruk-hai", "witch-king"].every((name) => spyIconSources.some((source) => source.includes(name))),
-    "Successful spy uses the target owner's troop icons.",
-  );
+  assert(spyIconSources.length === 1 && spyIconSources[0].includes("orc"), "Successful spy uses the target owner's visible nonzero troop icons.");
   assert((await success.locator('[data-troop-marker="rivendell"]').count()) === 1, "Successful spy reveals same-opponent adjacent troop totals.");
   await success.getByRole("button", { name: "Dismiss" }).click();
   assert(!(await success.getByRole("button", { name: "Spy" }).isDisabled()), "Spy remains available after a successful spy is dismissed.");
@@ -2096,6 +2105,7 @@ async function runTurnAttackChecks(browser) {
   await assertBattleLayoutSymmetric(regular, "Regular battle modal layout");
   await assertBattleTroopRows(regular, "Regular battle modal troop rows");
   assert((await regular.locator(".battle-troops").nth(0).locator(".troop-icon-count").count()) === 1, "Battle defender row omits zero-count troop types.");
+  assert((await regular.locator(".battle-troops").nth(0).locator(".captured-spy-icon").count()) === 1, "Battle defender row shows captured spies inline.");
   assert((await regular.locator(".battle-troops").nth(1).locator(".troop-icon-count").count()) < 4, "Battle attacker row omits zero-count troop types.");
   assert(((await regular.locator(".battle-message").textContent()) ?? "").trim() === "", "Battle message row is reserved when empty.");
   assert((await regular.locator(".battle-score").first().textContent())?.includes("/ 10"), "Regular battle shows scores out of ten.");
@@ -2167,10 +2177,15 @@ async function runTurnAttackChecks(browser) {
     attackingTroops: { heavy: 1, cavalry: 1, elite: 0, leader: 0 },
     defenderScore: 6.2,
     defendingTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
+    releasedAttackerSpy: true,
     result: { type: "attackerWon" },
   });
   await capture(challenge, "18h-attacker-battle-result-mobile.png");
-  await assertBattleResultLayout(challenge, { iconCount: 2, message: "Frodo defeated Sauron" });
+  await assertBattleResultLayout(challenge, { iconCount: 2, message: "Frodo defeated Sauron", spyCount: 2 });
+  const attackerResultSpySources = await challenge.locator(".battle-result-modal .captured-spy-icon img").evaluateAll((images) =>
+    images.map((image) => image.getAttribute("src") ?? ""),
+  );
+  assert(attackerResultSpySources.some((source) => source.includes("smeagul.png")) && attackerResultSpySources.some((source) => source.includes("-captured.png")), "Attacker victory shows the released own spy unbarred and other spies still captured.");
   await challenge.getByRole("button", { name: "Dismiss battle" }).click();
   await challenge.waitForSelector(".battle-modal", { state: "detached" });
 
@@ -2182,7 +2197,19 @@ async function runTurnAttackChecks(browser) {
     result: { type: "defenderWon" },
   });
   await capture(challenge, "18i-defender-battle-result-mobile.png");
-  await assertBattleResultLayout(challenge, { iconCount: 1, message: "Sauron defeated Frodo" });
+  await assertBattleResultLayout(challenge, { iconCount: 1, message: "Sauron defeated Frodo", spyCount: 1 });
+
+  await loadBattleStateFixture(challenge, {
+    attackerScore: 7.3,
+    attackingTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
+    defenderScore: 6.2,
+    defendingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+    result: { type: "defenderWon" },
+  }, { capturedSpyCount: 5 });
+  await capture(challenge, "18j-battle-result-wrapped-spies-mobile.png");
+  await assertBattleResultLayout(challenge, { iconCount: 1, message: "Sauron defeated Frodo", spyCount: 5 });
+  const wrappedResultBox = await challenge.locator(".battle-result-modal .troop-count-row").boundingBox();
+  assert(wrappedResultBox && wrappedResultBox.height > 46, "Battle result unit row wraps when spies push it beyond five icons.");
 
   await regular.close();
   await challenge.close();
@@ -2404,6 +2431,15 @@ async function loadTurnAttackFixture(page, { attackStyle, randomValue }) {
   const state = turnSpyGameState(territoryIds);
   state.config.attackStyle = attackStyle;
   state.turn.stage = "actions";
+  state.players.push({
+    id: "spyOwner",
+    name: "Gandalf",
+    color: "blue",
+    nameLocked: false,
+    colorLocked: false,
+    connectionStatus: "connected",
+  });
+  state.turn.spies.spyOwner = { status: "captured", territoryId: "bree", custodianPlayerId: "opponent" };
 
   await page.addInitScript(({ savedState, nextRandom }) => {
     localStorage.clear();
@@ -2415,10 +2451,27 @@ async function loadTurnAttackFixture(page, { attackStyle, randomValue }) {
   await page.waitForSelector(".turn-action-panel");
 }
 
-async function loadBattleStateFixture(page, battleOverrides) {
+async function loadBattleStateFixture(page, battleOverrides, options = {}) {
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
   const state = turnSpyGameState(territoryIds);
+  const capturedSpyCount = options.capturedSpyCount ?? 1;
+
+  for (let index = 0; index < capturedSpyCount; index += 1) {
+    const playerId = `spyOwner${index}`;
+    const colors = ["blue", "green", "purple", "black", "red"];
+
+    state.players.push({
+      id: playerId,
+      name: `Spy ${index + 1}`,
+      color: colors[index % colors.length],
+      nameLocked: false,
+      colorLocked: false,
+      connectionStatus: "connected",
+    });
+    state.turn.spies[playerId] = { status: "captured", territoryId: "bree", custodianPlayerId: "opponent" };
+  }
+
   state.turn.stage = "battle";
   state.turn.battle = {
     id: "battle-fixture",
@@ -2434,6 +2487,7 @@ async function loadBattleStateFixture(page, battleOverrides) {
     defenderScore: 6.2,
     latestRoll: null,
     hasRolled: false,
+    releasedAttackerSpy: false,
     result: null,
     ...battleOverrides,
   };
@@ -2615,11 +2669,9 @@ function firstEnabledAddButton(page) {
 }
 
 async function finishReinforcementPlacement(page) {
-  for (const troopType of ["heavy", "cavalry", "elite"]) {
-    const button = page.locator(".troop-section-reinforcement .troop-action-row").nth(0).getByRole("button", { name: `Add ${troopType}` });
-    for (let count = 0; count < 80 && !(await button.isDisabled()); count += 1) {
-      await button.click();
-    }
+  const addButtons = page.locator(".troop-section-reinforcement .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)");
+  for (let count = 0; count < 80 && (await addButtons.count()) > 0; count += 1) {
+    await addButtons.first().click();
   }
 
   await page.getByRole("button", { name: "Finish reinforcements" }).click();

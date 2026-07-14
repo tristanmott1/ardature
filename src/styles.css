@@ -881,13 +881,6 @@ select {
   pointer-events: none;
 }
 
-.captured-spy-row {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 20px;
-}
-
 .captured-spy-icon {
   display: block;
   width: 46px;
@@ -930,16 +923,25 @@ select {
 
 .troop-action-row {
   display: grid;
-  grid-template-columns: 32px 32px minmax(0, auto) 72px;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
   gap: 8px;
   align-items: center;
   justify-content: center;
+  min-height: 54px;
+}
+
+.unit-icon-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  max-width: 276px;
 }
 
 .troop-action-icons {
-  display: grid;
-  grid-template-columns: repeat(4, 48px);
-  gap: 9px;
+  min-height: 48px;
 }
 
 .troop-row-affordance {
@@ -1073,8 +1075,7 @@ select {
   text-align: center;
 }
 
-.troop-section-info > .troop-count-row,
-.troop-section-info > .captured-spy-row {
+.troop-section-info > .troop-count-row {
   justify-self: center;
 }
 

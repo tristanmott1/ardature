@@ -1,8 +1,8 @@
 # Gameplay Turns V1
 
-This milestone starts after initial troop allocation is complete. It replaces the temporary read-only map endpoint with the real turn loop: spy, reinforcements, attack, and fortify placeholder.
+This milestone starts after initial troop allocation is complete. It replaces the temporary read-only map endpoint with the real turn loop: spy, reinforcements, attack, and fortify.
 
-The current pass adds the attack action on top of the existing turn shell. Fortify remains a placeholder until the later fortify milestone.
+The next implementation passes should first clean up shared troop/captured-spy display, then implement full fortify on top of that shared display model.
 
 ## Phase Order
 
@@ -39,11 +39,11 @@ Spy cannot be used:
 - during fortify
 - after fortify, because the turn is already over
 
-For the current gameplay implementation:
+The turn-loop scope is:
 
 - Reinforcements are fully implemented.
 - Attack is implemented with source/target selection, committed attacking troops, attack-style scoring, tilted dice, live casualties, retreat, conquest, and a final dismiss button.
-- Fortify is available but simply ends the turn without moving troops.
+- Fortify is implemented as a one-target movement action with optional skip.
 - Local mode uses the existing handoff popup between turns.
 
 ## Turn Layout
@@ -55,10 +55,9 @@ When the current viewer is not in the middle of an action, map inspection uses t
 - By default no territory is selected and the troop section is hidden.
 - Selecting any territory opens the troop section.
 - Pressing the selected territory again unselects it and hides the troop section.
-- The troop section shows the territory name and all four troop-type icons.
-- Own territories show exact counts, with zero-count troop types grayed out.
-- Opponent territories show the selected territory owner's four troop icons disabled/grayed with `?` in the count bubbles.
-- Captured spies are shown only when exact counts are visible.
+- The troop section shows the territory name and follows the shared unit-icon display contract below.
+- Own territories show exact contents.
+- Opponent territories show unknown contents unless this viewer has successful spy intel for that territory.
 - Passive sync devices use this same default inspection mode during opponent turns.
 
 A compact turn action section sits at the bottom of the screen over the full-screen map. It is persistent turn UI, not a modal overlay, so it changes the visible map aperture used by focus/return actions but does not resize the SVG or mutate the current camera. Once the turn loop has started and a player is actively on turn, this section is normally present for the active local viewer. It hides while a modal, popup, bottom sheet, pause, scanner, handoff, notification, or decision confirmation takes over the interaction.
@@ -71,8 +70,10 @@ The action section has a single-line instruction row above the buttons:
 - During attack source selection, the instruction is `Select a territory to attack from`.
 - During attack target selection, the instruction is `Select a territory to attack`.
 - During attack troop commitment, the instruction is `Choose attacking troops`.
+- During fortify target selection, the instruction is `Select a territory to fortify`.
+- During fortify source selection, the instruction is `Select territories to fortify from`.
 
-When spy setup is in progress, the normal action buttons are replaced by one black, horizontally centered `Cancel Spy` button. When attack setup is in progress, they are replaced by one black, horizontally centered `Cancel Attack` button. The action bar keeps the same height as the normal turn action bar while centering the cancel control. When fortify later becomes a multi-step action, its setup cancel button should follow the same pattern as `Cancel Fortify`.
+When spy setup is in progress, the normal action buttons are replaced by one black, horizontally centered `Cancel Spy` button. When attack setup is in progress, they are replaced by one black, horizontally centered `Cancel Attack` button. When fortify setup is in progress, they are replaced by a black, horizontally centered `Cancel Fortify` button and a `Skip` button. `Skip` ends the turn immediately without confirmation and without moving units. The action bar keeps the same height as the normal turn action bar while centering the cancel/skip controls.
 
 The turn action section indicates the active turn options:
 
@@ -95,6 +96,32 @@ There is no gameplay distinction between land and ship connections. Both count f
 
 Physical shared borders from generated geometry are visual map data only. Mountains, forests, coastlines, and dotted ship-route art do not define gameplay adjacency in the app.
 
+## Unit Icon Display
+
+All troop and captured-spy rows use one shared display contract. This applies to initial allocation, reinforcements, normal explore/info mode, successful spy intel, attack troop commitment, battle modal rows, battle result rows, and fortify.
+
+When exact contents are unknown:
+
+- show exactly the four side-aware troop icons: heavy, cavalry, elite, and leader
+- use the selected territory owner's side/color to choose light or dark icon art
+- disable/gray every icon
+- show `?` in every count bubble
+- never show captured spy icons
+
+When exact contents are known:
+
+- show only troop icons whose count is greater than zero
+- show captured spy icons only for captured spies actually present in that row/location
+- captured spies appear inline with troop icons, not in permanent empty spy slots
+- center the visible icon group
+- if a row has more than five icons because captured spies are present, it may wrap into a second centered line
+- the maximum visible row is nine icons: four troop types plus five opponent spies
+- any `+` or `-` row affordance is outside the centered icon group and must not affect centering
+
+Rows that are structurally required by an action keep their reserved row height even when they contain no icons. In initial troop allocation, this can happen before a selected territory has any troops; the row is empty, the `+` or `-` affordance is not shown, and the row still occupies exactly the same space. Information rows may be hidden entirely when no territory is selected, but once a selected territory opens the troop section, the selected territory and its visible/unknown unit row must render as a complete `info` mode section.
+
+Attack troop commitment is the one known-content action row that intentionally does not show captured spies. It shows only movable attacking troops from the source because captured spies cannot attack.
+
 ## Spy
 
 Each player starts with one spy capability:
@@ -106,7 +133,7 @@ The spy is not a troop and does not count toward troop totals. A spy can be avai
 
 Available spies can make spy attempts. Captured spies are board objects on a territory. Each captured spy stores the spy owner, current custodian, and current territory. Captured spies are visible whenever a viewer is allowed to inspect the detailed unit contents of that territory. This includes the territory owner through normal inspection and another player during a successful spy on that territory.
 
-Captured spies use committed circular captured-spy PNG icons with black vertical prison bars. The icon ring is colored by the spy owner's player color. Captured spies cannot be used for spy attempts, cannot attack, and do not count toward troop totals. In the later full fortify milestone, captured spies can be moved during fortify like pieces, but they still cannot attack and still do not count as troops.
+Captured spies use committed circular captured-spy PNG icons with black vertical prison bars. The icon ring is colored by the spy owner's player color. Captured spies cannot be used for spy attempts, cannot attack, and do not count toward troop totals. Captured spies can move during fortify under the fortify rules below, but they still cannot attack and still do not count as troops.
 
 ### Spy Targeting
 
@@ -148,14 +175,14 @@ Spy notifications are queued per affected player, persist through pause/refresh/
 
 In local mode, queued spy-captured notifications for other players appear only at the beginning of that affected player's turn, in the order received. In sync mode, the host queues the notification authoritatively and delivers it to the affected player even if that player was disconnected when it was created.
 
-The captured spy remains on its current territory until released or moved by later fortify rules. If the spy owner captures or receives that current territory, the spy becomes available immediately, including during the same turn. If another player captures or receives that territory, that player gains custody of every captured spy on it, and those spies remain captured on that same territory.
+The captured spy remains on its current territory until released or moved by fortify. If the spy owner captures or receives that current territory, the spy becomes available immediately, including during the same turn. If another player captures or receives that territory, that player gains custody of every captured spy on it, and those spies remain captured on that same territory.
 
 ### Spy Success
 
 If the spy is not captured:
 
-- reveal the exact heavy/cavalry/elite/leader breakdown of the selected opponent territory
-- reveal any captured spies imprisoned on the selected opponent territory
+- reveal the exact known contents of the selected opponent territory
+- reveal any captured spies imprisoned on the selected opponent territory as part of that known-content row
 - reveal total troop counts, but not breakdowns, for territories adjacent to the selected territory that are owned by that same opponent
 - show those adjacent totals through the normal white map troop counters
 - show the selected opponent territory through the troop section in `info` mode, using the same exact-count UI that own territories use
@@ -251,7 +278,7 @@ Reinforcement placement uses the same compact two-row allocation controls as ini
 - the troop section is hidden until the active player selects an owned territory
 - pressing the selected territory again unselects it and hides the troop section
 
-The placement controls still show all four troop slots, including the leader slot. The add-row leader count is always `0` and disabled because reinforcements never create a new leader. The selected-territory row still shows the territory's total troops, including troops that existed before reinforcements. Minus buttons are enabled only for troop types that include troops added during the current reinforcement action.
+The placement controls follow the shared known-content icon contract. The top row shows only remaining reinforcement troop types whose counts are greater than zero. Reinforcements never create a new leader, so the leader icon is absent unless a count is actually present from a future rule. The selected-territory row shows the territory's total known contents, including troops that existed before reinforcements and any captured spies on that territory. Minus buttons are enabled only for troop types that include troops added during the current reinforcement action. Captured spies may be visible in the selected-territory row when present, but they are not removable during reinforcement placement.
 
 The player may place reinforcement troops on any territories they own. There is no one-new-troop-per-territory requirement during reinforcements. The action is complete only when all new reinforcement troops have been placed.
 
@@ -376,9 +403,9 @@ The dice sit between the two scores. Defender dice are white with black pips. At
 
 While the battle is active, the modal layout is a fixed vertical stack: reserved message row, defender name, defender troop row, defender score, dice, attacker score, attacker troop row, attacker name, and retreat button. The top message row is always present. It may be empty or say `Waiting...`.
 
-Battle troop rows show only troop types with counts greater than zero. Remaining icons keep the normal compact icon size and recenter. If a side has no troops after the battle ends, that troop row renders no icons but still reserves the same vertical row space.
+Battle unit rows follow the shared known-content icon contract. They show troop types with counts greater than zero plus captured spies present with that battle force. The visible icons keep the normal compact icon size and recenter. If a side has no troops after the battle ends, that row renders no troop icons but still reserves the same vertical row space.
 
-Both sides' current battle troop breakdowns are visible during the battle. Everyone who can see the battle modal sees the same battle contents and sees which troop types die. The modal shows the latest roll only, not a full roll history. The latest roll always shows exactly the dice that were rolled; casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
+Both sides' current battle troop breakdowns are visible during the battle. Everyone who can see the battle modal sees the same battle contents, captured spies present with the battle forces, and which troop types die. Captured spies are not casualties and do not affect dice. The modal shows the latest roll only, not a full roll history. The latest roll always shows exactly the dice that were rolled; casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
 
 In sync mode:
 
@@ -397,7 +424,7 @@ In local mode, only the active attacker sees the battle modal. The defender does
 
 The attacker must roll at least once. Before the first roll, the retreat button is disabled. After at least one roll, the attacker may retreat. Pressing retreat opens a confirmation decision. If retreat is confirmed, the attack ends immediately.
 
-If the battle ends by conquest or attacker elimination, the normal battle layout is replaced by a simple result layout. It shows `{winner} defeated {loser}`, the surviving winning troops centered below it, and the final check button. The result layout does not show scores, dice, the loser row, or the regular mirrored stack. Nothing else may happen until the attacker presses that final check button. If the attacker confirms a retreat, the battle ends immediately and the battle modal closes; no final retreat message is shown.
+If the battle ends by conquest or attacker elimination, the normal battle layout is replaced by a simple result layout. It shows `{winner} defeated {loser}`, the winning side's resulting unit row centered below it, and the final check button. The result layout does not show scores, dice, the loser row, or the regular mirrored stack. If the defender wins, the result row shows surviving defending troops plus any captured spies that were already on the defended territory. If the attacker wins, the result row shows surviving attacking troops plus captured third-party spies from the conquered territory. A captured spy owned by the attacker is released immediately by the conquest and appears in this victory result row as the attacker's normal unbarred spy icon; after the result is dismissed, that released spy is no longer displayed in the territory because an available spy is not tied to one territory. Nothing else may happen until the attacker presses that final check button. If the attacker confirms a retreat, the battle ends immediately and the battle modal closes; no final retreat message is shown.
 
 After battle dismissal, the active player returns to the normal post-reinforcement action choice with `Attack` and `Fortify` available, unless the game has ended. The active player may attack again if a legal source-target pair remains and the pair has not already been used this turn.
 
@@ -608,16 +635,121 @@ If a player is removed during gameplay while an attack is active:
 
 ## Fortify
 
-Fortify is a placeholder in the first gameplay-turn implementation.
+Fortify is optional and happens after the active player is done attacking. Once the player advances to fortify, there is no return to attack.
 
-For now:
+Pressing `Fortify` begins local fortify setup. The regular action buttons are replaced by:
 
-- pressing fortify ends the current player's turn
-- no territory selection is required
-- no troops move
-- the next remaining player begins their turn
+- a black, horizontally centered `Cancel Fortify` button
+- a `Skip` button
 
-The later fortify milestone will implement the full one-target fortification action.
+`Cancel Fortify` resets the whole fortify action and returns to the post-reinforcement action choice. `Skip` has no confirmation; it ends the current player's turn immediately without moving units.
+
+Fortify setup is local UI until the final fortify confirmation. Sync passive viewers do not see the active player's fortify target, source selections, provisional moves, focus, troop section, or action prompt. They see only committed host facts after fortify/end-turn commits.
+
+### Fortify Steps
+
+The setup steps are:
+
+1. Select the owned target territory to fortify.
+2. Select one or more owned source territories to fortify from.
+3. Move legal units from selected sources into the target.
+4. Confirm the fortify action, or press `Skip` before confirmation to end the turn without fortifying.
+
+Instruction text:
+
+- before target selection: `Select a territory to fortify`
+- after target selection and before choosing a source: `Select territories to fortify from`
+- while a source is selected and the troop section is open: keep the fortify-source instruction in the action section while the troop section names the current movement as `{source} to {target}`
+
+Only the target and currently selected source need to be emphasized as local setup selections. The target remains selected while choosing and switching sources. Pressing a selected source again unselects that source but keeps the fortify target.
+
+### Fortify Source Eligibility
+
+The target must be owned by the active player.
+
+A source territory is eligible if:
+
+- it is owned by the active player
+- it is not the target
+- it is connected to the target through a chain of territories all owned by the active player
+
+This chain uses gameplay connections from `maps/territory-key.md`, including ship connections. Physical map borders are irrelevant.
+
+Immediate connection matters for which units can move:
+
+- An immediately connected source is directly connected to the target by one gameplay edge.
+- A remote source is connected to the target through owned territory chains but is not directly connected to the target.
+
+### Fortify Movement Rules
+
+Every source must leave at least one troop behind. Captured spies do not count as troops, so moving spies never satisfies or violates the one-troop-left requirement by itself.
+
+Cavalry:
+
+- cavalry may be moved from any eligible source, including remote sources
+- cavalry may come from any number of eligible sources
+- there is no single-source limit for cavalry
+
+Regular troops:
+
+- heavy, elite, and leader troops can move only from an immediately connected source
+- exactly one source may contribute regular troops during a fortify action
+- once one source has contributed any regular troop, regular troop buttons are disabled for every other source
+- if all regular troops are removed from the committed movement for that source, another immediately connected source may become the regular source
+- the leader counts as a regular troop for fortify movement restrictions
+
+Captured spies:
+
+- captured spies are individual tokens, not troop counts
+- captured spies can move only if their actual icon is present in the selected source
+- selecting a captured spy in the source row moves that entire spy icon to the target row
+- selecting a moved captured spy in the target row moves that exact spy back to its source, if that spy was moved from the currently selected source during this fortify action
+- captured spies already on the target remain visible there but are not removable unless they were moved there from the currently selected source in this fortify action
+- captured spies moved from one source are not removable while another source is selected
+
+Captured spies from immediately connected sources follow the same single-source lane as regular troops:
+
+- they may move from the one immediately connected source that is contributing regular troops/spies
+- once that source has moved a regular troop or captured spy, captured spy icons from other immediately connected sources are disabled unless the first source's regular/spied movement is fully undone
+
+Captured spies from remote sources can move only by accompanying cavalry from that same source:
+
+- if a remote source has at least one cavalry committed, captured spies from that remote source may also be moved
+- if cavalry from that remote source is reduced back to zero, every captured spy moved from that remote source is automatically returned to that source
+- remote captured spies never establish the one regular-source lane
+
+### Fortify Troop Section
+
+The troop section uses allocation-style rows once a source is selected.
+
+Top/source row:
+
+- uses the `+` affordance
+- shows units currently available to move from the selected source
+- follows the shared known-content icon contract
+- shows troop icons with counts greater than zero that are legal or potentially legal from that source
+- disables illegal options instead of hiding them when a visible unit exists but cannot currently move
+- shows captured spy icons only if captured spies are actually present in the selected source
+- does not show a permanent empty captured-spy slot
+
+Middle label:
+
+- exactly `{source} to {target}`
+
+Bottom/target row:
+
+- uses the `-` affordance
+- shows the total units currently in the target in the provisional fortify view
+- includes the target's original troops and captured spies
+- includes all provisional fortify additions from every source, not only the currently selected source
+- follows the shared known-content icon contract
+- captured spy icons appear only for spies actually in the target
+- tapping a removable troop or spy moves it back only when it belongs to the currently selected source's provisional movement
+- units moved from other sources and units originally in the target remain visible but disabled while this source is selected
+
+The final fortify check button is disabled until at least one troop or captured spy has been committed to move. Confirming commits every provisional move at once, ends the current player's turn, and advances to the next remaining player through the normal local handoff or sync host snapshot flow.
+
+If player removal, pause/reconnect cleanup, or cancelation cancels an active fortify action before confirmation, all provisional fortify moves are undone. Locked attacks are not canceled by fortify cleanup because an active locked attack is a different authoritative state.
 
 ## Sync Viewer Rules
 

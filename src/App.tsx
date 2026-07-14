@@ -378,6 +378,7 @@ function App() {
       ((battleViewerId === activeBattle.attackerPlayerId && activeBattle.attackerScore === null) ||
         (game.mode === "sync" && battleViewerId === activeBattle.defenderPlayerId && activeBattle.defenderScore === null)),
   );
+  const battleDefenderSpies = activeBattle ? capturedSpiesOnTerritory(game, activeBattle.targetTerritoryId) : [];
   const showBattleOverlay = Boolean(activeBattle && isBattleParticipant);
   const battleCue = activeBattle && game.mode === "sync" && !isBattleParticipant
     ? {
@@ -1902,10 +1903,12 @@ function App() {
               canChallenge={canChallengeBattle}
               canControl={canControlBattle}
               defender={defender}
+              defenderSpies={battleDefenderSpies}
               onChallenge={submitCurrentBattleChallenge}
               onDismiss={dismissCurrentBattle}
               onRetreat={() => setDecisionPrompt("retreat")}
               onRoll={rollCurrentBattle}
+              players={game.players}
             />
           )
           : null;

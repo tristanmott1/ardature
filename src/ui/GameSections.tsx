@@ -14,7 +14,7 @@ import { spyIconSrc, TroopIconImage } from "../game/troopIcons";
 import type { GeneratedTerritoryData } from "../map/mapTypes";
 import { territoryForId } from "../map/territoryLookup";
 import { PlayerIdentity } from "./PlayerChrome";
-import { CapturedSpyRow, TroopCountRow, TroopPlacementRows, UnknownTroopCountRow } from "./TroopControls";
+import { TroopCountRow, TroopPlacementRows, UnknownTroopCountRow } from "./TroopControls";
 
 const EMPTY_TROOPS: TroopCounts = {
   cavalry: 0,
@@ -221,11 +221,12 @@ function ReinforcementTroopSection({
           canRemoveType={canRemoveType}
           onAdjustTroop={onAdjustTroop}
           player={player}
+          players={players}
           remaining={remaining}
+          selectedSpies={capturedSpies}
           selectedTroops={selectedTroops}
           territoryName={selectedTerritory.name}
         />
-        {selectedTerritory && selectedTroops ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
         <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Finish reinforcements">
           <Check size={20} />
         </button>
@@ -314,10 +315,9 @@ function InfoTroopSection({
       {selectedTerritory ? <strong className="selected-territory-name">{selectedTerritory.name}</strong> : null}
       {selectedTerritory && troopPlayer ? (
         troopBreakdown
-          ? <TroopCountRow counts={troopBreakdown} player={troopPlayer} />
+          ? <TroopCountRow counts={troopBreakdown} player={troopPlayer} players={players} spies={capturedSpies} />
           : <UnknownTroopCountRow player={troopPlayer} />
       ) : null}
-      {selectedTerritory && troopBreakdown ? <CapturedSpyRow players={players} spies={capturedSpies} /> : null}
     </section>
   );
 }

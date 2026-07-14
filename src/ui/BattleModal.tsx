@@ -1,5 +1,7 @@
 import { Check, Flag } from "lucide-react";
 import type { BattleState, GamePlayer, TroopCounts, TroopType } from "../game/gameTypes";
+import type { CapturedSpyView } from "../game/gameView";
+import type { CapturedSpyToken } from "./TroopControls";
 import { TroopCountRow } from "./TroopControls";
 
 const BATTLE_TROOP_TYPES: TroopType[] = ["heavy", "cavalry", "elite", "leader"];
@@ -19,20 +21,24 @@ export function BattleModal({
   canChallenge,
   canControl,
   defender,
+  defenderSpies,
   onChallenge,
   onDismiss,
   onRetreat,
   onRoll,
+  players,
 }: {
   attacker: GamePlayer;
   battle: BattleState;
   canChallenge: boolean;
   canControl: boolean;
   defender: GamePlayer;
+  defenderSpies: CapturedSpyView[];
   onChallenge: () => void;
   onDismiss: () => void;
   onRetreat: () => void;
   onRoll: () => void;
+  players: GamePlayer[];
 }) {
   const scoresReady = battle.attackerScore !== null && battle.defenderScore !== null;
   const message = battle.result
@@ -61,12 +67,15 @@ export function BattleModal({
     const winner = battle.result.type === "attackerWon" ? attacker : defender;
     const loser = battle.result.type === "attackerWon" ? defender : attacker;
     const winningTroops = battle.result.type === "attackerWon" ? battle.attackingTroops : battle.defendingTroops;
+    const resultSpies = battle.result.type === "attackerWon" && battle.releasedAttackerSpy
+      ? [...defenderSpies, { captured: false, ownerPlayerId: attacker.id }]
+      : defenderSpies;
 
     return (
       <div className="modal-scrim battle-scrim">
         <section className="modal-panel battle-modal battle-result-modal" role="dialog" aria-label="Battle result">
           <p className="battle-result-message">{winner.name} defeated {loser.name}</p>
-          <BattleTroops player={winner} troops={winningTroops} />
+          <BattleTroops player={winner} players={players} spies={resultSpies} troops={winningTroops} />
           <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl} aria-label="Dismiss battle">
             <Check size={20} />
           </button>
@@ -80,7 +89,7 @@ export function BattleModal({
       <section className="modal-panel battle-modal" role="dialog" aria-label="Battle">
         {message ? <p className="battle-message">{message}</p> : <p className="battle-message" aria-hidden="true">&nbsp;</p>}
         <strong className="battle-player-name">{defender.name}</strong>
-        <BattleTroops player={defender} troops={battle.defendingTroops} />
+        <BattleTroops player={defender} players={players} spies={defenderSpies} troops={battle.defendingTroops} />
         <BattleScore score={battle.defenderScore} />
         <div className="battle-dice-area">
           <button className="battle-dice-button" type="button" onClick={onRoll} disabled={!canRoll} aria-label="Roll dice">
@@ -89,7 +98,7 @@ export function BattleModal({
           </button>
         </div>
         <BattleScore score={battle.attackerScore} />
-        <BattleTroops player={attacker} troops={battle.attackingTroops} />
+        <BattleTroops player={attacker} players={players} troops={battle.attackingTroops} />
         <strong className="battle-player-name">{attacker.name}</strong>
         {battle.result ? (
           <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl} aria-label="Dismiss battle">
@@ -106,12 +115,12 @@ export function BattleModal({
   );
 }
 
-function BattleTroops({ player, troops }: { player: GamePlayer; troops: TroopCounts }) {
+function BattleTroops({ player, players, spies = [], troops }: { player: GamePlayer; players: GamePlayer[]; spies?: CapturedSpyToken[]; troops: TroopCounts }) {
   const troopTypes = BATTLE_TROOP_TYPES.filter((troopType) => troops[troopType] > 0);
 
   return (
     <div className="battle-troops">
-      <TroopCountRow counts={troops} player={player} troopTypes={troopTypes} />
+      <TroopCountRow counts={troops} player={player} players={players} spies={spies} troopTypes={troopTypes} />
     </div>
   );
 }

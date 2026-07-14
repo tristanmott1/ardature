@@ -9,7 +9,7 @@ This directory contains planning and implementation notes for the app. The exist
 - `app-architecture.md`: planned PWA directory structure, app data flow, and map rendering architecture.
 - `setup-draft-sync-v1.md`: setup, sync lobby, territory draft, draft pause/reconnect, and draft ownership mechanics.
 - `troop-allocation-v1.md`: current gameplay milestone for army building, troop allocation, allocation pause/removal, and viewer-specific read-only map visibility.
-- `gameplay-turns-v1.md`: turn-loop milestone for turn order, spy, reinforcements, region bonuses, attack setup/battle, fortify placeholder, and gameplay player removal.
+- `gameplay-turns-v1.md`: turn-loop milestone for turn order, spy, reinforcements, region bonuses, attack setup/battle, full fortify, and gameplay player removal.
 
 ## Documentation Rules
 

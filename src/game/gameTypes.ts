@@ -126,6 +126,7 @@ export type BattleState = {
   defenderScore: number | null;
   latestRoll: BattleDiceRoll | null;
   hasRolled: boolean;
+  releasedAttackerSpy: boolean;
   result: BattleResult | null;
 };
 

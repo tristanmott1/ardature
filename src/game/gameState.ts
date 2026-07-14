@@ -1077,6 +1077,7 @@ export function commitAttack(state: GameState, playerId: string, sourceTerritory
         defenderScore: usesChallenge && state.mode === "sync" ? null : combatScoreForTroops(defendingTroops),
         latestRoll: null,
         hasRolled: false,
+        releasedAttackerSpy: false,
         result: null,
       },
       completedAttacks: [
@@ -2755,6 +2756,8 @@ function finishBattleConquest(state: GameState, battle: BattleState): GameState 
     return state;
   }
 
+  const attackerSpy = state.turn.spies[battle.attackerPlayerId];
+  const releasedAttackerSpy = attackerSpy?.status === "captured" && attackerSpy.territoryId === battle.targetTerritoryId;
   const sourceTroops = attackerAllocation.territories[battle.sourceTerritoryId] ?? createTroopCounts();
   const attackingTerritories = {
     ...attackerAllocation.territories,
@@ -2786,6 +2789,15 @@ function finishBattleConquest(state: GameState, battle: BattleState): GameState 
           territories: defendingTerritories,
         },
       },
+    },
+    turn: {
+      ...state.turn,
+      battle: state.turn.battle
+        ? {
+            ...state.turn.battle,
+            releasedAttackerSpy,
+          }
+        : null,
     },
   }));
 
@@ -3189,6 +3201,7 @@ function normalizeBattle(value: unknown): BattleState | null {
     defenderScore: finiteScore(battle.defenderScore),
     latestRoll: normalizeBattleRoll(battle.latestRoll),
     hasRolled: battle.hasRolled === true,
+    releasedAttackerSpy: battle.releasedAttackerSpy === true,
     result: battle.result?.type === "attackerWon" || battle.result?.type === "defenderWon" || battle.result?.type === "retreated"
       ? { type: battle.result.type }
       : null,
