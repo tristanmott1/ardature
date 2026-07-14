@@ -71,7 +71,7 @@ Budget rules:
 - This budget-maximal rule prevents moving the marker from producing an army that keeps every existing troop and receives an additional troop for free.
 - A corner is a strongest-possible preference for that troop class. Integer budget constraints may still add another class when a literally pure army would leave enough budget to buy another troop.
 - A final count of `0` for any troop class is valid.
-- While the marker moves, the UI shows live final heavy/cavalry/elite counts plus the guaranteed leader as four circular troop icons with count badges above the triangle.
+- While the marker moves, the UI shows live final heavy/cavalry/elite counts plus the guaranteed leader above the triangle using the shared known-content icon row. Any troop class whose count is `0` is hidden and the remaining icons are centered.
 - Once the player submits the army build, the heavy/cavalry/elite counts plus the guaranteed leader become that player's base army.
 
 Inherited troops from removed players are additive. They do not change the player's budget and they do not get converted into budget. Leaders from removed players are not inherited as leaders; each removed wizard or witch-king is randomly replaced with one heavy, cavalry, or elite troop before redistribution. If a player selected a `100%` cavalry mixture and later receives `2` heavy and `1` elite from a removed player, their live allocation pool shows their original cavalry count, their original leader, plus the inherited `2` heavy and `1` elite.

@@ -252,7 +252,7 @@ A region bonus is awarded only when the player owns every playable territory in 
 | Rhûn | 4 heavy |
 | Mordor | 3 heavy |
 
-The army-build modal shows total reinforcement troops above the triangle, including both controllable troops and fixed region bonus troops. Only the territory-budget troops respond to the triangle marker.
+The army-build modal shows total reinforcement troops above the triangle, including both controllable troops and fixed region bonus troops. It uses the shared known-content icon row: troop types whose count is `0` are hidden and the remaining icons are centered. Only the territory-budget troops respond to the triangle marker. Because reinforcements never add a leader, the leader icon is hidden unless a future rule creates a nonzero leader count.
 
 Region bonus troops should use the same fixed/additive troop-pool mechanics already used for troops inherited from removed players.
 

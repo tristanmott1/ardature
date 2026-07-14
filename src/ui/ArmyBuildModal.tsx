@@ -1,8 +1,7 @@
 import { useRef } from "react";
 import { Check } from "lucide-react";
 import { armyCountsForMarker } from "../game/armyBuild";
-import { TROOP_TYPES } from "../game/gameState";
-import type { ArmyMarker, GamePlayer, GameState, TroopCounts, TroopType } from "../game/gameTypes";
+import type { ArmyMarker, GamePlayer, GameState, TroopCounts } from "../game/gameTypes";
 import { colorCss } from "../game/playerColors";
 import { troopIconSrc } from "../game/troopIcons";
 import { TroopCountRow } from "./TroopControls";
@@ -14,7 +13,6 @@ export function ArmyBuildModal({
   onSubmitBuild,
   player,
   projectedTroops,
-  troopTypes = TROOP_TYPES,
 }: {
   allocation?: GameState["allocation"];
   marker?: ArmyMarker;
@@ -22,7 +20,6 @@ export function ArmyBuildModal({
   onSubmitBuild: () => void;
   player: GamePlayer;
   projectedTroops?: TroopCounts | null;
-  troopTypes?: TroopType[];
 }) {
   const playerAllocation = allocation?.playerAllocations[player.id] ?? null;
   const modalMarker = marker ?? playerAllocation?.marker ?? null;
@@ -31,7 +28,7 @@ export function ArmyBuildModal({
   return (
     <div className="modal-scrim army-build-scrim">
       <section className="modal-panel army-build-modal" role="dialog" aria-label="Build army">
-        {modalTroops ? <TroopCountRow counts={modalTroops} player={player} troopTypes={troopTypes} variant="large" /> : null}
+        {modalTroops ? <TroopCountRow counts={modalTroops} player={player} variant="large" /> : null}
         {modalMarker ? <ArmyTriangle marker={modalMarker} onChange={onArmyMarkerChange} player={player} /> : null}
         <button className="primary icon-text-button wide-button" type="button" onClick={onSubmitBuild} aria-label="Confirm army">
           <Check size={20} />

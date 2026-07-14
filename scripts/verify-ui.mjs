@@ -1816,8 +1816,9 @@ async function runRandomAllocationChecks(page) {
   await page.getByRole("button", { name: "Reinforcements" }).click();
   await page.waitForSelector(".army-build-modal .army-triangle");
   await capture(page, "16-reinforcement-army-mobile.png");
-  assert((await page.locator(".army-build-modal .troop-icon-count").count()) === 4, "Reinforcement army build keeps the leader slot at zero.");
-  assert((await page.locator(".army-build-modal .troop-count-bubble").last().textContent())?.trim() === "0", "Reinforcement leader slot shows zero.");
+  const reinforcementBuildIconCount = await page.locator(".army-build-modal .troop-icon-count").count();
+  assert(reinforcementBuildIconCount > 0 && reinforcementBuildIconCount <= 3, "Reinforcement army build shows only nonzero regular troop icons.");
+  assert((await page.locator(".army-build-modal .troop-count-bubble").evaluateAll((nodes) => nodes.some((node) => (node.textContent ?? "").trim() === "0"))) === false, "Reinforcement army build hides zero-count icons.");
   await page.getByRole("button", { name: "Confirm army" }).click();
   await page.waitForSelector(".army-build-modal", { state: "detached" });
   assert((await page.locator(".troop-section-reinforcement").count()) === 0, "Reinforcement troop section is hidden before selecting a territory.");

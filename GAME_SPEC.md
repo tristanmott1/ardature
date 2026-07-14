@@ -185,6 +185,7 @@ Rules:
 - After reserving the leader, every candidate heavy/cavalry/elite army must stay within budget and leave fewer units than the cheapest troop costs.
 - From those budget-maximal integer armies, choose the actual troop ratio closest to the triangle marker by squared ratio error. Break ties by unused budget, then stable heavy/cavalry/elite order.
 - No resulting army can be strictly improved by adding a troop without exceeding its budget. Triangle corners express the strongest possible preference but are not guaranteed to remain literally pure when a pure army would leave enough budget for another class.
+- The army-build modal shows live counts above the triangle with the shared known-content icon row. Troop types whose count is `0` are hidden and the remaining icons are centered.
 - Every owned territory must contain at least one troop total before the game can begin.
 - A player may not place troops on another player's territory.
 - During allocation, troop-count circles appear on all territories owned by the allocating player.
@@ -393,7 +394,7 @@ The reinforcement triangle uses the same fixed-point candidate-selection model a
 - elite cost: `6`
 - effective budget units: `territoryBudget * 5`
 
-The player controls only the heavy/cavalry/elite breakdown of this territory-count budget. The UI shows the total reinforcement pool, including fixed region bonuses, above the triangle.
+The player controls only the heavy/cavalry/elite breakdown of this territory-count budget. The UI shows the total reinforcement pool, including fixed region bonuses, above the triangle with the shared known-content icon row. Because reinforcements never add a leader, the leader icon is hidden unless a future rule creates a nonzero leader count.
 
 ### Region Bonuses
 
@@ -1013,7 +1014,7 @@ Army build:
 - The current player's side also gives them exactly one wizard or witch-king leader.
 - The triangle marker starts in the center.
 - The army-build triangle uses barycentric coordinates and allows true `0%` troop classes.
-- The UI shows live troop counts while the marker moves using icon count badges, not troop text.
+- The UI shows live troop counts while the marker moves using icon count badges, not troop text. Troop types whose count is `0` are hidden and the remaining icons are centered.
 - Submitting the army build locks that player's base heavy/cavalry/elite troop counts plus their guaranteed leader.
 
 Territory allocation:
