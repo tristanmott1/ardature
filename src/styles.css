@@ -1273,6 +1273,15 @@ select {
   line-height: 1.1;
 }
 
+.battle-player-name:first-of-type {
+  margin-bottom: 6px;
+}
+
+.battle-player-name:last-of-type {
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
 .battle-score {
   color: var(--muted);
   font-size: 0.86rem;
@@ -1282,6 +1291,7 @@ select {
 .battle-dice-area {
   display: grid;
   justify-items: center;
+  margin: 6px 0;
   padding: 4px 0;
 }
 
