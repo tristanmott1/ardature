@@ -117,8 +117,8 @@ Allocation rules:
 - Pressing the selected territory again unselects it and hides the troop section.
 - The selected territory controls show two compact icon rows: remaining troops for adding and troops on the selected territory for removing.
 - The selected territory name is shown in bold between the add and remove rows, but its total troop count is not repeated in the controls because the map marker already shows that total.
-- The `+` and `-` row icons are non-clickable affordances. They are muted only when no troop in that row can currently be added or removed.
-- The circular troop icons are the action targets: tap a remaining troop icon to add one troop, or tap a selected-territory troop icon to remove one troop.
+- The `+` and `-` row icons are buttons. Pressing one adds or removes as many currently legal troops as possible.
+- The circular troop icons remain one-at-a-time precision controls: tap a remaining troop icon to add one troop, or tap a selected-territory troop icon to remove one troop.
 - The Ready check button remains in the troop section below the troop rows.
 - The player can remove any number of troops from the selected territory.
 - The player can add any number of remaining troops to the selected territory, but only if the total remaining troop count after the add is at least the number of still-empty owned territories.

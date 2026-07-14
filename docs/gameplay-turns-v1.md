@@ -74,7 +74,7 @@ The action section has a single-line instruction row above the buttons:
 - During fortify target selection, the instruction is `Select a territory to fortify`.
 - During fortify source selection, the instruction is `Select territories to fortify from`.
 
-When spy setup is in progress, the normal action buttons are replaced by one black, horizontally centered `Cancel Spy` button. When attack setup is in progress, they are replaced by one black, horizontally centered `Cancel Attack` button. When fortify setup is in progress, they are replaced by a black, horizontally centered `Cancel Fortify` button and a `Skip` button. `Skip` ends the turn immediately without confirmation and without moving units. The action bar keeps the same height as the normal turn action bar while centering the cancel/skip controls.
+When spy setup is in progress, the normal action buttons are replaced by one black, horizontally centered `Cancel Spy` button. When attack setup is in progress, they are replaced by one black, horizontally centered `Cancel Attack` button. When fortify setup is in progress, they are replaced by a black, horizontally centered `Cancel Fortify` button and a black `Skip` button. `Skip` ends the turn immediately without confirmation and without moving units. The action bar keeps the same height as the normal turn action bar while centering the cancel/skip controls.
 
 The turn action section indicates the active turn options:
 
@@ -83,6 +83,8 @@ The turn action section indicates the active turn options:
 - After reinforcements are complete, the stage area becomes `Attack` and `Fortify` buttons next to the spy button.
 
 Pressing a stage button changes the current local action prompt. Pressing another stage button while choosing a spy target aborts the spy selection. Starting, canceling, or finishing an action clears the default map inspection selection so the normal map explorer never resumes with an action territory preselected. Popups and modals may appear above the map area, but they should not cover the player bar.
+
+In allocation-style troop rows, the `+` and `-` icons are buttons. Pressing one moves as many currently legal units as possible, while the individual unit icons remain one-at-a-time controls. When a bulk action must leave a troop behind, it leaves one troop using priority: heavy, then cavalry, then elite, then leader.
 
 ## Gameplay Connections
 
@@ -641,7 +643,7 @@ Fortify is optional and happens after the active player is done attacking. Once 
 Pressing `Fortify` begins local fortify setup. The regular action buttons are replaced by:
 
 - a black, horizontally centered `Cancel Fortify` button
-- a `Skip` button
+- a black `Skip` button
 
 `Cancel Fortify` resets the whole fortify action and returns to the post-reinforcement action choice. `Skip` has no confirmation; it ends the current player's turn immediately without moving units.
 
@@ -725,7 +727,7 @@ The troop section uses allocation-style rows once a source is selected.
 
 Top/source row:
 
-- uses the `+` affordance
+- uses the `+` bulk-action button
 - shows units currently available to move from the selected source
 - follows the shared known-content icon contract
 - shows troop icons with counts greater than zero that are legal or potentially legal from that source
@@ -739,7 +741,7 @@ Middle label:
 
 Bottom/target row:
 
-- uses the `-` affordance
+- uses the `-` bulk-action button
 - shows the total units currently in the target in the provisional fortify view
 - includes the target's original troops and captured spies
 - includes all provisional fortify additions from every source, not only the currently selected source

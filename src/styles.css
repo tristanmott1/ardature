@@ -955,7 +955,11 @@ select {
   place-items: center;
   width: 32px;
   height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #111111;
+  cursor: pointer;
 }
 
 .troop-row-spacer {
@@ -965,6 +969,7 @@ select {
 
 .troop-row-affordance[data-muted="true"] {
   opacity: 0.3;
+  cursor: default;
 }
 
 .troop-icon-button {

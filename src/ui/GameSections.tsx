@@ -29,8 +29,10 @@ type TroopSectionProps =
       allocation: GameState["allocation"];
       canFinish: boolean;
       mode: "initialAllocation";
+      onAddAll: () => void;
       onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
       onFinish: () => void;
+      onRemoveAll: () => void;
       ownership: TerritoryOwnerMap;
       player: GamePlayer;
       selectedTerritoryId: string | null;
@@ -40,8 +42,10 @@ type TroopSectionProps =
       canFinish: boolean;
       capturedSpies: CapturedSpyView[];
       mode: "reinforcement";
+      onAddAll: () => void;
       onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
       onFinish: () => void;
+      onRemoveAll: () => void;
       player: GamePlayer;
       players: GamePlayer[];
       reinforcement: ReinforcementState;
@@ -51,8 +55,10 @@ type TroopSectionProps =
       canFinish: boolean;
       committedTroops: TroopCounts;
       mode: "attack";
+      onAddAll: () => void;
       onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
       onFinish: () => void;
+      onRemoveAll: () => void;
       player: GamePlayer;
       sourceTerritory: GeneratedTerritoryData;
       sourceTroops: TroopCounts;
@@ -65,9 +71,11 @@ type TroopSectionProps =
       canRemoveSpy: (spyOwnerId: string) => boolean;
       canRemoveType: (troopType: TroopType) => boolean;
       mode: "fortify";
+      onAddAll: () => void;
       onAdjustSpy: (spyOwnerId: string, delta: 1 | -1) => void;
       onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
       onFinish: () => void;
+      onRemoveAll: () => void;
       player: GamePlayer;
       players: GamePlayer[];
       sourceSpies: CapturedSpyToken[];
@@ -105,8 +113,10 @@ export function TroopSection(props: TroopSectionProps) {
 function InitialAllocationTroopSection({
   allocation,
   canFinish,
+  onAddAll,
   onAdjustTroop,
   onFinish,
+  onRemoveAll,
   ownership,
   player,
   selectedTerritoryId,
@@ -119,8 +129,10 @@ function InitialAllocationTroopSection({
         <AllocationControls
           allocation={allocation}
           canFinish={canFinish}
+          onAddAll={onAddAll}
           onAdjustTroop={onAdjustTroop}
           onFinish={onFinish}
+          onRemoveAll={onRemoveAll}
           ownership={ownership}
           player={player}
           selectedTerritoryId={selectedTerritoryId}
@@ -185,7 +197,7 @@ export function TurnActionPanel({
               {cancelLabel}
             </button>
             {fortifySetupActive ? (
-              <button className="secondary icon-text-button turn-stage-button" type="button" onClick={onSkipFortify}>
+              <button className="primary icon-text-button turn-stage-button action-cancel-button" type="button" onClick={onSkipFortify}>
                 Skip
               </button>
             ) : null}
@@ -229,8 +241,10 @@ function ReinforcementTroopSection({
   allocation,
   canFinish,
   capturedSpies,
+  onAddAll,
   onAdjustTroop,
   onFinish,
+  onRemoveAll,
   player,
   players,
   reinforcement,
@@ -254,7 +268,9 @@ function ReinforcementTroopSection({
         <TroopPlacementRows
           canAddType={canAddType}
           canRemoveType={canRemoveType}
+          onAddAll={onAddAll}
           onAdjustTroop={onAdjustTroop}
+          onRemoveAll={onRemoveAll}
           player={player}
           players={players}
           remaining={remaining}
@@ -273,8 +289,10 @@ function ReinforcementTroopSection({
 function AttackTroopSection({
   canFinish,
   committedTroops,
+  onAddAll,
   onAdjustTroop,
   onFinish,
+  onRemoveAll,
   player,
   sourceTerritory,
   sourceTroops,
@@ -290,7 +308,9 @@ function AttackTroopSection({
         <TroopPlacementRows
           canAddType={canAddType}
           canRemoveType={canRemoveType}
+          onAddAll={onAddAll}
           onAdjustTroop={onAdjustTroop}
+          onRemoveAll={onRemoveAll}
           player={player}
           remaining={remaining}
           selectedTroops={committedTroops}
@@ -310,9 +330,11 @@ function FortifyTroopSection({
   canFinish,
   canRemoveSpy,
   canRemoveType,
+  onAddAll,
   onAdjustSpy,
   onAdjustTroop,
   onFinish,
+  onRemoveAll,
   player,
   players,
   sourceSpies,
@@ -331,8 +353,10 @@ function FortifyTroopSection({
           canAddType={canAddType}
           canRemoveSpy={canRemoveSpy}
           canRemoveType={canRemoveType}
+          onAddAll={onAddAll}
           onAdjustSpy={onAdjustSpy}
           onAdjustTroop={onAdjustTroop}
+          onRemoveAll={onRemoveAll}
           player={player}
           players={players}
           remaining={sourceTroops}
@@ -404,16 +428,20 @@ function InfoTroopSection({
 function AllocationControls({
   allocation,
   canFinish,
+  onAddAll,
   onAdjustTroop,
   onFinish,
+  onRemoveAll,
   ownership,
   player,
   selectedTerritoryId,
 }: {
   allocation: NonNullable<GameState["allocation"]>;
   canFinish: boolean;
+  onAddAll: () => void;
   onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
   onFinish: () => void;
+  onRemoveAll: () => void;
   ownership: TerritoryOwnerMap;
   player: GamePlayer;
   selectedTerritoryId: string | null;
@@ -433,7 +461,9 @@ function AllocationControls({
       <TroopPlacementRows
         canAddType={canAddType}
         canRemoveType={canRemoveType}
+        onAddAll={onAddAll}
         onAdjustTroop={onAdjustTroop}
+        onRemoveAll={onRemoveAll}
         player={player}
         remaining={remaining}
         selectedTroops={selectedTroops}

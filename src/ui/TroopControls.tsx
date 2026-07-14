@@ -17,6 +17,8 @@ export function TroopPlacementRows({
   canRemoveType,
   onAdjustSpy,
   onAdjustTroop,
+  onAddAll,
+  onRemoveAll,
   player,
   selectedSpies = [],
   remaining,
@@ -31,6 +33,8 @@ export function TroopPlacementRows({
   canRemoveType: (troopType: TroopType) => boolean;
   onAdjustSpy?: (spyOwnerId: string, delta: 1 | -1) => void;
   onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
+  onAddAll?: () => void;
+  onRemoveAll?: () => void;
   player: GamePlayer;
   players?: GamePlayer[];
   remaining: TroopCounts;
@@ -48,6 +52,7 @@ export function TroopPlacementRows({
         delta={1}
         icon={<Plus size={17} />}
         labelNoun="remaining"
+        onAdjustAll={onAddAll}
         onAdjustTroop={onAdjustTroop}
         onAdjustSpy={onAdjustSpy}
         player={player}
@@ -65,6 +70,7 @@ export function TroopPlacementRows({
         delta={-1}
         icon={<Minus size={17} />}
         labelNoun="on territory"
+        onAdjustAll={onRemoveAll}
         onAdjustSpy={onAdjustSpy}
         onAdjustTroop={onAdjustTroop}
         player={player}
@@ -84,6 +90,7 @@ function TroopActionRow({
   icon,
   labelNoun,
   onAdjustSpy,
+  onAdjustAll,
   onAdjustTroop,
   player,
   players = [],
@@ -97,6 +104,7 @@ function TroopActionRow({
   icon: ReactNode;
   labelNoun: string;
   onAdjustSpy?: (spyOwnerId: string, delta: 1 | -1) => void;
+  onAdjustAll?: () => void;
   onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
   player: GamePlayer;
   players?: GamePlayer[];
@@ -109,9 +117,9 @@ function TroopActionRow({
   return (
     <div className="troop-action-row">
       {hasVisibleUnits ? (
-        <span className="troop-row-affordance" data-muted={canUseAny ? undefined : "true"} aria-hidden="true">
+        <button className="troop-row-affordance" type="button" onClick={onAdjustAll} disabled={!canUseAny} data-muted={canUseAny ? undefined : "true"} aria-label={`${actionLabel} all`}>
           {icon}
-        </span>
+        </button>
       ) : (
         <span className="troop-row-spacer" aria-hidden="true" />
       )}

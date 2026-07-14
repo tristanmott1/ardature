@@ -425,6 +425,8 @@ async function runSourceChecks() {
   assert(!appSource.includes("troop-step-grid") && !appSource.includes("troop-stepper"), "Old troop stepper markup is removed.");
   assert(!stylesSource.includes(".troop-step-grid") && !stylesSource.includes(".troop-stepper"), "Old troop stepper styles are removed.");
   assert(gameSectionsSource.includes('from "./TroopControls"') && troopControlsSource.includes("function TroopPlacementRows") && troopControlsSource.includes("function TroopActionRow") && troopControlsSource.includes("function visibleTroopTypes") && (troopControlsSource.match(/className=\"troop-action-row\"/g) ?? []).length === 1 && !appSource.includes("function TroopPlacementRows"), "Initial allocation and reinforcement share one filtered troop placement row component.");
+  assert(troopControlsSource.includes("onAddAll") && troopControlsSource.includes("onRemoveAll") && troopControlsSource.includes('aria-label={`${actionLabel} all`}'), "Troop row plus/minus affordances are pressable bulk action buttons.");
+  assert(appSource.includes("function movableTroopsLeavingOne") && appSource.includes('["heavy", "cavalry", "elite", "leader"] as const'), "Bulk source moves use one leave-behind priority helper.");
   assert(!stylesSource.includes(".army-triangle text"), "Army triangle does not style text labels.");
   assert(!mapViewSource.includes("isImmediatePress") && !mapViewSource.includes("pressImmediately"), "Old immediate territory press workaround is removed.");
   assert(indexSource.includes("./app-icons/icon-192.png") && indexSource.includes("./app-icons/apple-touch-icon.png"), "Index references organized app icons.");
@@ -1096,6 +1098,35 @@ async function assertActionCancelGroupCentered(page, labels) {
 
   assert(centers, `${labels.join(" and ")} are present in the action bar.`);
   assert(Math.abs(centers.groupCenter - centers.panelCenter) <= 1, `${labels.join(" and ")} are centered as an action group.`);
+}
+
+async function assertTroopAffordanceButtons(page, scope, message) {
+  const rows = page.locator(`${scope} .troop-action-row`);
+  assert((await rows.count()) === 2, `${message} Expected add and remove rows.`);
+
+  for (let index = 0; index < 2; index += 1) {
+    const row = rows.nth(index);
+    if ((await row.locator(".troop-icon-button").count()) === 0) {
+      continue;
+    }
+
+    assert((await row.locator(".troop-row-affordance").evaluate((node) => node.tagName.toLowerCase())) === "button", `${message} Row affordance is a button.`);
+    assert((await row.locator(".troop-icon-button .troop-row-affordance").count()) === 0, `${message} Row affordance is not nested in a troop icon button.`);
+  }
+}
+
+async function rowBubbleTotal(page, rowLocator) {
+  const texts = await rowLocator.locator(".troop-count-bubble").allTextContents();
+  return texts.map(Number).reduce((sum, count) => sum + count, 0);
+}
+
+async function troopCountFromState(page, territoryId) {
+  return page.evaluate((targetId) => {
+    const state = JSON.parse(localStorage.getItem("ardature.localGame.v1") ?? "null");
+    const ownerId = state?.draft?.ownership?.[targetId];
+    const troops = state?.allocation?.playerAllocations?.[ownerId]?.territories?.[targetId] ?? {};
+    return (troops.heavy ?? 0) + (troops.cavalry ?? 0) + (troops.elite ?? 0) + (troops.leader ?? 0);
+  }, territoryId);
 }
 
 async function assertReadyColumnHeadersLeftAligned(page) {
@@ -1821,6 +1852,7 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".troop-action-row").nth(0).locator(".troop-icon-button").count()) > 0, "Add row shows available troop icon buttons.");
   assert((await page.locator(".troop-action-row").nth(1).locator(".troop-icon-button").count()) === 0, "Empty remove row hides troop icon buttons.");
   assert((await page.locator(".troop-action-row").nth(1).locator(".troop-row-affordance").count()) === 0, "Empty remove row hides the minus affordance.");
+  await assertTroopAffordanceButtons(page, ".troop-placement-controls", "Initial allocation");
   const allocationBox = await page.locator(".troop-placement-controls").boundingBox();
   const addIconsBox = await page.locator(".troop-action-icons").nth(0).boundingBox();
   const removeIconsBox = await page.locator(".troop-action-icons").nth(1).boundingBox();
@@ -1828,14 +1860,15 @@ async function runRandomAllocationChecks(page) {
   assert(allocationBox && removeIconsBox && Math.abs((removeIconsBox.x + removeIconsBox.width / 2) - (allocationBox.x + allocationBox.width / 2)) < 2, "Remove troop icons are centered independent of the minus icon.");
   const allocationChildClasses = await page.locator(".troop-placement-controls").evaluate((node) => Array.from(node.children).map((child) => child.className));
   assert(String(allocationChildClasses[0]).includes("troop-action-row") && String(allocationChildClasses[1]).includes("allocation-target") && String(allocationChildClasses[2]).includes("troop-action-row"), "Allocation controls order add row, territory name, remove row.");
-  assert((await page.locator(".troop-row-affordance button").count()) === 0, "Row plus and minus icons are not buttons.");
   await clickTerritory(page, ownedTerritoryId);
   assert((await page.locator(".troop-placement-controls").count()) === 0, "Pressing the selected allocation territory again hides the troop section.");
   await clickTerritory(page, ownedTerritoryId);
   await page.waitForSelector(".troop-placement-controls");
-  await page.getByRole("button", { name: "Add heavy" }).click();
+  await page.getByRole("button", { name: "Add all" }).click();
   assert((await page.locator(".troop-marker").count()) >= 1, "Adding a troop shows a troop marker.");
-  await page.getByRole("button", { name: "Remove heavy" }).click();
+  assert(await rowBubbleTotal(page, page.locator(".troop-action-row").nth(1)) > 1, "Bulk allocation add places every currently legal troop.");
+  await page.getByRole("button", { name: "Remove all" }).click();
+  assert(await rowBubbleTotal(page, page.locator(".troop-action-row").nth(1)) === 0, "Bulk allocation remove clears removable troops.");
   await page.getByRole("button", { name: "Add heavy" }).click();
   await finishAllocationTurn(page, "yellow", { coveredTerritoryIds: [ownedTerritoryId], troopPool: [
     ...Array(12).fill("heavy"),
@@ -1915,11 +1948,17 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".turn-action-instruction").getByText(`Add troops to ${reinforcementTerritoryName}`).count()) === 1, "Reinforcement placement instruction names the selected territory.");
   await capture(page, "17-reinforcement-placement-mobile.png");
   assert((await page.locator(".troop-section-reinforcement .troop-action-row").count()) === 2, "Reinforcement placement has add and remove rows.");
+  await assertTroopAffordanceButtons(page, ".troop-section-reinforcement", "Reinforcement placement");
   assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(0).locator(".troop-icon-button").count()) > 0, "Reinforcement add row shows nonzero available troop icons.");
   assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(0).getByRole("button", { name: "Add leader" }).count()) === 0, "Reinforcement add row omits the zero leader slot.");
   const reinforcementBottomCounts = (await page.locator(".troop-section-reinforcement .troop-action-row").nth(1).locator(".troop-count-bubble").allTextContents()).map(Number);
   assert(reinforcementBottomCounts.reduce((sum, count) => sum + count, 0) > 0, "Reinforcement remove row shows existing territory troops.");
   assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(1).locator(".troop-icon-button:not(:disabled)").count()) === 0, "Existing troops shown during reinforcement cannot be removed.");
+  const existingReinforcementTotal = await rowBubbleTotal(page, page.locator(".troop-section-reinforcement .troop-action-row").nth(1));
+  await page.locator(".troop-section-reinforcement .troop-action-row").nth(0).getByRole("button", { name: "Add all" }).click();
+  assert(await rowBubbleTotal(page, page.locator(".troop-section-reinforcement .troop-action-row").nth(1)) > existingReinforcementTotal, "Bulk reinforcement add places all remaining reinforcement troops on the selected territory.");
+  await page.locator(".troop-section-reinforcement .troop-action-row").nth(1).getByRole("button", { name: "Remove all" }).click();
+  assert(await rowBubbleTotal(page, page.locator(".troop-section-reinforcement .troop-action-row").nth(1)) === existingReinforcementTotal, "Bulk reinforcement remove leaves locked pre-existing territory troops.");
   const beforeExpandViewBox = await viewBox(page);
   await clickTerritory(page, reinforcementTerritoryId);
   assert((await page.locator(".troop-section-reinforcement").count()) === 0, "Pressing the selected reinforcement territory again hides the troop section.");
@@ -1951,11 +1990,10 @@ async function runRandomAllocationChecks(page) {
   await page.waitForSelector(".troop-section-attack .allocation-target");
   assert((await page.locator(".turn-action-instruction").getByText("Choose attacking troops").count()) === 1, "Attack setup asks for committed troops after source and target selection.");
   assert((await page.locator(".troop-section-attack .allocation-target").textContent())?.includes(" to "), "Attack troop section names the source and target.");
-  await page.locator(".troop-section-attack .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").first().click();
-  const secondAttackTroop = page.locator(".troop-section-attack .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").first();
-  if ((await secondAttackTroop.count()) > 0) {
-    await secondAttackTroop.click();
-  }
+  await assertTroopAffordanceButtons(page, ".troop-section-attack", "Attack setup");
+  const sourceTotalBeforeBulkAttack = await troopCountFromState(page, attackPair.sourceTerritoryId);
+  await page.locator(".troop-section-attack .troop-action-row").nth(0).getByRole("button", { name: "Add all" }).click();
+  assert(await rowBubbleTotal(page, page.locator(".troop-section-attack .troop-action-row").nth(1)) === sourceTotalBeforeBulkAttack - 1, "Bulk attack commits every troop except the required leave-behind troop.");
   await page.getByRole("button", { name: "Confirm attack" }).click();
   await page.getByRole("dialog", { name: "Battle" }).waitFor();
   await capture(page, "18b-battle-modal-mobile.png");
@@ -2304,6 +2342,7 @@ async function runTurnFortifyChecks(browser) {
   assert((await page.locator(".turn-action-instruction").getByText("Select a territory to fortify").count()) === 1, "Fortify starts by asking for a target.");
   assert((await page.getByRole("button", { name: "Cancel Fortify" }).count()) === 1, "Fortify setup shows a cancel button.");
   assert((await page.getByRole("button", { name: "Skip" }).count()) === 1, "Fortify setup shows a skip button.");
+  assert((await page.getByRole("button", { name: "Skip" }).getAttribute("class"))?.includes("primary"), "Fortify skip button uses the black primary action style.");
   await assertActionCancelGroupCentered(page, ["Cancel Fortify", "Skip"]);
 
   await clickTerritory(page, "shire");
@@ -2315,13 +2354,13 @@ async function runTurnFortifyChecks(browser) {
   await page.waitForSelector(".troop-section-fortify .allocation-target");
   await capture(page, "19c-fortify-adjacent-source-mobile.png");
   assert(((await page.locator(".troop-section-fortify .allocation-target").textContent()) ?? "").includes("Bree to Shire"), "Fortify troop section names source and target.");
+  await assertTroopAffordanceButtons(page, ".troop-section-fortify", "Fortify adjacent source");
   assert((await page.locator(".troop-section-fortify .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").count()) >= 5, "Adjacent fortify source can move regular troops, cavalry, leader, and local captured spies.");
   assert((await page.getByRole("button", { name: "Remove Boromir spy" }).isDisabled()), "Captured spies originally on the target are visible but disabled.");
 
-  await page.getByRole("button", { name: "Add heavy" }).click();
-  await page.getByRole("button", { name: "Add Gandalf spy" }).click();
+  await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add all" }).click();
   const targetAfterBreeMove = await fortifyTargetUnitSummary(page);
-  assert(targetAfterBreeMove.troops >= 2 && targetAfterBreeMove.spies >= 2, "Target row shows original units plus provisional source moves.");
+  assert(targetAfterBreeMove.troops >= 5 && targetAfterBreeMove.spies >= 2, "Bulk adjacent fortify moves regular troops, cavalry, leader, and legal captured spies.");
 
   await clickTerritory(page, "north-downs");
   await page.waitForFunction(() => document.querySelector(".troop-section-fortify .allocation-target")?.textContent?.includes("North Downs to Shire"));
@@ -2334,11 +2373,9 @@ async function runTurnFortifyChecks(browser) {
   assert(!(await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add cavalry" }).isDisabled()), "Remote fortify source can move cavalry.");
   assert(await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add heavy" }).isDisabled(), "Remote fortify source cannot move heavy troops.");
   assert(await page.getByRole("button", { name: "Add Elrond spy" }).isDisabled(), "Remote captured spy cannot move before same-source cavalry.");
-  await page.getByRole("button", { name: "Add cavalry" }).click();
-  assert(!(await page.getByRole("button", { name: "Add Elrond spy" }).isDisabled()), "Remote captured spy can move after same-source cavalry.");
-  await page.getByRole("button", { name: "Add Elrond spy" }).click();
+  await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add all" }).click();
   assert((await page.locator(".troop-section-fortify .troop-action-row").nth(1).locator(".captured-spy-icon").count()) >= 3, "Target row includes spies moved from the current remote source.");
-  await page.locator(".troop-section-fortify .troop-action-row").nth(1).getByRole("button", { name: "Remove cavalry" }).click();
+  await page.locator(".troop-section-fortify .troop-action-row").nth(1).getByRole("button", { name: "Remove all" }).click();
   assert((await page.getByRole("button", { name: "Remove Elrond spy" }).count()) === 0, "Removing remote cavalry automatically returns remote spies to their source.");
 
   await page.getByRole("button", { name: "Cancel Fortify" }).click();
@@ -2356,14 +2393,13 @@ async function runTurnFortifyChecks(browser) {
   await clickTerritory(page, "shire");
   await clickTerritory(page, "bree");
   await page.waitForSelector(".troop-section-fortify .allocation-target");
-  await page.getByRole("button", { name: "Add heavy" }).click();
-  await page.getByRole("button", { name: "Add Gandalf spy" }).click();
+  await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add all" }).click();
   await page.getByRole("button", { name: "Confirm fortify" }).click();
   await page.waitForSelector('.app-shell[data-app-phase="turnHandoff"]');
   await capture(page, "19f-fortify-committed-handoff-mobile.png");
   const committedState = await page.evaluate(() => JSON.parse(localStorage.getItem("ardature.localGame.v1") ?? "null"));
-  assert(committedState.allocation.playerAllocations.viewer.territories.shire.heavy === 2, "Committed fortify adds moved troops to the target.");
-  assert(committedState.allocation.playerAllocations.viewer.territories.bree.heavy === 1, "Committed fortify removes moved troops from the source.");
+  assert(committedState.allocation.playerAllocations.viewer.territories.shire.heavy === 2, "Committed bulk fortify adds moved troops to the target.");
+  assert(committedState.allocation.playerAllocations.viewer.territories.bree.heavy === 1, "Committed bulk fortify leaves one heavy behind when possible.");
   assert(committedState.turn.spies.spyOwner.territoryId === "shire" && committedState.turn.spies.spyOwner.custodianPlayerId === "viewer", "Committed fortify moves captured spies to the target.");
 
   await page.close();

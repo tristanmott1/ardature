@@ -15,6 +15,7 @@ import {
   beginAllocationTurn,
   beginDraftTimer,
   beginTurnAfterHandoff,
+  canAddTroop,
   canAddReinforcementTroop,
   canAttackFromTerritory,
   canAttackTargetTerritory,
@@ -50,6 +51,8 @@ import {
   readLocalGame,
   readSyncHostGame,
   reinforcementComplete,
+  remainingReinforcementTroops,
+  remainingTroops,
   remainingTerritoryIds,
   retreatBattle,
   rollBattle,
@@ -66,6 +69,7 @@ import {
   subtractTroops,
   territoryTroops,
   troopTotal,
+  TROOP_TYPES,
   advanceAfterDraft,
   startDraft,
   startGameMapAfterAllocation,
@@ -276,6 +280,28 @@ function canCommitAttackAdjustment(delta: 1 | -1, committedTroops: TroopCounts, 
     Object.values(remainingTroops).every((count) => count >= 0);
 
   return countsAreValid && (delta < 0 || troopTotal(remainingTroops) >= 1);
+}
+
+function movableTroopsLeavingOne(sourceTroops: TroopCounts, allowedTypes: TroopType[] = ["heavy", "cavalry", "elite", "leader"]) {
+  const movableTroops = createTroopCounts();
+  let leftBehind = false;
+
+  for (const troopType of ["heavy", "cavalry", "elite", "leader"] as const) {
+    const count = sourceTroops[troopType];
+    if (count <= 0) {
+      continue;
+    }
+
+    if (!leftBehind) {
+      leftBehind = true;
+      movableTroops[troopType] = allowedTypes.includes(troopType) ? count - 1 : 0;
+      continue;
+    }
+
+    movableTroops[troopType] = allowedTypes.includes(troopType) ? count : 0;
+  }
+
+  return movableTroops;
 }
 
 function createFortifyMove(move?: FortifyMovesBySource[string]) {
@@ -1656,6 +1682,40 @@ function App() {
     setGame((current) => adjustTerritoryTroop(current, allocationPlayerId, allocationSelectedTerritoryId, troopType, delta));
   }
 
+  function adjustAllSelectedTroops(delta: 1 | -1) {
+    if (!allocationPlayerId || !allocationSelectedTerritoryId || syncJoinerBlocked) {
+      return;
+    }
+
+    setGame((current) => {
+      let next = current;
+      for (let step = 0; step < 200; step += 1) {
+        const allocation = next.allocation;
+        const ownership = next.draft?.ownership;
+        if (!allocation || !ownership) {
+          break;
+        }
+
+        const troops = delta > 0
+          ? remainingTroops(allocation, allocationPlayerId)
+          : territoryTroops(allocation, allocationSelectedTerritoryId);
+        const troopType = TROOP_TYPES.find((candidate) => troops[candidate] > 0 && (delta < 0 || canAddTroop(allocation, ownership, allocationPlayerId, allocationSelectedTerritoryId, candidate)));
+        if (!troopType) {
+          break;
+        }
+
+        const updated = adjustTerritoryTroop(next, allocationPlayerId, allocationSelectedTerritoryId, troopType, delta);
+        if (updated === next) {
+          break;
+        }
+
+        next = updated;
+      }
+
+      return next;
+    });
+  }
+
   function finishCurrentAllocation() {
     if (!allocationPlayerId || syncJoinerBlocked) {
       return;
@@ -1740,6 +1800,39 @@ function App() {
     }
 
     setGame((current) => adjustReinforcementTroop(current, turnPlayerId, turnSelectedTerritoryId, troopType, delta));
+  }
+
+  function adjustAllSelectedReinforcementTroops(delta: 1 | -1) {
+    if (!turnPlayerId || !turnSelectedTerritoryId || syncJoinerBlocked) {
+      return;
+    }
+
+    setGame((current) => {
+      let next = current;
+      for (let step = 0; step < 200; step += 1) {
+        const reinforcement = next.turn?.reinforcement;
+        if (!reinforcement) {
+          break;
+        }
+
+        const troops = delta > 0
+          ? remainingReinforcementTroops(reinforcement)
+          : reinforcement.territories[turnSelectedTerritoryId] ?? createTroopCounts();
+        const troopType = TROOP_TYPES.find((candidate) => troops[candidate] > 0);
+        if (!troopType) {
+          break;
+        }
+
+        const updated = adjustReinforcementTroop(next, turnPlayerId, turnSelectedTerritoryId, troopType, delta);
+        if (updated === next) {
+          break;
+        }
+
+        next = updated;
+      }
+
+      return next;
+    });
   }
 
   function finishCurrentReinforcements() {
@@ -1904,6 +1997,35 @@ function App() {
     }));
   }
 
+  function adjustAllFortifyUnits(delta: 1 | -1) {
+    if (!turnPlayerId || !fortifySetup?.selectedSourceTerritoryId) {
+      return;
+    }
+
+    const sourceTerritoryId = fortifySetup.selectedSourceTerritoryId;
+    const sourceMove = fortifyMoveForSource(fortifySetup, sourceTerritoryId);
+    if (delta < 0) {
+      setFortifySetup(updateFortifySourceMove(fortifySetup, sourceTerritoryId, createFortifyMove()));
+      return;
+    }
+
+    const sourceTroops = fortifySourceTroops(game, sourceTerritoryId, sourceMove);
+    const immediate = fortifySourceIsImmediate(sourceTerritoryId, fortifySetup.targetTerritoryId);
+    const regularSourceId = fortifyRegularSourceId(fortifySetup.targetTerritoryId, fortifySetup.movesBySource);
+    const canUseRegularLane = immediate && (!regularSourceId || regularSourceId === sourceTerritoryId);
+    const allowedTypes: TroopType[] = canUseRegularLane ? ["heavy", "cavalry", "elite", "leader"] : ["cavalry"];
+    const movedTroops = movableTroopsLeavingOne(sourceTroops, allowedTypes);
+    const movedSpyOwnerIds = fortifySourceSpies(game, sourceTerritoryId, sourceMove)
+      .filter((spy) => immediate ? canUseRegularLane : movedTroops.cavalry > 0)
+      .map((spy) => spy.ownerPlayerId);
+    const nextMove = {
+      spyOwnerIds: [...sourceMove.spyOwnerIds, ...movedSpyOwnerIds],
+      troops: addTroops(sourceMove.troops, movedTroops),
+    };
+
+    setFortifySetup(updateFortifySourceMove(fortifySetup, sourceTerritoryId, nextMove));
+  }
+
   function skipTurnFortify() {
     if (!turnPlayerId || syncJoinerBlocked) {
       return;
@@ -1960,6 +2082,26 @@ function App() {
     setAttackSetup({
       ...attackSetup,
       troops: nextTroops,
+    });
+  }
+
+  function adjustAllAttackTroops(delta: 1 | -1) {
+    if (!attackSetup?.sourceTerritoryId || !attackSetup.targetTerritoryId) {
+      return;
+    }
+
+    if (delta < 0) {
+      setAttackSetup({
+        ...attackSetup,
+        troops: createTroopCounts(),
+      });
+      return;
+    }
+
+    const sourceTroops = territoryTroops(game.allocation, attackSetup.sourceTerritoryId);
+    setAttackSetup({
+      ...attackSetup,
+      troops: addTroops(attackSetup.troops, movableTroopsLeavingOne(subtractTroops(sourceTroops, attackSetup.troops))),
     });
   }
 
@@ -2338,8 +2480,10 @@ function App() {
               canFinish={Boolean(turnPlayerId && canCommitAttack(game, turnPlayerId, sourceTerritory.id, targetTerritory.id, attackSetup.troops))}
               committedTroops={attackSetup.troops}
               mode="attack"
+              onAddAll={() => adjustAllAttackTroops(1)}
               onAdjustTroop={adjustAttackTroop}
               onFinish={confirmTurnAttack}
+              onRemoveAll={() => adjustAllAttackTroops(-1)}
               player={turnActionPlayer}
               sourceTerritory={sourceTerritory}
               sourceTroops={sourceTroops}
@@ -2357,9 +2501,11 @@ function App() {
               canRemoveSpy={(spyOwnerId) => fortifySourceMove.spyOwnerIds.includes(spyOwnerId)}
               canRemoveType={(troopType) => fortifySourceMove.troops[troopType] > 0}
               mode="fortify"
+              onAddAll={() => adjustAllFortifyUnits(1)}
               onAdjustSpy={adjustFortifySpy}
               onAdjustTroop={adjustFortifyTroop}
               onFinish={commitTurnFortify}
+              onRemoveAll={() => adjustAllFortifyUnits(-1)}
               player={turnActionPlayer}
               players={game.players}
               sourceSpies={fortifySourceSpyTokens}
@@ -2379,8 +2525,10 @@ function App() {
               canFinish={Boolean(turnPlayerId && reinforcementComplete(game, turnPlayerId))}
               capturedSpies={reinforcementCapturedSpies}
               mode="reinforcement"
+              onAddAll={() => adjustAllSelectedReinforcementTroops(1)}
               onAdjustTroop={adjustSelectedReinforcementTroop}
               onFinish={finishCurrentReinforcements}
+              onRemoveAll={() => adjustAllSelectedReinforcementTroops(-1)}
               player={turnActionPlayer}
               players={game.players}
               reinforcement={turnReinforcement}
@@ -2395,8 +2543,10 @@ function App() {
               allocation={game.allocation}
               canFinish={Boolean(game.allocation && allocationComplete(game.allocation, ownership, allocationPlayer.id))}
               mode="initialAllocation"
+              onAddAll={() => adjustAllSelectedTroops(1)}
               onAdjustTroop={adjustSelectedTroop}
               onFinish={finishCurrentAllocation}
+              onRemoveAll={() => adjustAllSelectedTroops(-1)}
               ownership={ownership}
               player={allocationPlayer}
               selectedTerritoryId={allocationSelectedTerritoryId}
