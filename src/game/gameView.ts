@@ -536,6 +536,10 @@ export function turnActionInstructionForGame(game: GameState, turnSelectedTerrit
     return "Select a territory to spy on";
   }
 
+  if (game.turn?.stage === "spyIntel") {
+    return "View territory";
+  }
+
   if (game.turn?.stage === "reinforcementBuild" || game.turn?.stage === "reinforcementPlace") {
     const territory = turnSelectedTerritoryId ? territoryForId(turnSelectedTerritoryId) : null;
 

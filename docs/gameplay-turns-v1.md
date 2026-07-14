@@ -66,6 +66,7 @@ The action section has a single-line instruction row above the buttons:
 
 - When no action is selected, the instruction is `Choose an action`.
 - When spy targeting is selected, the instruction is `Select a territory to spy on`.
+- While successful spy intel is visible, the instruction is `View territory`.
 - During reinforcement placement, the instruction is `Select a territory` until an owned territory is selected, then `Add troops to {territory}`.
 - During attack source selection, the instruction is `Select a territory to attack from`.
 - During attack target selection, the instruction is `Select a territory to attack`.
@@ -252,7 +253,7 @@ A region bonus is awarded only when the player owns every playable territory in 
 | Rhûn | 4 heavy |
 | Mordor | 3 heavy |
 
-The army-build modal shows total reinforcement troops above the triangle, including both controllable troops and fixed region bonus troops. It uses the shared known-content icon row: troop types whose count is `0` are hidden and the remaining icons are centered. Only the territory-budget troops respond to the triangle marker. Because reinforcements never add a leader, the leader icon is hidden unless a future rule creates a nonzero leader count.
+The army-build modal shows total reinforcement troops above the triangle, including both controllable troops and fixed region bonus troops. It uses the shared known-content icon row: troop types whose count is `0` are hidden and the remaining icons are centered. The modal is wide enough to keep the large count row on one line without shrinking icons, so changing the marker does not make the modal height jitter. Only the territory-budget troops respond to the triangle marker. Because reinforcements never add a leader, the leader icon is hidden unless a future rule creates a nonzero leader count.
 
 Region bonus troops should use the same fixed/additive troop-pool mechanics already used for troops inherited from removed players.
 

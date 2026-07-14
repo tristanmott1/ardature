@@ -234,7 +234,8 @@ async function runSourceChecks() {
   assert(appSource.includes("function renderUpperSection()") && appSource.includes("function renderActionSection()") && appSource.includes("{upperSectionElement}") && appSource.includes("{actionSectionElement}"), "App renders game-stage sections through explicit section slots.");
   assert(!troopControlsSource.includes("Select a territory"), "Allocation troop controls do not render a placeholder sliver when no territory is selected.");
   assert(gameSectionsSource.includes('className="troop-icon-button turn-spy-button"') && gameSectionsSource.includes("turn-spy-spacer") && !gameSectionsSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling and keeps a spacer when lost.");
-  assert(gameSectionsSource.includes("turn-action-instruction") && stylesSource.includes(".turn-action-instruction") && appSource.includes("turnActionInstructionForGame(game, turnSelectedTerritoryId)") && gameViewSource.includes("Add troops to ${territory.name}"), "Turn action bar includes a derived instruction row for each action.");
+  assert(gameSectionsSource.includes("turn-action-instruction") && stylesSource.includes(".turn-action-instruction") && appSource.includes("turnActionInstructionForGame(game, turnSelectedTerritoryId)") && gameViewSource.includes("Add troops to ${territory.name}") && gameViewSource.includes("View territory"), "Turn action bar includes a derived instruction row for each action.");
+  assert(stylesSource.includes(".army-build-modal > .troop-count-row.large") && stylesSource.includes("flex-wrap: nowrap"), "Army build modal keeps the large count row on one line.");
   assert(stylesSource.includes('.turn-spy-button[data-selected="true"]') && stylesSource.includes(".turn-spy-spacer"), "Turn spy selected and missing states have dedicated styling.");
   assert(appSource.includes("syncSnapshotForViewer") && appSource.includes("hostTransportRef.current?.sendToPeer(player.id") && gameViewSource.includes("spyIntel: null") && gameViewSource.includes("reinforcement: null"), "Sync snapshots hide private turn sub-state from passive viewers.");
   assert(gameTypesSource.includes("GameNotification") && gameTypesSource.includes("notifications: Record<string, GameNotification[]>") && gameTypesSource.includes("regionControl: Record<string, string | null>"), "Game state stores authoritative per-player notification queues and region control.");
@@ -1019,6 +1020,42 @@ async function assertBattleResultLayout(page, { iconCount, message, spyCount = 0
   assert((await page.locator(".battle-result-modal .battle-player-name").count()) === 0, "Battle result layout does not show regular player rows.");
 }
 
+async function assertArmyBuildRowOneLine(page, expectedIconCount, message) {
+  const row = page.locator(".army-build-modal > .troop-count-row.large");
+  const details = await row.evaluate((element) => {
+    const rowBox = element.getBoundingClientRect();
+    const iconBoxes = Array.from(element.querySelectorAll(".troop-icon-count")).map((icon) => icon.getBoundingClientRect());
+    return {
+      count: iconBoxes.length,
+      flexWrap: getComputedStyle(element).flexWrap,
+      height: rowBox.height,
+      topSpread: iconBoxes.length > 0
+        ? Math.max(...iconBoxes.map((box) => box.top)) - Math.min(...iconBoxes.map((box) => box.top))
+        : 0,
+    };
+  });
+
+  assert(details.count === expectedIconCount, `${message} Expected ${expectedIconCount} visible troop icons.`);
+  assert(details.flexWrap === "nowrap", `${message} Large army count row does not wrap.`);
+  assert(details.height <= 70 && details.topSpread <= 1, `${message} Large army count row stays on one line.`);
+}
+
+async function assertArmyBuildModalHeightStableDuringMarkerMoves(page) {
+  const modal = page.locator(".army-build-modal");
+  const triangleBox = await page.locator(".army-triangle").boundingBox();
+  const initialBox = await modal.boundingBox();
+  assert(triangleBox && initialBox, "Army build modal and triangle are visible.");
+
+  await page.mouse.click(triangleBox.x + triangleBox.width * 0.5, triangleBox.y + triangleBox.height * 0.16);
+  await page.waitForTimeout(50);
+  const movedBox = await modal.boundingBox();
+  await page.mouse.click(triangleBox.x + triangleBox.width * 0.5, triangleBox.y + triangleBox.height * 0.616);
+  await page.waitForTimeout(50);
+  const restoredBox = await modal.boundingBox();
+
+  assert(movedBox && restoredBox && Math.abs(movedBox.height - initialBox.height) <= 1 && Math.abs(restoredBox.height - initialBox.height) <= 1, "Army build modal height stays stable while projected counts change.");
+}
+
 async function waitForBattleRollOrResult(page) {
   await page.waitForFunction(() => document.querySelector(".battle-pip.visible") || document.querySelector(".battle-result-modal"));
 }
@@ -1764,6 +1801,8 @@ async function runRandomAllocationChecks(page) {
   await page.waitForSelector(".army-build-modal .army-triangle");
   await capture(page, "11-allocation-army-mobile.png");
   assert((await page.locator(".army-build-modal .troop-icon-count").count()) === 4, "Army build shows three troop classes plus leader.");
+  await assertArmyBuildRowOneLine(page, 4, "Initial army build row");
+  await assertArmyBuildModalHeightStableDuringMarkerMoves(page);
   assert((await page.locator(".army-triangle .army-triangle-icon").count()) === 3, "Army triangle uses three troop icons.");
   assert((await page.locator(".army-triangle text").count()) === 0, "Army triangle has no H/C/E text labels.");
   const projectedCounts = (await page.locator(".army-build-modal .troop-count-bubble").evaluateAll((nodes) => nodes.map((node) => (node.textContent ?? "").trim()))).sort((left, right) => Number(left) - Number(right));
@@ -2095,6 +2134,7 @@ async function runTurnSpyOutcomeChecks(browser) {
   await success.getByRole("button", { name: "Send spy" }).click();
   await success.getByRole("button", { name: "Dismiss" }).waitFor();
   await capture(success, "13c-spy-success-mobile.png");
+  assert((await success.locator(".turn-action-instruction").getByText("View territory").count()) === 1, "Successful spy intel uses the view-territory instruction.");
   assert((await success.locator(".troop-section-info .selected-territory-name").getByText("Bree").count()) === 1, "Successful spy shows the target territory name.");
   assert((await success.locator(".troop-section-info .troop-icon-count").count()) === 1, "Successful spy shows only nonzero target troop types.");
   assert((await success.locator(".troop-section-info .captured-spy-icon").count()) === 1, "Successful spy shows captured spies imprisoned on the target.");

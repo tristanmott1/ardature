@@ -776,10 +776,15 @@ select {
 }
 
 .army-build-modal {
-  width: min(380px, calc(100vw - 32px));
+  width: min(430px, calc(100vw - 16px));
   justify-items: center;
   gap: 18px;
-  padding: 18px;
+  padding: 16px;
+}
+
+.army-build-modal > .troop-count-row.large {
+  flex-wrap: nowrap;
+  gap: 10px;
 }
 
 .army-triangle {
