@@ -70,6 +70,7 @@ const PAN_MOMENTUM_STOP_SPEED = 0.02;
 const PAN_MOMENTUM_DECAY_MS = 300;
 const PAN_MOMENTUM_MAX_MS = 900;
 const CAMERA_CONTROL_OFFSET = 14;
+const CAMERA_CONTROL_SIZE = 46;
 const EMPTY_VISIBLE_INSETS: MapVisibleInsets = {
   bottom: 0,
   left: 0,
@@ -115,8 +116,20 @@ export function MapView({
   const viewportRef = useRef<MapViewport>(mapData.homeViewport);
   const [isAnimating, setIsAnimatingState] = useState(false);
   const [viewport, setViewportState] = useState<MapViewport>(viewportRef.current);
+  const visibleCameraWidth = typeof window === "undefined"
+    ? Number.POSITIVE_INFINITY
+    : window.innerWidth - visibleInsets.left - visibleInsets.right;
+  const visibleCameraHeight = typeof window === "undefined"
+    ? Number.POSITIVE_INFINITY
+    : window.innerHeight - visibleInsets.top - visibleInsets.bottom;
+  const canShowCameraControls =
+    showCameraControls &&
+    visibleCameraWidth >= CAMERA_CONTROL_SIZE * 2 + CAMERA_CONTROL_OFFSET * 3 &&
+    visibleCameraHeight >= CAMERA_CONTROL_SIZE + CAMERA_CONTROL_OFFSET * 2;
   const cameraControlStyle = {
-    "--map-camera-control-bottom": `${Math.max(CAMERA_CONTROL_OFFSET, visibleInsets.bottom + CAMERA_CONTROL_OFFSET)}px`,
+    "--map-camera-control-bottom": `${visibleInsets.bottom + CAMERA_CONTROL_OFFSET}px`,
+    "--map-camera-control-left": `${visibleInsets.left + CAMERA_CONTROL_OFFSET}px`,
+    "--map-camera-control-right": `${visibleInsets.right + CAMERA_CONTROL_OFFSET}px`,
   } as CSSProperties;
 
   function setViewport(nextViewport: MapViewport) {
@@ -699,7 +712,7 @@ export function MapView({
           ) : null}
         </g>
       </svg>
-      {showCameraControls ? (
+      {canShowCameraControls ? (
         <>
           <button
             aria-label="Return to map view"

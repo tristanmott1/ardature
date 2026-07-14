@@ -355,7 +355,7 @@ async function runSourceChecks() {
   assert(!hitTargetSource.includes("onPointerDown") && !hitTargetSource.includes("onPointerUp") && !hitTargetSource.includes("pendingPress"), "Hit targets do not duplicate map pointer gesture state.");
   assert(mapViewSource.includes("Maximize") && mapViewSource.includes("Return to map view"), "Map view uses a corner-only return-to-map control.");
   assert(mapViewSource.includes("Crosshair") && mapViewSource.includes("Disable automatic focus") && mapViewSource.includes("Enable automatic focus"), "Map view exposes an auto-focus toggle.");
-  assert(mapViewSource.includes("{showCameraControls ? (") && !mapViewSource.includes("showCameraControls && !isAnimating") && mapViewSource.includes("aria-disabled={isAnimating}"), "Map camera controls stay mounted during camera animations.");
+  assert(mapViewSource.includes("canShowCameraControls") && !mapViewSource.includes("showCameraControls && !isAnimating") && mapViewSource.includes("aria-disabled={isAnimating}"), "Map camera controls stay mounted during camera animations when the visible aperture has room.");
   assert(!mapViewSource.includes("ResizeObserver") && !mapViewSource.includes("flushSync") && !mapViewSource.includes("preservedResizeViewport") && !mapViewSource.includes("resizeAnchor") && !mapViewSource.includes("preserveAspectRatio={"), "Map view does not mutate camera state to correct persistent section changes.");
   assert(appSource.includes("useMapVisibleInsets") && appSource.includes("visibleInsets={visibleInsets}") && mapViewSource.includes("visibleInsets?: MapVisibleInsets") && mapViewSource.includes("viewportForApertureTarget"), "Map focus and return-to-map use a measured visible aperture.");
   assert(stylesSource.includes(".game-action-slot") && stylesSource.includes("position: fixed") && !stylesSource.includes(".game-layout .map-shell"), "Game-stage sections overlay the full-screen map instead of resizing it.");
@@ -589,6 +589,39 @@ async function assertMapShellFullScreen(page, message) {
   assert(box && viewport, message);
   assert(Math.abs(box.x) < 1 && Math.abs(box.y) < 1, message);
   assert(Math.abs(box.width - viewport.width) < 1 && Math.abs(box.height - viewport.height) < 1, message);
+}
+
+async function assertCameraControlsInsideVisibleAperture(page, message) {
+  const aperture = await page.evaluate(() => {
+    const playerBar = document.querySelector(".player-bar")?.getBoundingClientRect() ?? null;
+    const upperSection = document.querySelector(".game-upper-slot")?.getBoundingClientRect() ?? null;
+    const actionSection = document.querySelector(".game-action-slot")?.getBoundingClientRect() ?? null;
+    const mapShell = document.querySelector(".map-shell");
+    const mapShellStyle = mapShell ? getComputedStyle(mapShell) : null;
+    const returnButton = document.querySelector('button[aria-label="Return to map view"]');
+    const returnStyle = returnButton ? getComputedStyle(returnButton) : null;
+
+    return {
+      bottom: actionSection?.top ?? window.innerHeight,
+      buttonBottom: returnStyle?.bottom ?? "",
+      controlBottom: mapShellStyle?.getPropertyValue("--map-camera-control-bottom").trim() ?? "",
+      innerHeight: window.innerHeight,
+      left: 0,
+      right: window.innerWidth,
+      top: upperSection?.bottom ?? playerBar?.bottom ?? 0,
+    };
+  });
+  const returnBox = await page.getByRole("button", { name: "Return to map view" }).boundingBox();
+  const focusBox = await page.locator(".map-auto-focus").boundingBox();
+
+  assert(returnBox && focusBox, message);
+  for (const box of [returnBox, focusBox]) {
+    const details = `${message} Box: ${JSON.stringify(box)} Aperture: ${JSON.stringify(aperture)}`;
+    assert(box.x >= aperture.left - 1, details);
+    assert(box.x + box.width <= aperture.right + 1, details);
+    assert(box.y >= aperture.top - 1, details);
+    assert(box.y + box.height <= aperture.bottom + 1, details);
+  }
 }
 
 async function waitForViewBox(page, expected) {
@@ -1429,6 +1462,7 @@ async function runRandomAllocationChecks(page) {
   const turnActionBox = await page.locator(".turn-action-panel").boundingBox();
   await assertMapShellFullScreen(page, "Turn map stays full-screen under the action section.");
   assert(turnMapBox && turnActionBox && turnActionBox.y < turnMapBox.y + turnMapBox.height, "Turn action bar overlays the full-screen map.");
+  await assertCameraControlsInsideVisibleAperture(page, "Turn camera controls stay inside the visible map aperture.");
   assert((await page.getByRole("button", { name: "Spy" }).count()) === 1, "Turn controls include the spy button.");
   assert((await page.getByRole("button", { name: "Reinforcements" }).count()) === 1, "Turn starts at reinforcements.");
   assert((await page.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Turn action bar starts with an instruction row.");
@@ -1460,12 +1494,14 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".turn-action-instruction").getByText("Select a territory").count()) === 1, "Reinforcement placement asks for a territory before selection.");
   assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Map camera controls are available before reinforcement territory selection.");
   await assertMapShellFullScreen(page, "Map shell is full-screen before selecting reinforcement territory.");
+  await assertCameraControlsInsideVisibleAperture(page, "Reinforcement camera controls start inside the visible map aperture.");
   const beforeShrinkViewBox = await viewBox(page);
   const reinforcementTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="yellow"]').first().getAttribute("data-territory-fill");
   assert(reinforcementTerritoryId, "Current player still owns a territory for reinforcements.");
   await clickTerritory(page, reinforcementTerritoryId);
   await page.waitForSelector(".troop-section-reinforcement .allocation-target");
   await assertMapShellFullScreen(page, "Map shell stays full-screen when troop section appears.");
+  await assertCameraControlsInsideVisibleAperture(page, "Reinforcement camera controls stay inside the visible aperture when troop section appears.");
   const afterShrinkViewBox = await viewBox(page);
   assert(afterShrinkViewBox === beforeShrinkViewBox, "Showing the troop section does not change the current map viewBox.");
   await page.waitForTimeout(40);
