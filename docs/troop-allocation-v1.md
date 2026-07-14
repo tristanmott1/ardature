@@ -106,7 +106,7 @@ After locking the army build, the player allocates all available troops to terri
 Allocation rules:
 
 - A player may select only territories they own.
-- Selecting a territory highlights it. If automatic focus is enabled, the map also focuses on that territory.
+- Selecting a territory highlights it. If automatic focus is enabled, the app creates a camera intent after the selected-territory troop section is visible, so the focus target fits the post-selection aperture. If automatic focus is off, selecting a territory may reveal the troop section but does not move the camera.
 - The selected allocation territory is local UI state. In sync mode, selecting a territory for allocation does not highlight or focus any other device.
 - Every owned territory must have at least one troop total before the player can finish.
 - Allocation uses the shared colored player bar: X on the left, current player name prominent near the left, timer near pause when present, and pause on the right in local mode or for the sync host.

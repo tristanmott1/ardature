@@ -294,7 +294,9 @@ Local mode uses the same draft engine as sync mode, but without network messages
 
 ## Map Behavior
 
-The app should be a map-first shell. During every stage, the map remains a full-screen layer. During game stages, the player bar sits at the top, the optional troop section sits below it, and the optional action section sits at the bottom as persistent UI over that map. These sections define the visible aperture for explicit focus/return actions, but showing or hiding them does not resize the SVG or mutate the current camera. Draft confirmation, pause, scanner, handoff, notifications, and decision confirmations do not remove or cover the player bar after draft has started. Overlay states may hide troop/action sections and cover the map.
+The app should be a map-first shell. During every stage, the map remains a full-screen layer. During game stages, the player bar sits at the top, the optional troop section sits below it, and the optional action section sits at the bottom as persistent UI over that map. These sections define the visible aperture for explicit focus/return camera intents, but showing or hiding them does not resize the SVG or mutate the current camera. Draft confirmation, pause, scanner, handoff, notifications, and decision confirmations do not remove or cover the player bar after draft has started. Overlay states may hide troop/action sections and cover the map.
+
+Camera movement is explicit. Local handoff and selected-territory automatic focus create app-level camera intents after the resulting persistent UI layout has rendered and been measured. Manual return-to-map is the same kind of explicit camera action, handled directly inside the map with the current measured aperture. A draft pick that opens a confirmation sheet does not move the camera unless automatic focus is enabled on that device. If automatic focus is off, selection may highlight the territory locally but the `viewBox` remains unchanged.
 
 Reusable map modes for this milestone:
 

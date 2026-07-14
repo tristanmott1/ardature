@@ -48,6 +48,10 @@ export type MapVisibleInsets = {
   top: number;
 };
 
+export type MapCameraIntent =
+  | { id: number; type: "home" }
+  | { id: number; territoryId: string; type: "territory" };
+
 type MapVisibleAperture = {
   height: number;
   left: number;
@@ -79,12 +83,11 @@ const EMPTY_VISIBLE_INSETS: MapVisibleInsets = {
 };
 
 export function MapView({
+  cameraIntent,
   frozen = false,
   mapData,
   onMapPress,
   onTerritoryPress,
-  resetCameraKey = 0,
-  selectedTerritoryId,
   autoFocusEnabled = false,
   onAutoFocusChange,
   showCameraControls = true,
@@ -92,12 +95,11 @@ export function MapView({
   troopMarkers = [],
   visibleInsets = EMPTY_VISIBLE_INSETS,
 }: {
+  cameraIntent?: MapCameraIntent | null;
   frozen?: boolean;
   mapData: GeneratedMapData;
   onMapPress?: () => void;
   onTerritoryPress?: (territoryId: string) => void;
-  resetCameraKey?: number;
-  selectedTerritoryId: string | null;
   autoFocusEnabled?: boolean;
   onAutoFocusChange?: (enabled: boolean) => void;
   showCameraControls?: boolean;
@@ -112,7 +114,7 @@ export function MapView({
   const momentumFrameRef = useRef<number | null>(null);
   const isAnimatingRef = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
-  const previousSelectedTerritoryIdRef = useRef<string | null>(null);
+  const consumedCameraIntentIdRef = useRef(0);
   const viewportRef = useRef<MapViewport>(mapData.homeViewport);
   const [isAnimating, setIsAnimatingState] = useState(false);
   const [viewport, setViewportState] = useState<MapViewport>(viewportRef.current);
@@ -608,39 +610,23 @@ export function MapView({
   }, [mapData.homeViewport]);
 
   useEffect(() => {
-    const previousSelectedTerritoryId = previousSelectedTerritoryIdRef.current;
-    previousSelectedTerritoryIdRef.current = selectedTerritoryId;
-
-    if (!selectedTerritoryId) {
-      if (previousSelectedTerritoryId || isAnimatingRef.current) {
-        stopFocusAnimation();
-      }
-
+    if (!cameraIntent || cameraIntent.id <= consumedCameraIntentIdRef.current) {
       return;
     }
 
-    if (!autoFocusEnabled) {
-      return;
-    }
+    consumedCameraIntentIdRef.current = cameraIntent.id;
 
-    if (selectedTerritoryId === previousSelectedTerritoryId) {
-      return;
-    }
-
-    const selectedTerritory = mapData.territories.find((territory) => territory.id === selectedTerritoryId);
-
-    if (!selectedTerritory) {
-      return;
-    }
-
-    startFocusAnimation(apertureTargetForBounds(selectedTerritory.focusBounds));
-  }, [autoFocusEnabled, mapData, selectedTerritoryId, visibleInsets]);
-
-  useEffect(() => {
-    if (resetCameraKey > 0) {
+    if (cameraIntent.type === "home") {
       returnToMapView();
+      return;
     }
-  }, [resetCameraKey]);
+
+    const selectedTerritory = mapData.territories.find((territory) => territory.id === cameraIntent.territoryId);
+
+    if (selectedTerritory) {
+      startFocusAnimation(apertureTargetForBounds(selectedTerritory.focusBounds));
+    }
+  }, [cameraIntent, mapData, visibleInsets]);
 
   useEffect(() => {
     if (frozen || !showCameraControls) {

@@ -113,7 +113,7 @@ import {
   type SyncRole,
 } from "./game/gameView";
 import { generatedMapData } from "./map/generated/mapData";
-import { MapView, type MapVisibleInsets } from "./map/components/MapView";
+import { MapView, type MapCameraIntent, type MapVisibleInsets } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import { territoryForId } from "./map/territoryLookup";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
@@ -139,6 +139,10 @@ import {
 type SyncScannerMode = "hostOffer" | "joinAnswer" | null;
 
 type JoinerSyncCommand = Extract<ArdatureSyncMessage, { type: "profileUpdate" | "draftConfirm" | "allocationUpdate" | "turnCommand" | "quit" }>;
+type PendingCameraRequest =
+  | { type: "home" }
+  | { territoryId: string; type: "territory" }
+  | null;
 
 const EMPTY_MAP_SELECTIONS: MapSelectionState = {
   allocationSelectedTerritoryId: null,
@@ -259,7 +263,8 @@ function App() {
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null);
   const [decisionPrompt, setDecisionPrompt] = useState<DecisionPrompt>(null);
   const [pausedReturnPhase, setPausedReturnPhase] = useState<AppPhase | null>(null);
-  const [resetCameraKey, setResetCameraKey] = useState(0);
+  const [cameraIntent, setCameraIntent] = useState<MapCameraIntent | null>(null);
+  const [pendingCameraRequest, setPendingCameraRequest] = useState<PendingCameraRequest>(null);
   const [autoFocusEnabled, setAutoFocusEnabled] = useState(() => readMapPreferences().autoFocusEnabled);
   const [mapSelections, setMapSelections] = useState<MapSelectionState>(EMPTY_MAP_SELECTIONS);
   const hostTransportRef = useRef<SyncHostTransport | null>(null);
@@ -412,6 +417,35 @@ function App() {
     setMapSelections((current) => applyMapSelectionUpdates(current, updates));
   }
 
+  function requestHomeCameraIntent() {
+    setPendingCameraRequest({ type: "home" });
+  }
+
+  function requestTerritoryCameraIntent(territoryId: string) {
+    setPendingCameraRequest({ territoryId, type: "territory" });
+  }
+
+  function cameraTerritoryIdForSelectionUpdates(updates: Partial<MapSelectionState>) {
+    return updates.pendingDraftTerritoryId ??
+      updates.allocationSelectedTerritoryId ??
+      updates.gameMapSelectedTerritoryId ??
+      updates.pendingSpyTerritoryId ??
+      updates.turnSelectedTerritoryId ??
+      null;
+  }
+
+  useEffect(() => {
+    if (!pendingCameraRequest) {
+      return;
+    }
+
+    setCameraIntent((current) => ({
+      id: (current?.id ?? 0) + 1,
+      ...pendingCameraRequest,
+    }));
+    setPendingCameraRequest(null);
+  }, [pendingCameraRequest, visibleInsets]);
+
   useEffect(() => {
     setMapSelections((current) => sanitizeMapSelections(current, {
       allocationPlayerId,
@@ -523,7 +557,7 @@ function App() {
     }
 
     if (game.mode === "local" && previousPhase !== game.phase && (game.phase === "allocationHandoff" || game.phase === "turnHandoff")) {
-      setResetCameraKey((current) => current + 1);
+      requestHomeCameraIntent();
     }
   }, [game]);
 
@@ -1166,6 +1200,11 @@ function App() {
 
     if (updates) {
       updateMapSelections(updates);
+
+      const territoryId = cameraTerritoryIdForSelectionUpdates(updates);
+      if (autoFocusEnabled && territoryId) {
+        requestTerritoryCameraIntent(territoryId);
+      }
     }
   }
 
@@ -1744,12 +1783,11 @@ function App() {
 
       <MapView
         autoFocusEnabled={autoFocusEnabled}
+        cameraIntent={cameraIntent}
         frozen={layout.freezeMapGestures}
         mapData={generatedMapData}
         onTerritoryPress={!layout.freezeMapGestures && mapPressMode ? pressTerritory : undefined}
         onAutoFocusChange={changeAutoFocusEnabled}
-        resetCameraKey={resetCameraKey}
-        selectedTerritoryId={viewerSelectedTerritoryId}
         showCameraControls={layout.canUseMapCameraControls}
         territoryStates={territoryStates}
         troopMarkers={troopMarkers}

@@ -900,7 +900,7 @@ In sync mode, pending selections are local-only. Another player's pending select
 
 The compact draft controls show the active player's draft progress as confirmed picks over expected final picks, such as `3 / 11`. The expected final pick count is computed from the current draft style, frozen turn order, active players, and remaining territories.
 
-Once draft starts, the game-stage layout has exactly four ordered sections: player bar, optional troop section, full-screen map, and optional action section. The map remains full-screen underneath all persistent game UI; player/troop/action sections cover it rather than resizing it. Those sections define the visible aperture for explicit return-to-map and focus actions, but showing or hiding them does not mutate the current camera. The player bar remains visible for the rest of the game, including confirmation sheets, game notifications, pause, allocation, allocation waiting, local handoff, read-only inspection, and turn play. Pause and modal states may hide troop/action sections and cover the map, but they do not hide or cover the player bar. Draft has no troop section and no action section. The bar shows the relevant timer whenever one exists during draft or allocation: live remaining time, paused remaining time, upcoming handoff time, or shared sync allocation time while waiting. No timer is shown after troop allocation.
+Once draft starts, the game-stage layout has exactly four ordered sections: player bar, optional troop section, full-screen map, and optional action section. The map remains full-screen underneath all persistent game UI; player/troop/action sections cover it rather than resizing it. Those sections define the visible aperture for explicit return-to-map and focus camera intents, but showing or hiding them does not mutate the current camera. Camera intents are emitted only after the resulting persistent UI layout has rendered and been measured, so focus/fill-screen use the post-event aperture. The player bar remains visible for the rest of the game, including confirmation sheets, game notifications, pause, allocation, allocation waiting, local handoff, read-only inspection, and turn play. Pause and modal states may hide troop/action sections and cover the map, but they do not hide or cover the player bar. Draft has no troop section and no action section. The bar shows the relevant timer whenever one exists during draft or allocation: live remaining time, paused remaining time, upcoming handoff time, or shared sync allocation time while waiting. No timer is shown after troop allocation.
 
 Game-stage popups and modals are organized by role. Only one overlay is active at a time. If multiple overlays are pending, the app shows them in this priority order:
 
@@ -922,7 +922,7 @@ Overlay roles:
 - Game notification modal: centered dismiss-only modal for authoritative region and spy notifications.
 - Pause modal: centered modal; sync host pause may include recovery QR tools, while sync non-host pause never shows QR recovery tools.
 - Decision modal: centered destructive confirmation for restart and exit/end game.
-- Handoff modal: local-only centered arrow gate. Before local handoff is shown, the app returns the map to the home viewport, then freezes it. The player bar shows the next player.
+- Handoff modal: local-only centered arrow gate. Entering local handoff hides troop/action sections, emits a home camera intent for the post-handoff aperture, and freezes user map input while the home animation may continue behind the popup. The player bar shows the next player.
 - Scanner modal: QR camera utility. Scanner flows opened before a device joins/rejoins a game are not bound by game-stage player bar rules.
 - Sync blocked modal: centered reconnecting/disconnected/host-ended blocker. Reconnecting devices must not present stale host facts as current truth.
 
@@ -953,7 +953,7 @@ Territory allocation:
 
 - The player allocates all available troops to owned territories.
 - Only owned territories are selectable.
-- Selecting an owned territory highlights it locally. If automatic focus is enabled, the map also focuses on that territory locally.
+- Selecting an owned territory highlights it locally. If automatic focus is enabled, the app emits a local territory camera intent after the selection layout has rendered. If automatic focus is off, selection changes can reveal the troop section but never move the map.
 - The troop section is hidden until an owned territory is selected.
 - Pressing the selected territory again unselects it and hides the troop section.
 - The troop section shows icon-only remaining troop totals in the top row, the selected territory name between rows, and icon-only selected-territory troop totals in the bottom row.

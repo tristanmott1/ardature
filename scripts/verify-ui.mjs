@@ -215,6 +215,9 @@ async function runSourceChecks() {
   assert(gameViewSource.includes("type ActiveOverlay") && gameViewSource.includes('type: "confirm"') && gameViewSource.includes('type: "pause"') && gameViewSource.includes("function activeOverlayForState"), "App uses a single overlay model for game-stage popups.");
   assert(appSource.includes("const activeOverlay = activeOverlayForState") && !appSource.includes("firstActiveOverlay("), "App imports active overlay priority instead of assembling modal priority inline.");
   assert(gameViewSource.includes("type OverlayBehavior") && gameViewSource.includes("function overlayBehaviorForOverlay") && gameViewSource.includes("hidesCameraControls") && gameViewSource.includes("hidesUpperSection") && gameViewSource.includes("hidesActionSection") && !gameViewSource.includes("const hasActiveOverlay") && !gameViewSource.includes("const hideSections"), "Overlay behavior is explicit instead of derived from scattered active-overlay booleans.");
+  assert(!appSource.includes("resetCameraKey") && !mapViewSource.includes("resetCameraKey"), "Map camera movement no longer uses resetCameraKey.");
+  assert(mapViewSource.includes("type MapCameraIntent") && mapViewSource.includes("cameraIntent") && mapViewSource.includes("consumedCameraIntentIdRef"), "MapView consumes explicit camera intents.");
+  assert(!mapViewSource.includes("selectedTerritoryId") && appSource.includes("requestHomeCameraIntent") && appSource.includes("requestTerritoryCameraIntent") && appSource.includes("pendingCameraRequest"), "MapView does not focus directly from selected territory state.");
   assert(gameViewSource.includes("type PausePanelPolicy") && gameViewSource.includes("function pausePanelPolicyForGame") && appSource.includes("const pausePanelPolicy = pausePanelPolicyForGame") && !appSource.includes('canRemove={game.mode === "local"') && !appSource.includes("game.players.every((player) => player.connectionStatus === \"connected\")"), "Pause panel permissions are projected outside App.");
   assert(appSource.includes("const [decisionPrompt, setDecisionPrompt]") && gameViewSource.includes("decisionPrompt: DecisionPrompt") && !appSource.includes("isEndGamePromptOpen") && !appSource.includes("isRestartGamePromptOpen"), "Decision overlays use one prompt state instead of separate booleans.");
   assert(appSource.includes("syncScannerMode") && gameViewSource.includes("scannerActive") && !appSource.includes("syncCameraMode") && !gameViewSource.includes("syncCameraMode"), "QR scanner overlay state is named separately from map camera controls.");
@@ -452,6 +455,35 @@ function generatedTerritoryCenter(source, territoryId) {
 
   assert(Number.isFinite(point.x) && Number.isFinite(point.y), `Generated center for ${territoryId} is finite.`);
   return point;
+}
+
+function generatedTerritoryFocusTarget(source, territoryId) {
+  const start = source.indexOf(`id: "${territoryId}",`);
+
+  if (start < 0) {
+    throw new Error(`Missing generated territory ${territoryId}.`);
+  }
+
+  const next = source.indexOf("\n    {", start + 1);
+  const block = source.slice(start, next > start ? next : undefined);
+  const match = block.match(/focusBounds: \{ minX: ([^,]+), minY: ([^,]+), maxX: ([^,]+), maxY: ([^ }]+) \},/);
+
+  if (!match) {
+    throw new Error(`Missing generated focus bounds for ${territoryId}.`);
+  }
+
+  const minX = Number(match[1]);
+  const minY = Number(match[2]);
+  const maxX = Number(match[3]);
+  const maxY = Number(match[4]);
+
+  assert([minX, minY, maxX, maxY].every(Number.isFinite), `Generated focus bounds for ${territoryId} are finite.`);
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
 }
 
 async function viewBox(page) {
@@ -1385,6 +1417,8 @@ async function runMobileMapInteractionChecks(page) {
 
 async function runRandomAllocationChecks(page) {
   console.log("Checking random draft allocation");
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+
   await page.goto(baseUrl);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
@@ -1524,8 +1558,13 @@ async function runRandomAllocationChecks(page) {
   assert(afterExpandViewBox === beforeExpandViewBox, "Hiding the troop section does not change the current map viewBox.");
   await page.waitForTimeout(40);
   assert((await viewBox(page)) === afterExpandViewBox, "Hiding the troop section does not apply a delayed camera correction.");
+  await page.getByRole("button", { name: "Enable automatic focus" }).click();
+  const beforeFocusedReinforcement = await viewBox(page);
   await clickTerritory(page, reinforcementTerritoryId);
   await page.waitForSelector(".troop-section-reinforcement .allocation-target");
+  const expectedReinforcementFocus = await apertureViewBoxForTarget(page, generatedTerritoryFocusTarget(mapDataSource, reinforcementTerritoryId));
+  await waitForViewBox(page, expectedReinforcementFocus);
+  assert((await viewBox(page)) !== beforeFocusedReinforcement, "Auto-focus creates an explicit camera move after reinforcement selection.");
   await finishReinforcementPlacement(page);
   await page.waitForSelector(".turn-action-panel");
   assert((await page.locator(".troop-section-info").count()) === 0, "Finishing reinforcements returns to the default turn view with no inspected territory.");
@@ -1533,6 +1572,7 @@ async function runRandomAllocationChecks(page) {
   assert(await page.getByRole("button", { name: "Attack" }).isDisabled(), "Attack is visible but disabled.");
   await page.getByRole("button", { name: "Fortify" }).click();
   await page.waitForSelector('.app-shell[data-app-phase="turnHandoff"]');
+  await waitForViewBox(page, await apertureViewBoxForTarget(page, homeViewportFromSize(await mapSize(page))));
   await capture(page, "19-next-turn-handoff-mobile.png");
 }
 
