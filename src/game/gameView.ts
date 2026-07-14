@@ -532,7 +532,7 @@ export function turnActionInstructionForGame(game: GameState, turnSelectedTerrit
   }
 
   if (game.turn?.stage === "spyTarget") {
-    return "Select a territory";
+    return "Select a territory to spy on";
   }
 
   if (game.turn?.stage === "reinforcementBuild" || game.turn?.stage === "reinforcementPlace") {

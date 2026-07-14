@@ -299,7 +299,7 @@ If the active player's spy is captured, the spy button is unavailable until that
 
 The selected spy target must be owned by an opponent. Any opponent territory may be selected because the gameplay graph is connected.
 
-The action section instruction row describes the current local turn prompt. When no action is selected, it says `Choose an action`. When spy targeting is selected, it says `Select a territory`. During reinforcement placement, it says `Select a territory` until an owned territory is selected, then `Add troops to {territory}`. Starting, canceling, or finishing a turn action clears the default map inspection selection so normal map exploration does not resume with an action territory preselected. Selecting an opponent territory while spying opens a compact confirmation sheet with X and check controls. While this confirmation sheet is active, the map is frozen, manual pan/zoom controls are hidden, troop/action sections are hidden, and the target is canceled with the sheet X rather than by tapping the selected target again.
+The action section instruction row describes the current local turn prompt. When no action is selected, it says `Choose an action`. When spy targeting is selected, it says `Select a territory to spy on`. During reinforcement placement, it says `Select a territory` until an owned territory is selected, then `Add troops to {territory}`. During attack setup, it says `Select a territory to attack from`, then `Select a territory to attack`, then `Choose attacking troops`. When spy setup is active, the regular action buttons are replaced by one black `Cancel Spy` button. When attack setup is active, they are replaced by one black `Cancel Attack` button. The spy-button slot is reserved invisibly in both cases so the action bar keeps the same footprint. Starting, canceling, or finishing a turn action clears the default map inspection selection so normal map exploration does not resume with an action territory preselected. Selecting an opponent territory while spying opens a compact confirmation sheet with X and check controls. While this confirmation sheet is active, the map is frozen, manual pan/zoom controls are hidden, troop/action sections are hidden, and the target is canceled with the sheet X rather than by tapping the selected target again.
 
 The capture probability is based on the shortest gameplay-connection distance from the target territory to the active player's nearest owned territory:
 
@@ -460,8 +460,8 @@ Once the active player presses `Attack`, the action bar buttons are replaced wit
 
 The setup steps are:
 
-1. Select attacking territory.
-2. Select target territory.
+1. Select the territory to attack from.
+2. Select the territory to attack.
 3. Choose attacking troops.
 4. Confirm the attack.
 
@@ -494,6 +494,7 @@ In `Challenge` mode:
 - In sync mode, the defender also receives a challenge modal.
 - In local mode, the defender receives a deterministic score.
 - The temporary challenge modal contains one centered button.
+- The challenge button, and later the challenge itself, is the only content in the modal; it is not embedded inside the regular battle layout.
 - Pressing the button immediately samples and submits that player's score from the beta score distribution.
 - The player cannot preview the score before submission.
 - Once submitted, the score is fixed for the battle.
@@ -534,12 +535,16 @@ Committed attacking troops still visually count on the source territory while th
 
 The battle modal is centered and is a task modal.
 
+The defender is displayed at the top: defender name centered above the defender troop row, defender score centered below it. The attacker is displayed at the bottom: attacker score centered above the attacker troop row, attacker name centered below it. Scores render with one decimal and `/ 10`, for example `7.3 / 10`.
+
+Dice are centered between the two scores. Defender dice are white with black pips. Attacker dice are red with white pips. Dice are large raw dice controls with no surrounding card or rectangle. Before the first roll, blank dice show the correct dice count with no pips.
+
 The modal shows:
 
 - defender dice and troop breakdown on top
 - attacker dice and troop breakdown on bottom
 - latest roll only
-- both numeric scores, once available, displayed with one decimal
+- both numeric scores, once available, displayed with one decimal and `/ 10`
 - a short message section, which may be empty or say things like `Waiting...`, `{attacker} won`, or `{defender} won`
 - dice rendered as the roll button
 - a button below the dice for retreat or final confirmation
@@ -552,7 +557,7 @@ In local mode, only the active attacker sees the battle modal. The defender does
 
 The attacker must roll at least once before retreating. Before the first roll, the retreat button is disabled. After at least one roll, the attacker may press retreat. Retreat asks for confirmation. If retreat is confirmed, the attack ends immediately.
 
-When battle ends by conquest, attacker elimination, or confirmed retreat, the dice are disabled, the retreat button becomes a check/confirm button, and the message section says who won or that the attacker retreated. Nothing else may happen until the attacker dismisses that final result.
+When battle ends by conquest or attacker elimination, the dice are disabled, the retreat button becomes a check/confirm button, and the message section says who won. Nothing else may happen until the attacker dismisses that final result. When the attacker confirms a retreat, the battle ends immediately and the battle modal closes without showing a final retreat message.
 
 ### Combat Score
 

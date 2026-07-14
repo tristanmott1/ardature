@@ -334,7 +334,7 @@ async function runSourceChecks() {
   assert(gameTypesSource.includes("BattleState") && gameTypesSource.includes('type: "commitAttack"') && gameTypesSource.includes('type: "submitBattleScore"') && gameTypesSource.includes('type: "rollBattle"'), "Turn commands include locked battle actions.");
   assert(gameTypesSource.includes("committedAttackingTroops: TroopCounts") && gameTypesSource.includes("initialDefendingTroops: TroopCounts") && gameTypesSource.includes("attackingTroops: TroopCounts") && gameTypesSource.includes("defendingTroops: TroopCounts"), "Battle state preserves locked original troop counts and current survivor counts.");
   assert(syncMessagesSource.includes('command.type === "commitAttack"') && syncMessagesSource.includes('command.type === "rollBattle"') && syncMessagesSource.includes('command.type === "retreatBattle"'), "Sync message validation covers battle commands.");
-  assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)"), "Battle modal renders dice, retreat, and one-decimal scores.");
+  assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)") && battleModalSource.includes("/ 10") && battleModalSource.includes("battle-pip"), "Battle modal renders pip dice, retreat, and one-decimal scores out of ten.");
   assert(combatSource.includes("COMBAT_SCORE_VALUES") && combatSource.includes("challengeScoreForTroops") && combatSource.includes("rollCombatDice") && combatSource.includes("sampleCasualty"), "Combat math stores centralized score, challenge, dice, and casualty helpers.");
   assert(gameStateSource.includes("function randomCompleteAllAllocations") && gameStateSource.includes("function randomArmyMarker") && gameStateSource.includes("function bordersOpponentTerritory"), "Random allocation has dedicated army and border placement helpers.");
   assert(gameStateSource.includes("generatedMapConnections[territoryId as keyof typeof generatedMapConnections]") && gameStateSource.includes("ownership[connectedId] !== playerId"), "Random allocation uses gameplay connections to find opponent borders.");
@@ -933,6 +933,37 @@ async function assertCompactPlayerRowsAligned(page, selector, message) {
   }
 }
 
+async function assertBattleLayoutSymmetric(page, message) {
+  const gaps = await page.locator(".battle-modal").evaluate((modal) => {
+    const playerNames = Array.from(modal.querySelectorAll(".battle-player-name")).map((element) => element.getBoundingClientRect());
+    const troopRows = Array.from(modal.querySelectorAll(".battle-troops .troop-count-row")).map((element) => element.getBoundingClientRect());
+    const scores = Array.from(modal.querySelectorAll(".battle-score")).map((element) => element.getBoundingClientRect());
+    const defenderDice = modal.querySelector(".battle-dice-row:first-child")?.getBoundingClientRect();
+    const attackerDice = modal.querySelector(".battle-dice-row:last-child")?.getBoundingClientRect();
+
+    if (playerNames.length !== 2 || troopRows.length !== 2 || scores.length !== 2 || !defenderDice || !attackerDice) {
+      return null;
+    }
+
+    return {
+      nameToTroopsBottom: playerNames[1].top - troopRows[1].bottom,
+      nameToTroopsTop: troopRows[0].top - playerNames[0].bottom,
+      scoreToDiceBottom: scores[1].top - attackerDice.bottom,
+      scoreToDiceTop: defenderDice.top - scores[0].bottom,
+      troopRowHeightBottom: troopRows[1].height,
+      troopRowHeightTop: troopRows[0].height,
+      troopsToScoreBottom: troopRows[1].top - scores[1].bottom,
+      troopsToScoreTop: scores[0].top - troopRows[0].bottom,
+    };
+  });
+
+  assert(gaps, "Battle layout exposes the expected rows for spacing checks.");
+  assert(Math.abs(gaps.troopRowHeightTop - gaps.troopRowHeightBottom) <= 1, `${message}: troop row heights match.`);
+  assert(Math.abs(gaps.nameToTroopsTop - gaps.nameToTroopsBottom) <= 1, `${message}: player-to-troops spacing is symmetric.`);
+  assert(Math.abs(gaps.troopsToScoreTop - gaps.troopsToScoreBottom) <= 1, `${message}: troops-to-score spacing is symmetric.`);
+  assert(Math.abs(gaps.scoreToDiceTop - gaps.scoreToDiceBottom) <= 1, `${message}: score-to-dice spacing is symmetric.`);
+}
+
 async function assertReadyColumnHeadersLeftAligned(page) {
   const columns = await page.locator(".ready-column").evaluateAll((elements) => elements.map((column) => {
     const header = column.querySelector("h2")?.getBoundingClientRect();
@@ -1022,6 +1053,35 @@ async function findAttackPair(page) {
 
     return preferred;
   });
+}
+
+async function findAttackPairBySkins(page, sourceSkin, targetSkin) {
+  const connections = await generatedConnections();
+  const sourceIds = new Set(await page.locator(`[data-territory-fill][data-territory-skin="${sourceSkin}"]`).evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("data-territory-fill")).filter(Boolean),
+  ));
+  const targetIds = new Set(await page.locator(`[data-territory-fill][data-territory-skin="${targetSkin}"]`).evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("data-territory-fill")).filter(Boolean),
+  ));
+
+  for (const sourceTerritoryId of sourceIds) {
+    for (const targetTerritoryId of connections[sourceTerritoryId] ?? []) {
+      if (targetIds.has(targetTerritoryId)) {
+        return { sourceTerritoryId, targetTerritoryId };
+      }
+    }
+  }
+
+  throw new Error(`No attack pair found from ${sourceSkin} to ${targetSkin}.`);
+}
+
+async function generatedConnections() {
+  const source = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
+  const json = source
+    .replace(/^export const generatedMapConnections = /, "")
+    .replace(/\s+as const;\s*$/, "");
+
+  return JSON.parse(json);
 }
 
 async function findOwnedBorderTerritory(page) {
@@ -1677,7 +1737,9 @@ async function runRandomAllocationChecks(page) {
   await page.waitForSelector(".troop-section-info");
   await page.getByRole("button", { name: "Spy" }).click();
   assert((await page.locator(".troop-section-info").count()) === 0, "Starting spy clears the default inspected territory.");
-  assert((await page.locator(".turn-action-instruction").getByText("Select a territory").count()) === 1, "Spy targeting changes the action instruction.");
+  assert((await page.locator(".turn-action-instruction").getByText("Select a territory to spy on").count()) === 1, "Spy targeting changes the action instruction.");
+  assert((await page.getByRole("button", { name: "Cancel Spy" }).count()) === 1, "Spy targeting replaces action buttons with one cancel button.");
+  assert((await page.locator(".turn-action-buttons .turn-spy-spacer").count()) === 1, "Spy targeting reserves the spy slot so the action bar keeps its normal size.");
   await clickTerritory(page, opponentTerritoryId);
   await page.getByRole("dialog", { name: "Confirm spy" }).waitFor();
   await capture(page, "15-spy-confirm-mobile.png");
@@ -1740,11 +1802,11 @@ async function runRandomAllocationChecks(page) {
   await capture(page, "18-turn-actions-mobile.png");
   assert(!(await page.getByRole("button", { name: "Attack" }).isDisabled()), "Attack is enabled after reinforcements.");
   await page.getByRole("button", { name: "Attack" }).click();
-  assert((await page.locator(".turn-action-instruction").getByText("Select attacking territory").count()) === 1, "Attack setup first asks for an attacking territory.");
-  assert((await page.getByRole("button", { name: "Cancel" }).count()) === 1, "Attack setup replaces action buttons with one cancel button.");
+  assert((await page.locator(".turn-action-instruction").getByText("Select a territory to attack from").count()) === 1, "Attack setup first asks for an attacking territory.");
+  assert((await page.getByRole("button", { name: "Cancel Attack" }).count()) === 1, "Attack setup replaces action buttons with one cancel button.");
   const attackPair = await findAttackPair(page);
   await clickTerritory(page, attackPair.sourceTerritoryId);
-  assert((await page.locator(".turn-action-instruction").getByText("Select target territory").count()) === 1, "Attack setup asks for a target after source selection.");
+  assert((await page.locator(".turn-action-instruction").getByText("Select a territory to attack").count()) === 1, "Attack setup asks for a target after source selection.");
   await clickTerritory(page, attackPair.targetTerritoryId);
   await page.waitForSelector(".troop-section-attack .allocation-target");
   assert((await page.locator(".turn-action-instruction").getByText("Choose attacking troops").count()) === 1, "Attack setup asks for committed troops after source and target selection.");
@@ -1757,15 +1819,18 @@ async function runRandomAllocationChecks(page) {
   await page.getByRole("button", { name: "Confirm attack" }).click();
   await page.getByRole("dialog", { name: "Battle" }).waitFor();
   await capture(page, "18b-battle-modal-mobile.png");
+  await assertBattleLayoutSymmetric(page, "Main battle modal layout");
   assert((await page.locator(".turn-action-panel").count()) === 0, "Turn action bar hides during a locked battle.");
   assert((await page.locator(".troop-section-attack").count()) === 0, "Attack troop section hides during a locked battle.");
   assert((await page.getByRole("button", { name: "Roll dice" }).count()) === 1, "Battle modal exposes dice as the roll control.");
+  assert((await page.locator(".battle-score").first().textContent())?.includes("/ 10"), "Battle modal scores are shown out of ten.");
+  assert((await page.locator(".battle-die-defender").count()) > 0 && (await page.locator(".battle-die-attacker").count()) > 0, "Battle modal shows defender and attacker dice.");
+  assert((await page.locator(".battle-pip.visible").count()) === 0, "Battle dice are blank before the first roll.");
   await page.getByRole("button", { name: "Roll dice" }).click();
-  await page.waitForSelector(".battle-die:not([data-empty])");
+  await page.waitForSelector(".battle-pip.visible");
   if ((await page.getByRole("button", { name: "Retreat" }).isEnabled().catch(() => false))) {
     await page.getByRole("button", { name: "Retreat" }).click();
     await page.getByRole("dialog", { name: "Retreat from this attack?" }).getByRole("button", { name: "Retreat" }).click();
-    await page.getByRole("button", { name: "Dismiss battle" }).click();
   } else {
     await page.getByRole("button", { name: "Dismiss battle" }).click();
   }
@@ -1899,9 +1964,9 @@ async function runTurnSpyOutcomeChecks(browser) {
   assert((await success.locator('[data-troop-marker="rivendell"]').count()) === 0, "Spy fixture starts with non-adjacent same-owner total hidden.");
   assert((await success.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Turn spy fixture starts with the default action instruction.");
   await success.getByRole("button", { name: "Spy" }).click();
-  assert((await success.locator(".turn-action-instruction").getByText("Select a territory").count()) === 1, "Spy targeting updates the action instruction.");
-  assert((await success.locator('.turn-spy-button[data-selected="true"]').count()) === 1, "Spy button shows selected state while choosing a spy target.");
-  await success.getByRole("button", { name: "Spy" }).click();
+  assert((await success.locator(".turn-action-instruction").getByText("Select a territory to spy on").count()) === 1, "Spy targeting updates the action instruction.");
+  assert((await success.getByRole("button", { name: "Cancel Spy" }).count()) === 1, "Spy targeting shows a cancel button.");
+  await success.getByRole("button", { name: "Cancel Spy" }).click();
   assert((await success.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Toggling spy off restores the default action instruction.");
   await clickTerritory(success, "shire");
   assert((await success.locator(".troop-section-info .selected-territory-name").getByText("Shire").count()) === 1, "Toggling spy off returns territory taps to normal inspection.");
@@ -1948,6 +2013,47 @@ async function runTurnSpyOutcomeChecks(browser) {
 
   await success.close();
   await failure.close();
+}
+
+async function runTurnAttackChecks(browser) {
+  console.log("Checking turn attacks");
+  const regular = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const challenge = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  regular.setDefaultTimeout(10000);
+  challenge.setDefaultTimeout(10000);
+
+  await loadTurnAttackFixture(regular, { attackStyle: "regular", randomValue: 0.5 });
+  await capture(regular, "18c-attack-actions-fixture-mobile.png");
+  await commitFixtureAttack(regular);
+  await regular.getByRole("dialog", { name: "Battle" }).waitFor();
+  await capture(regular, "18d-regular-battle-before-roll-mobile.png");
+  await assertBattleLayoutSymmetric(regular, "Regular battle modal layout");
+  assert((await regular.locator(".battle-score").first().textContent())?.includes("/ 10"), "Regular battle shows scores out of ten.");
+  assert((await regular.locator(".battle-pip.visible").count()) === 0, "Regular battle dice are blank before rolling.");
+  await regular.getByRole("button", { name: "Roll dice" }).click();
+  await regular.waitForSelector(".battle-pip.visible");
+  await capture(regular, "18e-regular-battle-after-roll-mobile.png");
+  await regular.getByRole("button", { name: "Retreat" }).click();
+  await regular.getByRole("dialog", { name: "Retreat from this attack?" }).getByRole("button", { name: "Retreat" }).click();
+  await regular.waitForSelector(".battle-modal", { state: "detached" });
+  assert((await regular.locator(".turn-action-panel").count()) === 1, "Confirmed retreat closes the battle modal and returns to turn actions.");
+
+  await loadTurnAttackFixture(challenge, { attackStyle: "challenge", randomValue: 0.5 });
+  await commitFixtureAttack(challenge);
+  await challenge.getByRole("dialog", { name: "Battle challenge" }).waitFor();
+  await capture(challenge, "18f-challenge-battle-button-mobile.png");
+  assert((await challenge.getByRole("dialog", { name: "Battle challenge" }).getByRole("button", { name: "Challenge" }).count()) === 1, "Challenge battle shows one challenge button.");
+  assert((await challenge.locator(".battle-troops, .battle-score").count()) === 0, "Challenge modal is not embedded in the regular battle layout.");
+  assert((await challenge.locator(".battle-dice-button").count()) === 0, "Challenge modal does not show dice before score submission.");
+  assert((await challenge.getByRole("button", { name: "Retreat" }).count()) === 0, "Challenge modal does not show retreat before score submission.");
+  await challenge.getByRole("button", { name: "Challenge" }).click();
+  await challenge.getByRole("dialog", { name: "Battle" }).waitFor();
+  await capture(challenge, "18g-challenge-battle-after-score-mobile.png");
+  await assertBattleLayoutSymmetric(challenge, "Challenge battle modal layout after score");
+  assert((await challenge.locator(".battle-dice-button").count()) === 1, "Submitted challenge score switches to the dice battle layout.");
+
+  await regular.close();
+  await challenge.close();
 }
 
 async function runGameplayRemovalChecks(page) {
@@ -2160,6 +2266,39 @@ async function loadTurnSpyFixture(page, randomValue) {
   await page.waitForSelector(".turn-action-panel");
 }
 
+async function loadTurnAttackFixture(page, { attackStyle, randomValue }) {
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
+  const state = turnSpyGameState(territoryIds);
+  state.config.attackStyle = attackStyle;
+  state.turn.stage = "actions";
+
+  await page.addInitScript(({ savedState, nextRandom }) => {
+    localStorage.clear();
+    Math.random = () => nextRandom;
+    localStorage.setItem("ardature.localGame.v1", JSON.stringify(savedState));
+  }, { savedState: state, nextRandom: randomValue });
+  await page.goto(baseUrl);
+  await page.waitForSelector('.app-shell[data-app-phase="turn"]');
+  await page.waitForSelector(".turn-action-panel");
+}
+
+async function commitFixtureAttack(page) {
+  await page.getByRole("button", { name: "Attack" }).click();
+  await clickTerritory(page, "shire");
+  await clickTerritory(page, "bree");
+  await page.waitForSelector(".troop-section-attack .allocation-target");
+  for (let count = 0; count < 3; count += 1) {
+    const button = page.locator(".troop-section-attack .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").first();
+    if ((await button.count()) === 0) {
+      break;
+    }
+
+    await button.click();
+  }
+  await page.getByRole("button", { name: "Confirm attack" }).click();
+}
+
 function turnSpyGameState(territoryIds) {
   const state = readOnlyVisibilityGameState(territoryIds);
   const opponentAllocation = state.allocation.playerAllocations.opponent;
@@ -2191,6 +2330,8 @@ function turnSpyGameState(territoryIds) {
       },
       spyIntel: null,
       reinforcement: null,
+      battle: null,
+      completedAttacks: [],
     },
   };
 }
@@ -2222,6 +2363,7 @@ function readOnlyVisibilityGameState(territoryIds) {
       pickTimeLimit: 0,
       allocationStyle: "manual",
       troopAllocationTimeLimit: 0,
+      attackStyle: "regular",
     },
     draft: {
       originalTurnOrder: ["viewer", "opponent"],
@@ -2428,6 +2570,35 @@ async function runSyncReadyPageChecks(browser) {
   assert((await passiveTurnPage.locator(".turn-action-panel").count()) === 0, "Passive sync turn player does not see turn controls.");
   assert((await passiveTurnPage.locator(".troop-section-info").count()) === 0, "Passive sync turn player has no empty troop section before selecting a territory.");
   assert((await passiveTurnPage.locator(".troop-section-info .troop-icon-count").count()) === 0, "Passive sync turn player does not see private action breakdowns.");
+
+  const activeSkin = activeTurnPage === host ? "green" : "red";
+  const passiveSkin = activeTurnPage === host ? "red" : "green";
+  const syncAttackPair = await findAttackPairBySkins(activeTurnPage, activeSkin, passiveSkin);
+  await activeTurnPage.getByRole("button", { name: "Reinforcements" }).click();
+  await activeTurnPage.waitForSelector(".army-build-modal .army-triangle");
+  await activeTurnPage.getByRole("button", { name: "Confirm army" }).click();
+  await activeTurnPage.waitForSelector(".army-build-modal", { state: "detached" });
+  await clickTerritory(activeTurnPage, syncAttackPair.sourceTerritoryId);
+  await activeTurnPage.waitForSelector(".troop-section-reinforcement .allocation-target");
+  await finishReinforcementPlacement(activeTurnPage);
+  await activeTurnPage.waitForSelector(".turn-action-panel");
+  await activeTurnPage.getByRole("button", { name: "Attack" }).click();
+  await clickTerritory(activeTurnPage, syncAttackPair.sourceTerritoryId);
+  await clickTerritory(activeTurnPage, syncAttackPair.targetTerritoryId);
+  await activeTurnPage.waitForSelector(".troop-section-attack .allocation-target");
+  await activeTurnPage.locator(".troop-section-attack .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").first().click();
+  await activeTurnPage.getByRole("button", { name: "Confirm attack" }).click();
+  await activeTurnPage.getByRole("dialog", { name: "Battle" }).waitFor({ timeout: 15000 });
+  await passiveTurnPage.getByRole("dialog", { name: "Battle" }).waitFor({ timeout: 15000 });
+  await capture(activeTurnPage, "17d-sync-attacker-battle-mobile.png");
+  await capture(passiveTurnPage, "17e-sync-defender-battle-mobile.png");
+  await assertBattleLayoutSymmetric(activeTurnPage, "Sync attacker battle modal layout");
+  await assertBattleLayoutSymmetric(passiveTurnPage, "Sync defender battle modal layout");
+  assert(await activeTurnPage.getByRole("button", { name: "Roll dice" }).isEnabled(), "Sync attacker can roll battle dice.");
+  assert(await passiveTurnPage.getByRole("button", { name: "Roll dice" }).isDisabled(), "Sync defender can see the battle but cannot roll.");
+  await activeTurnPage.getByRole("button", { name: "Roll dice" }).click();
+  await activeTurnPage.waitForSelector(".battle-pip.visible");
+  await passiveTurnPage.waitForSelector(".battle-pip.visible");
 
   await host.close();
   await joiner.close();
@@ -2727,6 +2898,7 @@ async function main() {
     await runReadOnlyVisibilityChecks(readOnlyMobile);
     await readOnlyMobile.close();
     await runTurnSpyOutcomeChecks(browser);
+    await runTurnAttackChecks(browser);
     const removalMobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
     removalMobile.setDefaultTimeout(10000);
     await runGameplayRemovalChecks(removalMobile);

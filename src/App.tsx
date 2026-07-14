@@ -31,6 +31,7 @@ import {
   createInitialGameState,
   createOwnershipMap,
   createPlayer,
+  createRegionControl,
   createTroopCounts,
   createTerritoryStates,
   dismissBattle,
@@ -1261,6 +1262,10 @@ function App() {
       ...game,
       phase: "draft" as const,
       draft,
+      allocation: null,
+      turn: null,
+      notifications: {},
+      regionControl: createRegionControl(),
     };
 
     setGame(remainingTerritoryIds(draft.ownership).length === 0
@@ -1641,6 +1646,7 @@ function App() {
     }
 
     setDecisionPrompt(null);
+    updateMapSelections({ gameMapSelectedTerritoryId: null });
     if (isSyncJoiner) {
       sendTurnCommand({ type: "retreatBattle", battleId: activeBattle.id });
       return;
@@ -2057,8 +2063,8 @@ function App() {
       ? attackSetup.sourceTerritoryId
         ? attackSetup.targetTerritoryId
           ? "Choose attacking troops"
-          : "Select target territory"
-        : "Select attacking territory"
+          : "Select a territory to attack"
+        : "Select a territory to attack from"
       : turnActionInstructionForGame(game, turnSelectedTerritoryId);
 
     return (

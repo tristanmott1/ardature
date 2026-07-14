@@ -234,6 +234,8 @@ export function restartPausedGameToSetup(state: GameState, isSyncHost: boolean):
         draft: null,
         allocation: null,
         turn: null,
+        notifications: {},
+        regionControl: createRegionControl(),
       })
     : state;
 }
@@ -1211,10 +1213,8 @@ export function retreatBattle(state: GameState, playerId: string, battleId: stri
     ...state,
     turn: {
       ...turn,
-      battle: {
-        ...battle,
-        result: { type: "retreated" },
-      },
+      stage: "actions",
+      battle: null,
     },
   };
 }

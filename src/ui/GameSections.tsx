@@ -142,45 +142,50 @@ export function TurnActionPanel({
     : stage === "reinforcementBuild" || stage === "reinforcementPlace"
       ? "reinforcementReady"
       : stage;
-  const spySelected = stage === "spyTarget";
+  const cancelActionActive = attackSetupActive || stage === "spyTarget";
+  const cancelAction = attackSetupActive ? onCancelAttack : onSpy;
+  const cancelLabel = attackSetupActive ? "Cancel Attack" : "Cancel Spy";
 
   return (
     <section className="game-section-panel turn-action-panel">
       <p className="turn-action-instruction">{instruction}</p>
       <div className="turn-action-buttons">
-        {attackSetupActive ? (
-          <button className="secondary icon-text-button turn-stage-button" type="button" onClick={onCancelAttack}>
-            <X size={18} />
-            Cancel
-          </button>
-        ) : (
+        {cancelActionActive ? (
           <>
-        {spyMissing ? (
-          <span className="turn-spy-button turn-spy-spacer" aria-hidden="true" />
-        ) : (
-          <button className="troop-icon-button turn-spy-button" type="button" onClick={onSpy} disabled={!canSpy} data-selected={spySelected ? "true" : undefined} aria-label="Spy">
-            <TroopIconImage ownerColor={player.color} src={spyIconSrc(player.color)} />
-          </button>
-        )}
-        {stage === "spyIntel" ? (
-          <button className="primary icon-text-button turn-stage-button" type="button" onClick={onDismissSpy}>
-            <Check size={18} />
-            Dismiss
-          </button>
-        ) : actionStage === "reinforcementReady" ? (
-          <button className="primary icon-text-button turn-stage-button" type="button" onClick={onReinforce} disabled={stage === "reinforcementBuild" || stage === "reinforcementPlace"}>
-            Reinforcements
-          </button>
-        ) : (
-          <>
-            <button className="secondary icon-text-button turn-stage-button" type="button" onClick={onAttack}>
-              Attack
-            </button>
-            <button className="primary icon-text-button turn-stage-button" type="button" onClick={onFortify}>
-              Fortify
+            <span className="turn-spy-button turn-spy-spacer" aria-hidden="true" />
+            <button className="primary icon-text-button turn-stage-button" type="button" onClick={cancelAction}>
+              <X size={18} />
+              {cancelLabel}
             </button>
           </>
-        )}
+        ) : (
+          <>
+            {spyMissing ? (
+              <span className="turn-spy-button turn-spy-spacer" aria-hidden="true" />
+            ) : (
+              <button className="troop-icon-button turn-spy-button" type="button" onClick={onSpy} disabled={!canSpy} aria-label="Spy">
+                <TroopIconImage ownerColor={player.color} src={spyIconSrc(player.color)} />
+              </button>
+            )}
+            {stage === "spyIntel" ? (
+              <button className="primary icon-text-button turn-stage-button" type="button" onClick={onDismissSpy}>
+                <Check size={18} />
+                Dismiss
+              </button>
+            ) : actionStage === "reinforcementReady" ? (
+              <button className="primary icon-text-button turn-stage-button" type="button" onClick={onReinforce} disabled={stage === "reinforcementBuild" || stage === "reinforcementPlace"}>
+                Reinforcements
+              </button>
+            ) : (
+              <>
+                <button className="primary icon-text-button turn-stage-button" type="button" onClick={onAttack}>
+                  Attack
+                </button>
+                <button className="primary icon-text-button turn-stage-button" type="button" onClick={onFortify}>
+                  Fortify
+                </button>
+              </>
+            )}
           </>
         )}
       </div>

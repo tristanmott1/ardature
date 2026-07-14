@@ -66,11 +66,13 @@ A compact turn action section sits at the bottom of the screen over the full-scr
 The action section has a single-line instruction row above the buttons:
 
 - When no action is selected, the instruction is `Choose an action`.
-- When spy targeting is selected, the instruction is `Select a territory`.
+- When spy targeting is selected, the instruction is `Select a territory to spy on`.
 - During reinforcement placement, the instruction is `Select a territory` until an owned territory is selected, then `Add troops to {territory}`.
-- During attack source selection, the instruction is `Select attacking territory`.
-- During attack target selection, the instruction is `Select target territory`.
+- During attack source selection, the instruction is `Select a territory to attack from`.
+- During attack target selection, the instruction is `Select a territory to attack`.
 - During attack troop commitment, the instruction is `Choose attacking troops`.
+
+When spy setup is in progress, the normal action buttons are replaced by one black `Cancel Spy` button. When attack setup is in progress, they are replaced by one black `Cancel Attack` button. The action bar keeps the same height and column rhythm as the normal turn action bar by reserving the spy-button slot invisibly. When fortify later becomes a multi-step action, its setup cancel button should follow the same pattern as `Cancel Fortify`.
 
 The turn action section indicates the active turn options:
 
@@ -281,6 +283,7 @@ In `Challenge` mode:
 - In sync mode, the defender also receives a challenge modal.
 - In local mode, the defender receives a deterministic score even when attack style is `Challenge`.
 - The temporary challenge modal contains one centered button.
+- The challenge button, and later the challenge itself, is the only content in the modal; it is not embedded inside the regular battle layout.
 - Pressing the challenge button immediately samples and submits that player's score from the configured beta score distribution.
 - The player does not see their challenge score before submission.
 - Once submitted, that score is fixed for the battle.
@@ -298,8 +301,8 @@ Once `Attack` is pressed, the action bar buttons are replaced with one cancel bu
 
 The setup steps are:
 
-1. Select attacking territory.
-2. Select target territory.
+1. Select the territory to attack from.
+2. Select the territory to attack.
 3. Choose attacking troops.
 4. Confirm the attack.
 
@@ -367,12 +370,16 @@ The defender's battle force is every troop currently occupying the target territ
 
 The battle modal is centered and uses the task-modal overlay role.
 
+The defender is shown at the top of the modal, with the defender name centered above the defender troop row and the defender score centered below it. The attacker is shown at the bottom, with the attacker score centered above the attacker troop row and the attacker name centered below it. Scores render with one decimal and `/ 10`, for example `7.3 / 10`.
+
+The dice sit between the two scores. Defender dice are white with black pips. Attacker dice are red with white pips. Dice are large raw dice controls without an enclosing card or rectangle. Before the first roll, the correct number of dice is shown as blank dice with no pips.
+
 The modal layout is:
 
 - defender dice and troop breakdown on top
 - attacker dice and troop breakdown on bottom
 - latest roll only, not a full roll history
-- numeric scores shown once submitted/computed, displayed with one decimal
+- numeric scores shown once submitted/computed, displayed with one decimal and `/ 10`
 - a short message section, which may be empty or say things like `Waiting...`, `{attacker} won`, or `{defender} won`
 - dice rendered as the roll button
 - a button below the dice for retreat or final confirmation
@@ -396,7 +403,7 @@ In local mode, only the active attacker sees the battle modal. The defender does
 
 The attacker must roll at least once. Before the first roll, the retreat button is disabled. After at least one roll, the attacker may retreat. Pressing retreat opens a confirmation decision. If retreat is confirmed, the attack ends immediately.
 
-If the battle ends by conquest, attacker elimination, or confirmed retreat, the dice are disabled, the retreat button becomes a check/confirm button, and the message section says who won or that the attacker retreated. Nothing else may happen until the attacker presses that final check button.
+If the battle ends by conquest or attacker elimination, the dice are disabled, the retreat button becomes a check/confirm button, and the message section says who won. Nothing else may happen until the attacker presses that final check button. If the attacker confirms a retreat, the battle ends immediately and the battle modal closes; no final retreat message is shown.
 
 After battle dismissal, the active player returns to the normal post-reinforcement action choice with `Attack` and `Fortify` available, unless the game has ended. The active player may attack again if a legal source-target pair remains and the pair has not already been used this turn.
 
