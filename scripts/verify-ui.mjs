@@ -426,7 +426,7 @@ async function runSourceChecks() {
   assert(!stylesSource.includes(".troop-step-grid") && !stylesSource.includes(".troop-stepper"), "Old troop stepper styles are removed.");
   assert(gameSectionsSource.includes('from "./TroopControls"') && troopControlsSource.includes("function TroopPlacementRows") && troopControlsSource.includes("function TroopActionRow") && troopControlsSource.includes("function visibleTroopTypes") && (troopControlsSource.match(/className=\"troop-action-row\"/g) ?? []).length === 1 && !appSource.includes("function TroopPlacementRows"), "Initial allocation and reinforcement share one filtered troop placement row component.");
   assert(troopControlsSource.includes("onAddAll") && troopControlsSource.includes("onRemoveAll") && troopControlsSource.includes('aria-label={`${actionLabel} all`}'), "Troop row plus/minus affordances are pressable bulk action buttons.");
-  assert(appSource.includes("function movableTroopsLeavingOne") && appSource.includes('["heavy", "cavalry", "elite", "leader"] as const'), "Bulk source moves use one leave-behind priority helper.");
+  assert(appSource.includes("LEAVE_BEHIND_TROOP_TYPES") && appSource.includes("MOVE_FIRST_TROOP_TYPES") && appSource.includes("function movableTroopsLeavingReserve"), "Bulk moves share one leave-behind priority helper.");
   assert(!stylesSource.includes(".army-triangle text"), "Army triangle does not style text labels.");
   assert(!mapViewSource.includes("isImmediatePress") && !mapViewSource.includes("pressImmediately"), "Old immediate territory press workaround is removed.");
   assert(indexSource.includes("./app-icons/icon-192.png") && indexSource.includes("./app-icons/apple-touch-icon.png"), "Index references organized app icons.");
@@ -1867,6 +1867,8 @@ async function runRandomAllocationChecks(page) {
   await page.getByRole("button", { name: "Add all" }).click();
   assert((await page.locator(".troop-marker").count()) >= 1, "Adding a troop shows a troop marker.");
   assert(await rowBubbleTotal(page, page.locator(".troop-action-row").nth(1)) > 1, "Bulk allocation add places every currently legal troop.");
+  assert((await page.locator(".troop-action-row").nth(0).getByRole("button", { name: "Add heavy" }).count()) === 1, "Bulk allocation add reserves heavy first when troops must be left behind.");
+  assert((await page.locator(".troop-action-row").nth(0).getByRole("button", { name: "Add leader" }).count()) === 0, "Bulk allocation add moves the leader before leaving heavy reserve troops behind.");
   await page.getByRole("button", { name: "Remove all" }).click();
   assert(await rowBubbleTotal(page, page.locator(".troop-action-row").nth(1)) === 0, "Bulk allocation remove clears removable troops.");
   await page.getByRole("button", { name: "Add heavy" }).click();

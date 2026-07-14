@@ -282,26 +282,25 @@ function canCommitAttackAdjustment(delta: 1 | -1, committedTroops: TroopCounts, 
   return countsAreValid && (delta < 0 || troopTotal(remainingTroops) >= 1);
 }
 
-function movableTroopsLeavingOne(sourceTroops: TroopCounts, allowedTypes: TroopType[] = ["heavy", "cavalry", "elite", "leader"]) {
+const LEAVE_BEHIND_TROOP_TYPES: TroopType[] = ["heavy", "cavalry", "elite", "leader"];
+const MOVE_FIRST_TROOP_TYPES = [...LEAVE_BEHIND_TROOP_TYPES].reverse();
+
+function movableTroopsLeavingReserve(sourceTroops: TroopCounts, reserveCount: number, allowedTypes: TroopType[] = LEAVE_BEHIND_TROOP_TYPES) {
   const movableTroops = createTroopCounts();
-  let leftBehind = false;
+  let remainingReserve = Math.max(0, reserveCount);
 
-  for (const troopType of ["heavy", "cavalry", "elite", "leader"] as const) {
+  for (const troopType of LEAVE_BEHIND_TROOP_TYPES) {
     const count = sourceTroops[troopType];
-    if (count <= 0) {
-      continue;
-    }
-
-    if (!leftBehind) {
-      leftBehind = true;
-      movableTroops[troopType] = allowedTypes.includes(troopType) ? count - 1 : 0;
-      continue;
-    }
-
-    movableTroops[troopType] = allowedTypes.includes(troopType) ? count : 0;
+    const reserved = Math.min(count, remainingReserve);
+    remainingReserve -= reserved;
+    movableTroops[troopType] = allowedTypes.includes(troopType) ? count - reserved : 0;
   }
 
   return movableTroops;
+}
+
+function movableTroopsLeavingOne(sourceTroops: TroopCounts, allowedTypes: TroopType[] = LEAVE_BEHIND_TROOP_TYPES) {
+  return movableTroopsLeavingReserve(sourceTroops, 1, allowedTypes);
 }
 
 function createFortifyMove(move?: FortifyMovesBySource[string]) {
@@ -1699,7 +1698,8 @@ function App() {
         const troops = delta > 0
           ? remainingTroops(allocation, allocationPlayerId)
           : territoryTroops(allocation, allocationSelectedTerritoryId);
-        const troopType = TROOP_TYPES.find((candidate) => troops[candidate] > 0 && (delta < 0 || canAddTroop(allocation, ownership, allocationPlayerId, allocationSelectedTerritoryId, candidate)));
+        const troopOrder = delta > 0 ? MOVE_FIRST_TROOP_TYPES : TROOP_TYPES;
+        const troopType = troopOrder.find((candidate) => troops[candidate] > 0 && (delta < 0 || canAddTroop(allocation, ownership, allocationPlayerId, allocationSelectedTerritoryId, candidate)));
         if (!troopType) {
           break;
         }

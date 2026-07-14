@@ -759,7 +759,7 @@ The troop section uses allocation-style rows:
 
 The final fortify check button is disabled until at least one troop or captured spy has been committed to move. Confirming commits every provisional move at once, ends the current player's turn, and advances to the next remaining player. Sync devices send only the final `{ type: "commitFortify", targetTerritoryId, movesBySource }` command. Skip sends `{ type: "skipFortify" }`. Provisional target, source, and movement UI is never synchronized.
 
-In allocation-style troop rows, the `+` and `-` icons are buttons. Pressing one moves as many currently legal units as possible, while individual unit icons remain one-at-a-time controls. When a bulk action must leave a troop behind, it leaves one troop using priority: heavy, then cavalry, then elite, then leader.
+In allocation-style troop rows, the `+` and `-` icons are buttons. Pressing one moves as many currently legal units as possible, while individual unit icons remain one-at-a-time controls. When a bulk action must leave troops behind, it reserves heavy first, then cavalry, then elite, then leader. Initial allocation may reserve multiple troops for empty territories, so it keeps reserving heavy until the reserve requirement is satisfied or the heavies are gone, then proceeds through the same priority.
 
 ### Source Eligibility
 

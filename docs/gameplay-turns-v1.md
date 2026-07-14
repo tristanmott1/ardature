@@ -84,7 +84,7 @@ The turn action section indicates the active turn options:
 
 Pressing a stage button changes the current local action prompt. Pressing another stage button while choosing a spy target aborts the spy selection. Starting, canceling, or finishing an action clears the default map inspection selection so the normal map explorer never resumes with an action territory preselected. Popups and modals may appear above the map area, but they should not cover the player bar.
 
-In allocation-style troop rows, the `+` and `-` icons are buttons. Pressing one moves as many currently legal units as possible, while the individual unit icons remain one-at-a-time controls. When a bulk action must leave a troop behind, it leaves one troop using priority: heavy, then cavalry, then elite, then leader.
+In allocation-style troop rows, the `+` and `-` icons are buttons. Pressing one moves as many currently legal units as possible, while the individual unit icons remain one-at-a-time controls. When a bulk action must leave troops behind, it reserves heavy first, then cavalry, then elite, then leader. Initial allocation may reserve multiple troops for empty territories, so it keeps reserving heavy until the reserve requirement is satisfied or the heavies are gone, then proceeds through the same priority.
 
 ## Gameplay Connections
 
