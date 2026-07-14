@@ -374,17 +374,11 @@ The defender is shown at the top of the modal, with the defender name centered a
 
 The dice sit between the two scores. Defender dice are white with black pips. Attacker dice are red with white pips. Dice are large raw dice controls without an enclosing card or rectangle. Before the first roll, the correct number of dice is shown as blank dice with no pips.
 
-The modal layout is:
+The modal layout is a fixed vertical stack: reserved message row, defender name, defender troop row, defender score, dice, attacker score, attacker troop row, attacker name, and retreat/final-confirm button. The top message row is always present. It may be empty, say `Waiting...`, or show `{attacker} won` / `{defender} won`.
 
-- defender dice and troop breakdown on top
-- attacker dice and troop breakdown on bottom
-- latest roll only, not a full roll history
-- numeric scores shown once submitted/computed, displayed with one decimal and `/ 10`
-- a short message section, which may be empty or say things like `Waiting...`, `{attacker} won`, or `{defender} won`
-- dice rendered as the roll button
-- a button below the dice for retreat or final confirmation
+Battle troop rows show only troop types with counts greater than zero. Remaining icons keep the normal compact icon size and recenter. If a side has no troops after the battle ends, that troop row renders no icons but still reserves the same vertical row space.
 
-Both sides' troop breakdowns are visible during the battle. Everyone who can see the battle modal sees the same battle contents and sees which troop types die.
+Both sides' current battle troop breakdowns are visible during the battle. Everyone who can see the battle modal sees the same battle contents and sees which troop types die. The modal shows the latest roll only, not a full roll history.
 
 In sync mode:
 

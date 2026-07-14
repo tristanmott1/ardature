@@ -936,24 +936,24 @@ async function assertCompactPlayerRowsAligned(page, selector, message) {
 async function assertBattleLayoutSymmetric(page, message) {
   const gaps = await page.locator(".battle-modal").evaluate((modal) => {
     const playerNames = Array.from(modal.querySelectorAll(".battle-player-name")).map((element) => element.getBoundingClientRect());
-    const troopRows = Array.from(modal.querySelectorAll(".battle-troops .troop-count-row")).map((element) => element.getBoundingClientRect());
+    const troopSlots = Array.from(modal.querySelectorAll(".battle-troops")).map((element) => element.getBoundingClientRect());
     const scores = Array.from(modal.querySelectorAll(".battle-score")).map((element) => element.getBoundingClientRect());
     const defenderDice = modal.querySelector(".battle-dice-row:first-child")?.getBoundingClientRect();
     const attackerDice = modal.querySelector(".battle-dice-row:last-child")?.getBoundingClientRect();
 
-    if (playerNames.length !== 2 || troopRows.length !== 2 || scores.length !== 2 || !defenderDice || !attackerDice) {
+    if (playerNames.length !== 2 || troopSlots.length !== 2 || scores.length !== 2 || !defenderDice || !attackerDice) {
       return null;
     }
 
     return {
-      nameToTroopsBottom: playerNames[1].top - troopRows[1].bottom,
-      nameToTroopsTop: troopRows[0].top - playerNames[0].bottom,
+      nameToTroopsBottom: playerNames[1].top - troopSlots[1].bottom,
+      nameToTroopsTop: troopSlots[0].top - playerNames[0].bottom,
       scoreToDiceBottom: scores[1].top - attackerDice.bottom,
       scoreToDiceTop: defenderDice.top - scores[0].bottom,
-      troopRowHeightBottom: troopRows[1].height,
-      troopRowHeightTop: troopRows[0].height,
-      troopsToScoreBottom: troopRows[1].top - scores[1].bottom,
-      troopsToScoreTop: scores[0].top - troopRows[0].bottom,
+      troopRowHeightBottom: troopSlots[1].height,
+      troopRowHeightTop: troopSlots[0].height,
+      troopsToScoreBottom: troopSlots[1].top - scores[1].bottom,
+      troopsToScoreTop: scores[0].top - troopSlots[0].bottom,
     };
   });
 
@@ -962,6 +962,36 @@ async function assertBattleLayoutSymmetric(page, message) {
   assert(Math.abs(gaps.nameToTroopsTop - gaps.nameToTroopsBottom) <= 1, `${message}: player-to-troops spacing is symmetric.`);
   assert(Math.abs(gaps.troopsToScoreTop - gaps.troopsToScoreBottom) <= 1, `${message}: troops-to-score spacing is symmetric.`);
   assert(Math.abs(gaps.scoreToDiceTop - gaps.scoreToDiceBottom) <= 1, `${message}: score-to-dice spacing is symmetric.`);
+}
+
+async function assertBattleTroopRows(page, message) {
+  const rows = await page.locator(".battle-troops").evaluateAll((elements) => elements.map((row) => {
+    const rowBox = row.getBoundingClientRect();
+    const icons = Array.from(row.querySelectorAll(".troop-icon-count")).map((icon) => {
+      const box = icon.getBoundingClientRect();
+      return {
+        height: box.height,
+        width: box.width,
+      };
+    });
+    const iconRow = row.querySelector(".troop-count-row")?.getBoundingClientRect();
+
+    return {
+      centerDelta: iconRow ? Math.abs((iconRow.left + iconRow.width / 2) - (rowBox.left + rowBox.width / 2)) : 0,
+      count: icons.length,
+      height: rowBox.height,
+      icons,
+    };
+  }));
+
+  assert(rows.length === 2, `${message}: battle renders two troop slots.`);
+  assert(rows.every((row) => row.height >= 54), `${message}: troop slots reserve stable height.`);
+  assert(rows.every((row) => row.centerDelta <= 1), `${message}: visible troop icons are centered.`);
+  for (const row of rows) {
+    for (const icon of row.icons) {
+      assert(Math.abs(icon.width - 46) <= 1 && Math.abs(icon.height - 46) <= 1, `${message}: battle troop icons keep compact size.`);
+    }
+  }
 }
 
 async function assertReadyColumnHeadersLeftAligned(page) {
@@ -2028,6 +2058,10 @@ async function runTurnAttackChecks(browser) {
   await regular.getByRole("dialog", { name: "Battle" }).waitFor();
   await capture(regular, "18d-regular-battle-before-roll-mobile.png");
   await assertBattleLayoutSymmetric(regular, "Regular battle modal layout");
+  await assertBattleTroopRows(regular, "Regular battle modal troop rows");
+  assert((await regular.locator(".battle-troops").nth(0).locator(".troop-icon-count").count()) === 1, "Battle defender row omits zero-count troop types.");
+  assert((await regular.locator(".battle-troops").nth(1).locator(".troop-icon-count").count()) < 4, "Battle attacker row omits zero-count troop types.");
+  assert(((await regular.locator(".battle-message").textContent()) ?? "").trim() === "", "Battle message row is reserved when empty.");
   assert((await regular.locator(".battle-score").first().textContent())?.includes("/ 10"), "Regular battle shows scores out of ten.");
   assert((await regular.locator(".battle-pip.visible").count()) === 0, "Regular battle dice are blank before rolling.");
   await regular.getByRole("button", { name: "Roll dice" }).click();
@@ -2050,7 +2084,28 @@ async function runTurnAttackChecks(browser) {
   await challenge.getByRole("dialog", { name: "Battle" }).waitFor();
   await capture(challenge, "18g-challenge-battle-after-score-mobile.png");
   await assertBattleLayoutSymmetric(challenge, "Challenge battle modal layout after score");
+  await assertBattleTroopRows(challenge, "Challenge battle modal troop rows after score");
   assert((await challenge.locator(".battle-dice-button").count()) === 1, "Submitted challenge score switches to the dice battle layout.");
+
+  await loadBattleStateFixture(challenge, {
+    attackerScore: 7.3,
+    defenderScore: null,
+    result: null,
+  });
+  assert((await challenge.locator(".battle-message").getByText("Waiting...").count()) === 1, "Battle message row shows waiting text while a score is missing.");
+
+  await loadBattleStateFixture(challenge, {
+    attackerScore: 7.3,
+    attackingTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
+    defenderScore: 6.2,
+    defendingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+    result: { type: "defenderWon" },
+  });
+  await capture(challenge, "18h-ended-battle-empty-row-mobile.png");
+  await assertBattleLayoutSymmetric(challenge, "Ended battle modal layout with empty row");
+  await assertBattleTroopRows(challenge, "Ended battle modal troop rows");
+  assert((await challenge.locator(".battle-message").getByText("Sauron won").count()) === 1, "Battle message row shows the final battle result.");
+  assert((await challenge.locator(".battle-troops").nth(1).locator(".troop-icon-count").count()) === 0, "Empty ended-battle row omits all icons.");
 
   await regular.close();
   await challenge.close();
@@ -2281,6 +2336,37 @@ async function loadTurnAttackFixture(page, { attackStyle, randomValue }) {
   await page.goto(baseUrl);
   await page.waitForSelector('.app-shell[data-app-phase="turn"]');
   await page.waitForSelector(".turn-action-panel");
+}
+
+async function loadBattleStateFixture(page, battleOverrides) {
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
+  const state = turnSpyGameState(territoryIds);
+  state.turn.stage = "battle";
+  state.turn.battle = {
+    id: "battle-fixture",
+    attackerPlayerId: "viewer",
+    defenderPlayerId: "opponent",
+    sourceTerritoryId: "shire",
+    targetTerritoryId: "bree",
+    committedAttackingTroops: { heavy: 1, cavalry: 1, elite: 0, leader: 0 },
+    initialDefendingTroops: { heavy: 3, cavalry: 0, elite: 0, leader: 0 },
+    attackingTroops: { heavy: 1, cavalry: 1, elite: 0, leader: 0 },
+    defendingTroops: { heavy: 3, cavalry: 0, elite: 0, leader: 0 },
+    attackerScore: 7.3,
+    defenderScore: 6.2,
+    latestRoll: null,
+    hasRolled: false,
+    result: null,
+    ...battleOverrides,
+  };
+
+  await page.addInitScript((savedState) => {
+    localStorage.clear();
+    localStorage.setItem("ardature.localGame.v1", JSON.stringify(savedState));
+  }, state);
+  await page.goto(baseUrl);
+  await page.getByRole("dialog", { name: "Battle" }).waitFor();
 }
 
 async function commitFixtureAttack(page) {

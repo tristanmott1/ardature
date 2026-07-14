@@ -539,17 +539,11 @@ The defender is displayed at the top: defender name centered above the defender 
 
 Dice are centered between the two scores. Defender dice are white with black pips. Attacker dice are red with white pips. Dice are large raw dice controls with no surrounding card or rectangle. Before the first roll, blank dice show the correct dice count with no pips.
 
-The modal shows:
+The modal layout is a fixed vertical stack: reserved message row, defender name, defender troop row, defender score, dice, attacker score, attacker troop row, attacker name, and retreat/final-confirm button. The top message row is always present. It may be empty, say `Waiting...`, or show `{attacker} won` / `{defender} won`.
 
-- defender dice and troop breakdown on top
-- attacker dice and troop breakdown on bottom
-- latest roll only
-- both numeric scores, once available, displayed with one decimal and `/ 10`
-- a short message section, which may be empty or say things like `Waiting...`, `{attacker} won`, or `{defender} won`
-- dice rendered as the roll button
-- a button below the dice for retreat or final confirmation
+Battle troop rows show only troop types with counts greater than zero. Remaining icons keep the normal compact icon size and recenter. If a side has no troops after the battle ends, that troop row renders no icons but still reserves the same vertical row space.
 
-Both sides' troop breakdowns are visible in the battle modal. Everyone who sees the modal sees the same battle contents and sees which troop types die.
+Both sides' current battle troop breakdowns are visible in the battle modal. Everyone who sees the modal sees the same battle contents and sees which troop types die. The modal shows the latest roll only, not a full roll history.
 
 In sync mode, only the attacker and defender see the battle modal. Only the attacker can roll, retreat, or dismiss the final result. Other connected players do not see the battle modal, but they do see committed map facts such as live territory troop totals and ownership changes. Non-participants stay in normal explore mode, but the battle source and target territories flash between selected and unselected visual states while the battle is active. The source/attacking territory flashes at a higher frequency, while the target/defending territory uses a slower pulse. Non-participants may still select any territory, including the source or target. If the selected territory is one of the flashing battle territories, the battle flash overrides the normal selected-fill color.
 

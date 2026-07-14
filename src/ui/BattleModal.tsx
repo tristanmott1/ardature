@@ -1,6 +1,8 @@
 import { Check, Flag } from "lucide-react";
-import type { BattleState, GamePlayer, TroopCounts } from "../game/gameTypes";
+import type { BattleState, GamePlayer, TroopCounts, TroopType } from "../game/gameTypes";
 import { TroopCountRow } from "./TroopControls";
+
+const BATTLE_TROOP_TYPES: TroopType[] = ["heavy", "cavalry", "elite", "leader"];
 
 const DIE_PIPS: Record<number, number[]> = {
   1: [4],
@@ -87,9 +89,11 @@ export function BattleModal({
 }
 
 function BattleTroops({ player, troops }: { player: GamePlayer; troops: TroopCounts }) {
+  const troopTypes = BATTLE_TROOP_TYPES.filter((troopType) => troops[troopType] > 0);
+
   return (
     <div className="battle-troops">
-      <TroopCountRow counts={troops} player={player} />
+      <TroopCountRow counts={troops} player={player} troopTypes={troopTypes} />
     </div>
   );
 }
