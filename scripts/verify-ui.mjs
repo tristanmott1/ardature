@@ -258,7 +258,21 @@ async function runSourceChecks() {
   assert(gameTypesSource.includes('type: "dismissNotification"') && gameTypesSource.includes("notificationId: string") && syncMessagesSource.includes('command.type === "dismissNotification"') && appSource.includes('sendTurnCommand({ type: "dismissNotification", notificationId: currentNotification.id })'), "Sync joiners dismiss queued notifications through the host by notification id.");
   assert(gameTypesSource.includes('delivery: "turnStart" | "immediate"') && gameTypesSource.includes("minTurnNumber: number") && appSource.includes("visibleNotification") && gameViewSource.includes('game.mode === "local" && game.phase === "turnHandoff"') && gameViewSource.includes("game.turn.turnNumber >= notification.minTurnNumber"), "Queued local notifications wait until after handoff.");
   assert(gameViewSource.includes("[viewerId]: game.notifications[viewerId] ?? []"), "Sync snapshots include only the viewer's notification queue.");
-  assert(gameStateSource.includes("function startTurnReinforcements") && gameStateSource.includes("function fortifyAndFinishTurn") && appSource.includes("startTurnReinforcements(current") && appSource.includes("fortifyAndFinishTurn(current") && !appSource.includes("startReinforcements(cancelSpySelection(current)") && !appSource.includes("finishTurnWithFortify(cancelSpySelection(current)"), "Turn action cleanup is composed in game-state helpers instead of App.");
+  assert(
+    gameStateSource.includes("function startTurnReinforcements") &&
+      gameStateSource.includes("function commitFortifyAndFinishTurn") &&
+      gameStateSource.includes("function skipFortifyAndFinishTurn") &&
+      appSource.includes("startTurnReinforcements(current") &&
+      appSource.includes("commitFortifyAndFinishTurn(current") &&
+      appSource.includes("skipFortifyAndFinishTurn(current") &&
+      !appSource.includes("startReinforcements(cancelSpySelection(current)") &&
+      !appSource.includes("finishTurnWithFortify(cancelSpySelection(current)"),
+    "Turn action cleanup is composed in game-state helpers instead of App.",
+  );
+  assert(gameTypesSource.includes('type: "commitFortify"') && gameTypesSource.includes('type: "skipFortify"') && !gameTypesSource.includes('type: "fortify"'), "Turn commands use final fortify commit/skip messages.");
+  assert(syncMessagesSource.includes('command.type === "commitFortify"') && syncMessagesSource.includes('command.type === "skipFortify"') && syncMessagesSource.includes("isFortifyMovesBySource"), "Sync validation covers final fortify commands.");
+  assert(appSource.includes("type FortifySetupState") && appSource.includes("const [fortifySetup, setFortifySetup]") && !gameTypesSource.includes("FortifySetupState"), "Provisional fortify setup is local App UI state, not shared GameState.");
+  assert(gameStateSource.includes("ownedChainTerritoryIds") && gameStateSource.includes("generatedMapConnections") && gameStateSource.includes("validFortifySpies"), "Fortify legality uses gameplay connections and validates captured-spy locations.");
   assert(!appSource.includes("spyCaptureNoticeFromTurnChange") && !appSource.includes("SpyCaptureNotice"), "Old effect-based spy capture notices are removed.");
   assert(appSource.includes("type MapSelectionState") && appSource.includes("const [mapSelections, setMapSelections]") && appSource.includes("pendingDraftTerritoryId") && appSource.includes("allocationSelectedTerritoryId") && appSource.includes("gameMapSelectedTerritoryId"), "App keeps local map selections in one explicit UI state model.");
   assert(!appSource.includes("setPendingDraftTerritoryId") && !appSource.includes("setAllocationSelectedTerritoryId") && !appSource.includes("setGameMapSelectedTerritoryId") && !appSource.includes("setTurnSelectedTerritoryId") && !appSource.includes("setPendingSpyTerritoryId"), "App does not preserve old per-selection setter wiring.");
@@ -1025,6 +1039,26 @@ async function assertActionCancelCentered(page, label) {
 
   assert(centers, `${label} is present in the action bar.`);
   assert(Math.abs(centers.buttonCenter - centers.panelCenter) <= 1, `${label} is centered in the action bar.`);
+}
+
+async function assertActionCancelGroupCentered(page, labels) {
+  const centers = await page.locator(".turn-action-panel").evaluate((panel, buttonLabels) => {
+    const buttons = Array.from(panel.querySelectorAll("button"))
+      .filter((candidate) => buttonLabels.some((label) => candidate.textContent?.includes(String(label))));
+    const panelBox = panel.getBoundingClientRect();
+    const left = Math.min(...buttons.map((button) => button.getBoundingClientRect().left));
+    const right = Math.max(...buttons.map((button) => button.getBoundingClientRect().right));
+
+    return buttons.length === buttonLabels.length
+      ? {
+          groupCenter: (left + right) / 2,
+          panelCenter: panelBox.left + panelBox.width / 2,
+        }
+      : null;
+  }, labels);
+
+  assert(centers, `${labels.join(" and ")} are present in the action bar.`);
+  assert(Math.abs(centers.groupCenter - centers.panelCenter) <= 1, `${labels.join(" and ")} are centered as an action group.`);
 }
 
 async function assertReadyColumnHeadersLeftAligned(page) {
@@ -1906,6 +1940,9 @@ async function runRandomAllocationChecks(page) {
   await page.waitForSelector(".turn-action-panel");
   assert((await page.locator(".troop-section-info").count()) === 0, "Dismissing battle returns to default turn view with no inspected territory.");
   await page.getByRole("button", { name: "Fortify" }).click();
+  assert((await page.getByRole("button", { name: "Cancel Fortify" }).count()) === 1, "Fortify setup replaces action buttons with cancel.");
+  assert((await page.getByRole("button", { name: "Skip" }).count()) === 1, "Fortify setup can skip directly to the next turn.");
+  await page.getByRole("button", { name: "Skip" }).click();
   await page.waitForSelector('.app-shell[data-app-phase="turnHandoff"]');
   await waitForViewBox(page, await apertureViewBoxForTarget(page, homeViewportFromSize(await mapSize(page))));
   await capture(page, "19-next-turn-handoff-mobile.png");
@@ -2216,6 +2253,91 @@ async function runTurnAttackChecks(browser) {
   await challenge.close();
 }
 
+async function runTurnFortifyChecks(browser) {
+  console.log("Checking fortify action");
+  const page = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  page.setDefaultTimeout(10000);
+
+  await loadTurnFortifyFixture(page);
+  await page.getByRole("button", { name: "Fortify" }).click();
+  await capture(page, "19a-fortify-start-mobile.png");
+  assert((await page.locator(".turn-action-instruction").getByText("Select a territory to fortify").count()) === 1, "Fortify starts by asking for a target.");
+  assert((await page.getByRole("button", { name: "Cancel Fortify" }).count()) === 1, "Fortify setup shows a cancel button.");
+  assert((await page.getByRole("button", { name: "Skip" }).count()) === 1, "Fortify setup shows a skip button.");
+  await assertActionCancelGroupCentered(page, ["Cancel Fortify", "Skip"]);
+
+  await clickTerritory(page, "shire");
+  await capture(page, "19b-fortify-target-mobile.png");
+  assert((await page.locator(".turn-action-instruction").getByText("Select territories to fortify from").count()) === 1, "Fortify asks for sources after target selection.");
+  assert((await page.locator(".troop-section-fortify").count()) === 0, "Fortify target selection alone does not show the troop section.");
+
+  await clickTerritory(page, "bree");
+  await page.waitForSelector(".troop-section-fortify .allocation-target");
+  await capture(page, "19c-fortify-adjacent-source-mobile.png");
+  assert(((await page.locator(".troop-section-fortify .allocation-target").textContent()) ?? "").includes("Bree to Shire"), "Fortify troop section names source and target.");
+  assert((await page.locator(".troop-section-fortify .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").count()) >= 5, "Adjacent fortify source can move regular troops, cavalry, leader, and local captured spies.");
+  assert((await page.getByRole("button", { name: "Remove Boromir spy" }).isDisabled()), "Captured spies originally on the target are visible but disabled.");
+
+  await page.getByRole("button", { name: "Add heavy" }).click();
+  await page.getByRole("button", { name: "Add Gandalf spy" }).click();
+  const targetAfterBreeMove = await fortifyTargetUnitSummary(page);
+  assert(targetAfterBreeMove.troops >= 2 && targetAfterBreeMove.spies >= 2, "Target row shows original units plus provisional source moves.");
+
+  await clickTerritory(page, "north-downs");
+  await page.waitForFunction(() => document.querySelector(".troop-section-fortify .allocation-target")?.textContent?.includes("North Downs to Shire"));
+  await capture(page, "19d-fortify-regular-lane-mobile.png");
+  assert(await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add heavy" }).isDisabled(), "A second adjacent source cannot move regular troops while the regular lane is occupied.");
+
+  await clickTerritory(page, "rivendell");
+  await page.waitForFunction(() => document.querySelector(".troop-section-fortify .allocation-target")?.textContent?.includes("Rivendell to Shire"));
+  await capture(page, "19e-fortify-remote-source-mobile.png");
+  assert(!(await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add cavalry" }).isDisabled()), "Remote fortify source can move cavalry.");
+  assert(await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add heavy" }).isDisabled(), "Remote fortify source cannot move heavy troops.");
+  assert(await page.getByRole("button", { name: "Add Elrond spy" }).isDisabled(), "Remote captured spy cannot move before same-source cavalry.");
+  await page.getByRole("button", { name: "Add cavalry" }).click();
+  assert(!(await page.getByRole("button", { name: "Add Elrond spy" }).isDisabled()), "Remote captured spy can move after same-source cavalry.");
+  await page.getByRole("button", { name: "Add Elrond spy" }).click();
+  assert((await page.locator(".troop-section-fortify .troop-action-row").nth(1).locator(".captured-spy-icon").count()) >= 3, "Target row includes spies moved from the current remote source.");
+  await page.locator(".troop-section-fortify .troop-action-row").nth(1).getByRole("button", { name: "Remove cavalry" }).click();
+  assert((await page.getByRole("button", { name: "Remove Elrond spy" }).count()) === 0, "Removing remote cavalry automatically returns remote spies to their source.");
+
+  await page.getByRole("button", { name: "Cancel Fortify" }).click();
+  assert((await page.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Canceling fortify returns to normal action choice.");
+  assert((await page.locator(".troop-section-fortify").count()) === 0, "Canceling fortify hides the fortify troop section.");
+
+  await page.getByRole("button", { name: "Fortify" }).click();
+  await page.getByRole("button", { name: "Skip" }).click();
+  await page.waitForSelector('.app-shell[data-app-phase="turnHandoff"]');
+  const skippedState = await page.evaluate(() => JSON.parse(localStorage.getItem("ardature.localGame.v1") ?? "null"));
+  assert(skippedState.draft.ownership.shire === "viewer" && skippedState.allocation.playerAllocations.viewer.territories.shire.heavy === 1, "Skipping fortify advances the turn without moving units.");
+
+  await loadTurnFortifyFixture(page);
+  await page.getByRole("button", { name: "Fortify" }).click();
+  await clickTerritory(page, "shire");
+  await clickTerritory(page, "bree");
+  await page.waitForSelector(".troop-section-fortify .allocation-target");
+  await page.getByRole("button", { name: "Add heavy" }).click();
+  await page.getByRole("button", { name: "Add Gandalf spy" }).click();
+  await page.getByRole("button", { name: "Confirm fortify" }).click();
+  await page.waitForSelector('.app-shell[data-app-phase="turnHandoff"]');
+  await capture(page, "19f-fortify-committed-handoff-mobile.png");
+  const committedState = await page.evaluate(() => JSON.parse(localStorage.getItem("ardature.localGame.v1") ?? "null"));
+  assert(committedState.allocation.playerAllocations.viewer.territories.shire.heavy === 2, "Committed fortify adds moved troops to the target.");
+  assert(committedState.allocation.playerAllocations.viewer.territories.bree.heavy === 1, "Committed fortify removes moved troops from the source.");
+  assert(committedState.turn.spies.spyOwner.territoryId === "shire" && committedState.turn.spies.spyOwner.custodianPlayerId === "viewer", "Committed fortify moves captured spies to the target.");
+
+  await page.close();
+}
+
+async function fortifyTargetUnitSummary(page) {
+  return page.locator(".troop-section-fortify .troop-action-row").nth(1).evaluate((row) => ({
+    spies: row.querySelectorAll(".captured-spy-icon").length,
+    troops: Array.from(row.querySelectorAll(".troop-count-bubble"))
+      .map((bubble) => Number(bubble.textContent ?? 0))
+      .reduce((sum, count) => sum + count, 0),
+  }));
+}
+
 async function runGameplayRemovalChecks(page) {
   console.log("Checking gameplay player removal");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
@@ -2447,6 +2569,56 @@ async function loadTurnAttackFixture(page, { attackStyle, randomValue }) {
     Math.random = () => nextRandom;
     localStorage.setItem("ardature.localGame.v1", JSON.stringify(savedState));
   }, { savedState: state, nextRandom: randomValue });
+  await page.goto(baseUrl);
+  await page.waitForSelector('.app-shell[data-app-phase="turn"]');
+  await page.waitForSelector(".turn-action-panel");
+}
+
+async function loadTurnFortifyFixture(page) {
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
+  const state = turnSpyGameState(territoryIds);
+
+  for (const player of [
+    { id: "spyOwner", name: "Gandalf", color: "blue" },
+    { id: "remoteSpyOwner", name: "Elrond", color: "green" },
+    { id: "targetSpyOwner", name: "Boromir", color: "purple" },
+  ]) {
+    state.players.push({
+      ...player,
+      nameLocked: false,
+      colorLocked: false,
+      connectionStatus: "connected",
+    });
+  }
+
+  state.draft.ownership = Object.fromEntries(territoryIds.map((territoryId) => [
+    territoryId,
+    ["shire", "bree", "north-downs", "rivendell"].includes(territoryId) ? "viewer" : "opponent",
+  ]));
+  state.allocation.playerAllocations.viewer.baseTroops = { heavy: 6, cavalry: 3, elite: 2, leader: 1 };
+  state.allocation.playerAllocations.viewer.territories = {
+    shire: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+    bree: { heavy: 2, cavalry: 1, elite: 1, leader: 1 },
+    "north-downs": { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
+    rivendell: { heavy: 1, cavalry: 2, elite: 1, leader: 0 },
+  };
+  state.allocation.playerAllocations.opponent.territories = {
+    nurn: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
+  };
+  state.turn.stage = "actions";
+  state.turn.spies = {
+    viewer: { status: "available", territoryId: null, custodianPlayerId: null },
+    opponent: { status: "available", territoryId: null, custodianPlayerId: null },
+    spyOwner: { status: "captured", territoryId: "bree", custodianPlayerId: "viewer" },
+    remoteSpyOwner: { status: "captured", territoryId: "rivendell", custodianPlayerId: "viewer" },
+    targetSpyOwner: { status: "captured", territoryId: "shire", custodianPlayerId: "viewer" },
+  };
+
+  await page.addInitScript((savedState) => {
+    localStorage.clear();
+    localStorage.setItem("ardature.localGame.v1", JSON.stringify(savedState));
+  }, state);
   await page.goto(baseUrl);
   await page.waitForSelector('.app-shell[data-app-phase="turn"]');
   await page.waitForSelector(".turn-action-panel");
@@ -3115,6 +3287,7 @@ async function main() {
     await readOnlyMobile.close();
     await runTurnSpyOutcomeChecks(browser);
     await runTurnAttackChecks(browser);
+    await runTurnFortifyChecks(browser);
     const removalMobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
     removalMobile.setDefaultTimeout(10000);
     await runGameplayRemovalChecks(removalMobile);

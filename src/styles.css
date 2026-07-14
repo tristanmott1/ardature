@@ -367,7 +367,8 @@ button:focus-visible,
 }
 
 .turn-action-buttons.action-cancel-row {
-  grid-template-columns: 1fr;
+  display: flex;
+  justify-content: center;
 }
 
 .turn-action-buttons .turn-stage-button:only-child {

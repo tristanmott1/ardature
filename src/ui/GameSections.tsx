@@ -14,6 +14,7 @@ import { spyIconSrc, TroopIconImage } from "../game/troopIcons";
 import type { GeneratedTerritoryData } from "../map/mapTypes";
 import { territoryForId } from "../map/territoryLookup";
 import { PlayerIdentity } from "./PlayerChrome";
+import type { CapturedSpyToken } from "./TroopControls";
 import { TroopCountRow, TroopPlacementRows, UnknownTroopCountRow } from "./TroopControls";
 
 const EMPTY_TROOPS: TroopCounts = {
@@ -58,6 +59,25 @@ type TroopSectionProps =
       targetTerritory: GeneratedTerritoryData;
     }
   | {
+      canAddSpy: (spyOwnerId: string) => boolean;
+      canAddType: (troopType: TroopType) => boolean;
+      canFinish: boolean;
+      canRemoveSpy: (spyOwnerId: string) => boolean;
+      canRemoveType: (troopType: TroopType) => boolean;
+      mode: "fortify";
+      onAdjustSpy: (spyOwnerId: string, delta: 1 | -1) => void;
+      onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
+      onFinish: () => void;
+      player: GamePlayer;
+      players: GamePlayer[];
+      sourceSpies: CapturedSpyToken[];
+      sourceTerritory: GeneratedTerritoryData;
+      sourceTroops: TroopCounts;
+      targetSpies: CapturedSpyToken[];
+      targetTerritory: GeneratedTerritoryData;
+      targetTroops: TroopCounts;
+    }
+  | {
       capturedSpies: CapturedSpyView[];
       mode: "info";
       players: GamePlayer[];
@@ -75,6 +95,8 @@ export function TroopSection(props: TroopSectionProps) {
       return <ReinforcementTroopSection {...props} />;
     case "attack":
       return <AttackTroopSection {...props} />;
+    case "fortify":
+      return <FortifyTroopSection {...props} />;
     case "info":
       return <InfoTroopSection {...props} />;
   }
@@ -115,23 +137,29 @@ export function TurnActionPanel({
   onDismissSpy,
   onAttack,
   onCancelAttack,
+  onCancelFortify,
   onFortify,
   onReinforce,
+  onSkipFortify,
   onSpy,
   player,
   stage,
   spyReturnStage,
   attackSetupActive,
+  fortifySetupActive,
 }: {
   attackSetupActive: boolean;
   canSpy: boolean;
+  fortifySetupActive: boolean;
   instruction: string;
   spyMissing: boolean;
   onAttack: () => void;
   onCancelAttack: () => void;
+  onCancelFortify: () => void;
   onDismissSpy: () => void;
   onFortify: () => void;
   onReinforce: () => void;
+  onSkipFortify: () => void;
   onSpy: () => void;
   player: GamePlayer;
   stage: NonNullable<GameState["turn"]>["stage"];
@@ -142,19 +170,26 @@ export function TurnActionPanel({
     : stage === "reinforcementBuild" || stage === "reinforcementPlace"
       ? "reinforcementReady"
       : stage;
-  const cancelActionActive = attackSetupActive || stage === "spyTarget";
-  const cancelAction = attackSetupActive ? onCancelAttack : onSpy;
-  const cancelLabel = attackSetupActive ? "Cancel Attack" : "Cancel Spy";
+  const cancelActionActive = attackSetupActive || fortifySetupActive || stage === "spyTarget";
+  const cancelAction = attackSetupActive ? onCancelAttack : fortifySetupActive ? onCancelFortify : onSpy;
+  const cancelLabel = attackSetupActive ? "Cancel Attack" : fortifySetupActive ? "Cancel Fortify" : "Cancel Spy";
 
   return (
     <section className="game-section-panel turn-action-panel">
       <p className="turn-action-instruction">{instruction}</p>
       <div className={`turn-action-buttons${cancelActionActive ? " action-cancel-row" : ""}`}>
         {cancelActionActive ? (
-          <button className="primary icon-text-button turn-stage-button action-cancel-button" type="button" onClick={cancelAction}>
-            <X size={18} />
-            {cancelLabel}
-          </button>
+          <>
+            <button className="primary icon-text-button turn-stage-button action-cancel-button" type="button" onClick={cancelAction}>
+              <X size={18} />
+              {cancelLabel}
+            </button>
+            {fortifySetupActive ? (
+              <button className="secondary icon-text-button turn-stage-button" type="button" onClick={onSkipFortify}>
+                Skip
+              </button>
+            ) : null}
+          </>
         ) : (
           <>
             {spyMissing ? (
@@ -262,6 +297,50 @@ function AttackTroopSection({
           territoryName={`${sourceTerritory.name} to ${targetTerritory.name}`}
         />
         <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Confirm attack">
+          <Check size={20} />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function FortifyTroopSection({
+  canAddSpy,
+  canAddType,
+  canFinish,
+  canRemoveSpy,
+  canRemoveType,
+  onAdjustSpy,
+  onAdjustTroop,
+  onFinish,
+  player,
+  players,
+  sourceSpies,
+  sourceTerritory,
+  sourceTroops,
+  targetSpies,
+  targetTerritory,
+  targetTroops,
+}: Extract<TroopSectionProps, { mode: "fortify" }>) {
+  return (
+    <section className="game-section-panel troop-section troop-section-allocation troop-section-fortify">
+      <div className="troop-placement-controls">
+        <TroopPlacementRows
+          availableSpies={sourceSpies}
+          canAddSpy={canAddSpy}
+          canAddType={canAddType}
+          canRemoveSpy={canRemoveSpy}
+          canRemoveType={canRemoveType}
+          onAdjustSpy={onAdjustSpy}
+          onAdjustTroop={onAdjustTroop}
+          player={player}
+          players={players}
+          remaining={sourceTroops}
+          selectedSpies={targetSpies}
+          selectedTroops={targetTroops}
+          territoryName={`${sourceTerritory.name} to ${targetTerritory.name}`}
+        />
+        <button className="primary icon-text-button wide-button" type="button" onClick={onFinish} disabled={!canFinish} aria-label="Confirm fortify">
           <Check size={20} />
         </button>
       </div>

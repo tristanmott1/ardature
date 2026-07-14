@@ -1,4 +1,4 @@
-import type { GameState, PlayerAllocation, PlayerColor, ReinforcementState, TroopCounts, TurnCommand } from "../game/gameTypes";
+import type { FortifyMovesBySource, GameState, PlayerAllocation, PlayerColor, ReinforcementState, TroopCounts, TurnCommand } from "../game/gameTypes";
 
 export type ArdatureSyncMessage =
   | {
@@ -124,7 +124,27 @@ function isTurnCommand(value: unknown): value is TurnCommand {
     return typeof command.notificationId === "string";
   }
 
-  return command.type === "dismissSpy" || command.type === "fortify";
+  if (command.type === "commitFortify") {
+    return typeof command.targetTerritoryId === "string" &&
+      isFortifyMovesBySource(command.movesBySource);
+  }
+
+  return command.type === "dismissSpy" || command.type === "skipFortify";
+}
+
+function isFortifyMovesBySource(value: unknown): value is FortifyMovesBySource {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every((move) => {
+    const sourceMove = move as Partial<FortifyMovesBySource[string]>;
+    return Boolean(sourceMove) &&
+      typeof sourceMove === "object" &&
+      isTroopCounts(sourceMove.troops) &&
+      Array.isArray(sourceMove.spyOwnerIds) &&
+      sourceMove.spyOwnerIds.every((spyOwnerId) => typeof spyOwnerId === "string");
+  });
 }
 
 function isReinforcement(value: unknown): value is ReinforcementState {

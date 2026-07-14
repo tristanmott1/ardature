@@ -13,6 +13,7 @@ import type {
   BattleState,
   DraftState,
   DraftStyle,
+  FortifyMovesBySource,
   GameNotification,
   GameConfig,
   GamePlayer,
@@ -1279,8 +1280,64 @@ export function finishTurnWithFortify(state: GameState, playerId: string): GameS
   return advanceTurn(state);
 }
 
-export function fortifyAndFinishTurn(state: GameState, playerId: string): GameState {
+export function skipFortifyAndFinishTurn(state: GameState, playerId: string): GameState {
   return finishTurnWithFortify(cancelSpySelection(state), playerId);
+}
+
+export function canCommitFortify(state: GameState, playerId: string, targetTerritoryId: string, movesBySource: FortifyMovesBySource) {
+  return Boolean(validFortifyMove(state, playerId, targetTerritoryId, movesBySource));
+}
+
+export function commitFortifyAndFinishTurn(state: GameState, playerId: string, targetTerritoryId: string, movesBySource: FortifyMovesBySource): GameState {
+  const validMove = validFortifyMove(state, playerId, targetTerritoryId, movesBySource);
+  if (!validMove || !state.allocation || !state.turn) {
+    return state;
+  }
+
+  const playerAllocation = state.allocation.playerAllocations[playerId];
+  if (!playerAllocation) {
+    return state;
+  }
+
+  let territories = { ...playerAllocation.territories };
+  let spies = state.turn.spies;
+
+  for (const [sourceTerritoryId, move] of Object.entries(validMove.movesBySource)) {
+    territories = {
+      ...territories,
+      [sourceTerritoryId]: subtractTroops(territories[sourceTerritoryId] ?? createTroopCounts(), move.troops),
+      [targetTerritoryId]: addTroops(territories[targetTerritoryId] ?? createTroopCounts(), move.troops),
+    };
+
+    for (const spyOwnerId of move.spyOwnerIds) {
+      spies = {
+        ...spies,
+        [spyOwnerId]: {
+          status: "captured",
+          territoryId: targetTerritoryId,
+          custodianPlayerId: playerId,
+        },
+      };
+    }
+  }
+
+  return advanceTurn(restoreCapturedSpies({
+    ...state,
+    allocation: {
+      ...state.allocation,
+      playerAllocations: {
+        ...state.allocation.playerAllocations,
+        [playerId]: {
+          ...playerAllocation,
+          territories,
+        },
+      },
+    },
+    turn: {
+      ...state.turn,
+      spies,
+    },
+  }));
 }
 
 export function completeTimedOutSyncAllocations(state: GameState): GameState {
@@ -1433,7 +1490,11 @@ export function applySyncTurnCommand(state: GameState, playerId: string, command
     return dismissBattle(state, playerId, command.battleId);
   }
 
-  return finishTurnWithFortify(cancelSpySelection(state), playerId);
+  if (command.type === "commitFortify") {
+    return commitFortifyAndFinishTurn(cancelSpySelection(state), playerId, command.targetTerritoryId, command.movesBySource);
+  }
+
+  return skipFortifyAndFinishTurn(cancelSpySelection(state), playerId);
 }
 
 export function applySyncPlayerQuit(state: GameState, playerId: string): GameState {
@@ -2183,6 +2244,114 @@ function validCommittedReinforcement(state: GameState, playerId: string, reinfor
   }
 
   return Object.entries(reinforcement.territories).every(([territoryId]) => ownership[territoryId] === playerId);
+}
+
+function validFortifyMove(state: GameState, playerId: string, targetTerritoryId: string, movesBySource: FortifyMovesBySource) {
+  const turn = state.turn;
+  const ownership = state.draft?.ownership;
+  const playerAllocation = state.allocation?.playerAllocations[playerId];
+  if (state.phase !== "turn" || !turn || turn.currentPlayerId !== playerId || turn.stage !== "actions" || !ownership || !playerAllocation || ownership[targetTerritoryId] !== playerId) {
+    return null;
+  }
+
+  const eligibleSources = ownedChainTerritoryIds(ownership, targetTerritoryId, playerId);
+  const movedSpyOwnerIds = new Set<string>();
+  const normalizedMoves: FortifyMovesBySource = {};
+  let regularSourceId: string | null = null;
+  let movedAnything = false;
+
+  for (const [sourceTerritoryId, move] of Object.entries(movesBySource)) {
+    if (!move || typeof move !== "object" || sourceTerritoryId === targetTerritoryId || !eligibleSources.has(sourceTerritoryId) || !validTroopCounts(move.troops) || !Array.isArray(move.spyOwnerIds)) {
+      return null;
+    }
+
+    const spyOwnerIds = [...new Set(move.spyOwnerIds)];
+    const movedTroops = createTroopCounts(move.troops);
+    if (troopTotal(movedTroops) === 0 && spyOwnerIds.length === 0) {
+      continue;
+    }
+
+    const sourceTroops = playerAllocation.territories[sourceTerritoryId] ?? createTroopCounts();
+    const sourceRemaining = subtractTroops(sourceTroops, movedTroops);
+    if (!validTroopCounts(sourceRemaining) || troopTotal(sourceRemaining) <= 0) {
+      return null;
+    }
+
+    const immediate = areConnectedTerritories(sourceTerritoryId, targetTerritoryId);
+    if (!immediate && (movedTroops.heavy > 0 || movedTroops.elite > 0 || movedTroops.leader > 0)) {
+      return null;
+    }
+
+    if (!validFortifySpies(state, playerId, sourceTerritoryId, spyOwnerIds, movedSpyOwnerIds)) {
+      return null;
+    }
+
+    if (!immediate && spyOwnerIds.length > 0 && movedTroops.cavalry <= 0) {
+      return null;
+    }
+
+    if (immediate && (movedTroops.heavy > 0 || movedTroops.elite > 0 || movedTroops.leader > 0 || spyOwnerIds.length > 0)) {
+      if (regularSourceId && regularSourceId !== sourceTerritoryId) {
+        return null;
+      }
+
+      regularSourceId = sourceTerritoryId;
+    }
+
+    normalizedMoves[sourceTerritoryId] = {
+      spyOwnerIds,
+      troops: movedTroops,
+    };
+    movedAnything = true;
+  }
+
+  return movedAnything
+    ? { movesBySource: normalizedMoves }
+    : null;
+}
+
+function validFortifySpies(state: GameState, playerId: string, sourceTerritoryId: string, spyOwnerIds: string[], movedSpyOwnerIds: Set<string>) {
+  for (const spyOwnerId of spyOwnerIds) {
+    if (movedSpyOwnerIds.has(spyOwnerId)) {
+      return false;
+    }
+
+    const spy = state.turn?.spies[spyOwnerId];
+    if (spy?.status !== "captured" || spy.territoryId !== sourceTerritoryId || spy.custodianPlayerId !== playerId) {
+      return false;
+    }
+
+    movedSpyOwnerIds.add(spyOwnerId);
+  }
+
+  return true;
+}
+
+function ownedChainTerritoryIds(ownership: TerritoryOwnerMap, targetTerritoryId: string, playerId: string) {
+  const connectedIds = new Set<string>();
+  const queue = [targetTerritoryId];
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const territoryId = queue[index];
+    const connections = generatedMapConnections[territoryId as keyof typeof generatedMapConnections] ?? [];
+
+    for (const connectedId of connections) {
+      if (connectedIds.has(connectedId) || ownership[connectedId] !== playerId) {
+        continue;
+      }
+
+      connectedIds.add(connectedId);
+      queue.push(connectedId);
+    }
+  }
+
+  connectedIds.delete(targetTerritoryId);
+  return connectedIds;
+}
+
+function areConnectedTerritories(leftTerritoryId: string, rightTerritoryId: string) {
+  const connections: readonly string[] = generatedMapConnections[leftTerritoryId as keyof typeof generatedMapConnections] ?? [];
+  return connections.includes(rightTerritoryId);
 }
 
 function validTroopCounts(counts: TroopCounts) {

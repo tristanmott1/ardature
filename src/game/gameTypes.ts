@@ -130,6 +130,13 @@ export type BattleState = {
   result: BattleResult | null;
 };
 
+export type FortifySourceMove = {
+  spyOwnerIds: string[];
+  troops: TroopCounts;
+};
+
+export type FortifyMovesBySource = Record<string, FortifySourceMove>;
+
 export type TurnCommand =
   | {
       type: "confirmSpy";
@@ -170,7 +177,12 @@ export type TurnCommand =
       battleId: string;
     }
   | {
-      type: "fortify";
+      type: "commitFortify";
+      movesBySource: FortifyMovesBySource;
+      targetTerritoryId: string;
+    }
+  | {
+      type: "skipFortify";
     };
 
 export type GameNotification =

@@ -10,8 +10,12 @@ export type CapturedSpyToken = {
 };
 
 export function TroopPlacementRows({
+  availableSpies = [],
+  canAddSpy,
   canAddType,
+  canRemoveSpy,
   canRemoveType,
+  onAdjustSpy,
   onAdjustTroop,
   player,
   selectedSpies = [],
@@ -20,8 +24,12 @@ export function TroopPlacementRows({
   territoryName,
   players = [],
 }: {
+  availableSpies?: CapturedSpyToken[];
+  canAddSpy?: (spyOwnerId: string) => boolean;
   canAddType: (troopType: TroopType) => boolean;
+  canRemoveSpy?: (spyOwnerId: string) => boolean;
   canRemoveType: (troopType: TroopType) => boolean;
+  onAdjustSpy?: (spyOwnerId: string, delta: 1 | -1) => void;
   onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
   player: GamePlayer;
   players?: GamePlayer[];
@@ -34,24 +42,30 @@ export function TroopPlacementRows({
     <>
       <TroopActionRow
         actionLabel="Add"
+        canUseSpy={canAddSpy}
         canUseType={canAddType}
         counts={remaining}
         delta={1}
         icon={<Plus size={17} />}
         labelNoun="remaining"
         onAdjustTroop={onAdjustTroop}
+        onAdjustSpy={onAdjustSpy}
         player={player}
+        players={players}
+        spies={availableSpies}
       />
       <div className="allocation-target">
         <strong>{territoryName}</strong>
       </div>
       <TroopActionRow
         actionLabel="Remove"
+        canUseSpy={canRemoveSpy}
         canUseType={canRemoveType}
         counts={selectedTroops}
         delta={-1}
         icon={<Minus size={17} />}
         labelNoun="on territory"
+        onAdjustSpy={onAdjustSpy}
         onAdjustTroop={onAdjustTroop}
         player={player}
         players={players}
@@ -63,22 +77,26 @@ export function TroopPlacementRows({
 
 function TroopActionRow({
   actionLabel,
+  canUseSpy,
   canUseType,
   counts,
   delta,
   icon,
   labelNoun,
+  onAdjustSpy,
   onAdjustTroop,
   player,
   players = [],
   spies = [],
 }: {
   actionLabel: "Add" | "Remove";
+  canUseSpy?: (spyOwnerId: string) => boolean;
   canUseType: (troopType: TroopType) => boolean;
   counts: TroopCounts;
   delta: 1 | -1;
   icon: ReactNode;
   labelNoun: string;
+  onAdjustSpy?: (spyOwnerId: string, delta: 1 | -1) => void;
   onAdjustTroop: (troopType: TroopType, delta: 1 | -1) => void;
   player: GamePlayer;
   players?: GamePlayer[];
@@ -86,7 +104,7 @@ function TroopActionRow({
 }) {
   const troopTypes = visibleTroopTypes(counts);
   const hasVisibleUnits = troopTypes.length > 0 || spies.length > 0;
-  const canUseAny = troopTypes.some(canUseType);
+  const canUseAny = troopTypes.some(canUseType) || spies.some((spy) => canUseSpy?.(spy.ownerPlayerId));
 
   return (
     <div className="troop-action-row">
@@ -108,7 +126,11 @@ function TroopActionRow({
             />
           </button>
         ))}
-        {spies.map((spy) => (
+        {spies.map((spy) => onAdjustSpy ? (
+          <button className="troop-icon-button" type="button" key={spy.ownerPlayerId} onClick={() => onAdjustSpy(spy.ownerPlayerId, delta)} disabled={!canUseSpy?.(spy.ownerPlayerId)} aria-label={`${actionLabel} ${spyLabel(players, spy.ownerPlayerId)} spy`}>
+            <CapturedSpyIcon players={players} spy={spy} />
+          </button>
+        ) : (
           <CapturedSpyIcon key={spy.ownerPlayerId} players={players} spy={spy} />
         ))}
       </div>
@@ -167,6 +189,10 @@ function CapturedSpyIcon({ players, spy }: { players: GamePlayer[]; spy: Capture
       <TroopIconImage ownerColor={owner.color} src={spyIconSrc(owner.color, spy.captured ?? true)} />
     </span>
   );
+}
+
+function spyLabel(players: GamePlayer[], spyOwnerId: string) {
+  return players.find((player) => player.id === spyOwnerId)?.name ?? "captured";
 }
 
 function visibleTroopTypes(counts: TroopCounts) {

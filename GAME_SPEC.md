@@ -109,7 +109,7 @@ When a spy is available, the owning player can use it for spy attempts. When a s
 
 Captured spies are visible whenever a viewer is allowed to see the detailed unit contents of that territory. This includes the territory owner through normal inspection and any player who successfully spies on that territory. Captured spies are shown with committed circular captured-spy PNG icons using black vertical prison bars. The icon ring is colored by the spy owner's player color.
 
-Captured spies do not count as troops, cannot attack, and cannot be used for spy attempts. In the later full fortify milestone, captured spies can be moved during fortify like pieces, but they still do not count as troops and still cannot attack.
+Captured spies do not count as troops, cannot attack, and cannot be used for spy attempts. Captured spies can be moved during fortify like pieces, but they still do not count as troops and still cannot attack.
 
 If the spy owner captures or otherwise gains control of the territory where their captured spy currently is, that spy is released immediately and becomes available again. The recovery depends on the spy's current territory, not necessarily the territory where the spy was originally captured. If a different player captures that territory, that player gains custody of every captured spy on the territory and those spies remain imprisoned on that territory. Capturing a territory always transfers custody of all captured spies on it, and releases only the captured spies owned by the new territory owner.
 
@@ -757,7 +757,7 @@ The troop section uses allocation-style rows:
 - middle label: `{source} to {target}`
 - bottom/target row: `-` affordance, total units currently in the target in the provisional fortify view, including original target units plus provisional additions from every source
 
-The final fortify check button is disabled until at least one troop or captured spy has been committed to move. Confirming commits every provisional move at once, ends the current player's turn, and advances to the next remaining player.
+The final fortify check button is disabled until at least one troop or captured spy has been committed to move. Confirming commits every provisional move at once, ends the current player's turn, and advances to the next remaining player. Sync devices send only the final `{ type: "commitFortify", targetTerritoryId, movesBySource }` command. Skip sends `{ type: "skipFortify" }`. Provisional target, source, and movement UI is never synchronized.
 
 ### Source Eligibility
 

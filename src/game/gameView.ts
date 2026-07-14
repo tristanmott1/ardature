@@ -51,7 +51,7 @@ export type MapSelectionState = {
 };
 
 export type TroopSectionMode =
-  | { type: "allocation"; source: "initial" | "reinforcement" | "attack" }
+  | { type: "allocation"; source: "initial" | "reinforcement" | "attack" | "fortify" }
   | { type: "info"; source: "gameMap" | "turn" };
 
 export type UpperGameSectionMode =
@@ -203,6 +203,7 @@ type GameStageLayoutContext = {
   game: GameState;
   gameMapInspection: TerritoryInspection;
   hasAttackTroopSection: boolean;
+  hasFortifyTroopSection: boolean;
   localAllocationReady: boolean;
   playerBarPlayer: GamePlayer | null;
   turnActionPlayer: GamePlayer | null;
@@ -630,6 +631,7 @@ export function gameStageLayoutForState({
   game,
   gameMapInspection,
   hasAttackTroopSection,
+  hasFortifyTroopSection,
   localAllocationReady,
   playerBarPlayer,
   turnActionPlayer,
@@ -647,6 +649,7 @@ export function gameStageLayoutForState({
         game,
         gameMapInspection,
         hasAttackTroopSection,
+        hasFortifyTroopSection,
         localAllocationReady,
         turnActionPlayer,
         turnMapInspection,
@@ -876,6 +879,7 @@ function upperSectionModeForGame({
   game,
   gameMapInspection,
   hasAttackTroopSection,
+  hasFortifyTroopSection,
   localAllocationReady,
   turnActionPlayer,
   turnMapInspection,
@@ -899,6 +903,10 @@ function upperSectionModeForGame({
 
   if (hasAttackTroopSection) {
     return { type: "troop", troopSection: { type: "allocation", source: "attack" } };
+  }
+
+  if (hasFortifyTroopSection) {
+    return { type: "troop", troopSection: { type: "allocation", source: "fortify" } };
   }
 
   if (

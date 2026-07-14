@@ -2,7 +2,7 @@
 
 This milestone starts after initial troop allocation is complete. It replaces the temporary read-only map endpoint with the real turn loop: spy, reinforcements, attack, and fortify.
 
-The next implementation passes should first clean up shared troop/captured-spy display, then implement full fortify on top of that shared display model.
+The shared troop/captured-spy display and full fortify action are implemented in this milestone. Future work should build on those shared rows and the final fortify command contract instead of adding phase-specific fortify panels.
 
 ## Phase Order
 
@@ -748,6 +748,13 @@ Bottom/target row:
 - units moved from other sources and units originally in the target remain visible but disabled while this source is selected
 
 The final fortify check button is disabled until at least one troop or captured spy has been committed to move. Confirming commits every provisional move at once, ends the current player's turn, and advances to the next remaining player through the normal local handoff or sync host snapshot flow.
+
+Sync uses two final-only turn commands:
+
+- `{ type: "commitFortify", targetTerritoryId, movesBySource }`
+- `{ type: "skipFortify" }`
+
+`movesBySource` stores each source territory's troop counts and captured-spy owner ids. The host validates ownership, source eligibility, one-troop-left, one regular-source lane, remote cavalry/spy requirements, and each captured spy's current territory/custodian before applying the command. Provisional target/source selections and provisional movement edits are local-only and are never sent to passive sync viewers.
 
 If player removal, pause/reconnect cleanup, or cancelation cancels an active fortify action before confirmation, all provisional fortify moves are undone. Locked attacks are not canceled by fortify cleanup because an active locked attack is a different authoritative state.
 
