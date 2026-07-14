@@ -40,6 +40,15 @@ type ViewportPoint = {
   y: number;
 };
 
+type MapRect = {
+  bottom: number;
+  height: number;
+  left: number;
+  right: number;
+  top: number;
+  width: number;
+};
+
 const MIN_FOCUS_ANIMATION_MS = 180;
 const MAX_FOCUS_ANIMATION_MS = 850;
 const FOCUS_DURATION_PER_DISTANCE = 900;
@@ -86,6 +95,7 @@ export function MapView({
   const isAnimatingRef = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
   const previousSelectedTerritoryIdRef = useRef<string | null>(null);
+  const previousRectRef = useRef<MapRect | null>(null);
   const viewportRef = useRef<MapViewport>(mapData.homeViewport);
   const [isAnimating, setIsAnimatingState] = useState(false);
   const [viewport, setViewportState] = useState<MapViewport>(viewportRef.current);
@@ -123,6 +133,29 @@ export function MapView({
     return {
       x: mapped.x,
       y: mapped.y,
+    };
+  }
+
+  function mapRect() {
+    const svg = svgRef.current;
+
+    if (!svg) {
+      return null;
+    }
+
+    const rect = svg.getBoundingClientRect();
+
+    if (rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+
+    return {
+      bottom: rect.bottom,
+      height: rect.height,
+      left: rect.left,
+      right: rect.right,
+      top: rect.top,
+      width: rect.width,
     };
   }
 
@@ -502,10 +535,73 @@ export function MapView({
     return result;
   }
 
+  function preserveViewportForResize(previousRect: MapRect, nextRect: MapRect, previousViewport: MapViewport) {
+    if (previousRect.width <= 0 || previousRect.height <= 0 || nextRect.width <= 0 || nextRect.height <= 0) {
+      return;
+    }
+
+    const anchor = resizeAnchor(previousRect, nextRect);
+    const anchorMapX = previousViewport.x + ((anchor.x - previousRect.left) / previousRect.width) * previousViewport.width;
+    const anchorMapY = previousViewport.y + ((anchor.y - previousRect.top) / previousRect.height) * previousViewport.height;
+    const nextWidth = previousViewport.width * (nextRect.width / previousRect.width);
+    const nextHeight = previousViewport.height * (nextRect.height / previousRect.height);
+
+    setViewport({
+      width: nextWidth,
+      height: nextHeight,
+      x: anchorMapX - ((anchor.x - nextRect.left) / nextRect.width) * nextWidth,
+      y: anchorMapY - ((anchor.y - nextRect.top) / nextRect.height) * nextHeight,
+    });
+  }
+
   useLayoutEffect(() => {
     stopPanMomentum();
     setViewport(mapData.homeViewport);
+    previousRectRef.current = mapRect();
   }, [mapData.homeViewport]);
+
+  useLayoutEffect(() => {
+    previousRectRef.current = mapRect();
+  }, [showCameraControls]);
+
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+
+    if (!svg) {
+      return;
+    }
+
+    previousRectRef.current = mapRect();
+
+    const observer = new ResizeObserver(() => {
+      const previousRect = previousRectRef.current;
+      const nextRect = mapRect();
+
+      if (!nextRect) {
+        return;
+      }
+
+      if (!showCameraControls) {
+        previousRectRef.current = nextRect;
+        return;
+      }
+
+      if (!previousRect) {
+        previousRectRef.current = nextRect;
+        return;
+      }
+
+      // Preserve the visible camera when layout sections resize the SVG.
+      if (!isAnimatingRef.current) {
+        preserveViewportForResize(previousRect, nextRect, viewportRef.current);
+      }
+
+      previousRectRef.current = nextRect;
+    });
+
+    observer.observe(svg);
+    return () => observer.disconnect();
+  }, [mapData.width, mapData.height, showCameraControls]);
 
   useEffect(() => {
     const previousSelectedTerritoryId = previousSelectedTerritoryIdRef.current;
@@ -724,6 +820,25 @@ function constrainViewport(viewport: MapViewport, mapWidth: number, mapHeight: n
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+function resizeAnchor(previousRect: MapRect, nextRect: MapRect): ViewportPoint {
+  const left = Math.max(previousRect.left, nextRect.left);
+  const right = Math.min(previousRect.right, nextRect.right);
+  const top = Math.max(previousRect.top, nextRect.top);
+  const bottom = Math.min(previousRect.bottom, nextRect.bottom);
+
+  if (right > left && bottom > top) {
+    return {
+      x: left + (right - left) / 2,
+      y: top + (bottom - top) / 2,
+    };
+  }
+
+  return {
+    x: nextRect.left + nextRect.width / 2,
+    y: nextRect.top + nextRect.height / 2,
+  };
 }
 
 function focusAnimationDuration(start: MapViewport, target: MapViewport) {

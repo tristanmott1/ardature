@@ -356,6 +356,7 @@ async function runSourceChecks() {
   assert(mapViewSource.includes("Maximize") && mapViewSource.includes("Return to map view"), "Map view uses a corner-only return-to-map control.");
   assert(mapViewSource.includes("Crosshair") && mapViewSource.includes("Disable automatic focus") && mapViewSource.includes("Enable automatic focus"), "Map view exposes an auto-focus toggle.");
   assert(mapViewSource.includes("{showCameraControls ? (") && !mapViewSource.includes("showCameraControls && !isAnimating") && mapViewSource.includes("aria-disabled={isAnimating}"), "Map camera controls stay mounted during camera animations.");
+  assert(mapViewSource.includes("ResizeObserver") && mapViewSource.includes("preserveViewportForResize") && mapViewSource.includes("resizeAnchor"), "Map view preserves camera continuity across layout resizes.");
   assert(mapPreferencesSource.includes("ardature.mapPreferences.v1") && mapPreferencesSource.includes("autoFocusEnabled: false"), "Map preferences persist auto-focus with a default-off state.");
   assert(territoryFillSource.includes("mixWithWhite") && territoryFillSource.includes("SELECTED_WHITE_MIX = 0.35"), "Selected territory fill blends the current color with white.");
   assert(!territoryFillSource.includes('state.status === "selected" ? "#ffffff"'), "Selected territory fill is not hard-coded to white.");
@@ -553,6 +554,49 @@ async function mapPointToScreen(page, point) {
       y: screenPoint.y,
     };
   }, point);
+}
+
+async function mapCameraSnapshot(page) {
+  const rect = await page.locator(".map-svg").boundingBox();
+
+  if (!rect) {
+    throw new Error("Missing map SVG bounds.");
+  }
+
+  return {
+    rect,
+    viewport: parseViewBox(await viewBox(page)),
+  };
+}
+
+function resizeAnchor(previousRect, nextRect) {
+  const left = Math.max(previousRect.x, nextRect.x);
+  const right = Math.min(previousRect.x + previousRect.width, nextRect.x + nextRect.width);
+  const top = Math.max(previousRect.y, nextRect.y);
+  const bottom = Math.min(previousRect.y + previousRect.height, nextRect.y + nextRect.height);
+
+  if (right > left && bottom > top) {
+    return {
+      x: left + (right - left) / 2,
+      y: top + (bottom - top) / 2,
+    };
+  }
+
+  return {
+    x: nextRect.x + nextRect.width / 2,
+    y: nextRect.y + nextRect.height / 2,
+  };
+}
+
+function mapPointAtScreen(snapshot, point) {
+  return {
+    x: snapshot.viewport.x + ((point.x - snapshot.rect.x) / snapshot.rect.width) * snapshot.viewport.width,
+    y: snapshot.viewport.y + ((point.y - snapshot.rect.y) / snapshot.rect.height) * snapshot.viewport.height,
+  };
+}
+
+function mapPointDistance(left, right) {
+  return Math.hypot(left.x - right.x, left.y - right.y);
 }
 
 function touchPoint(point, id) {
@@ -1377,10 +1421,14 @@ async function runRandomAllocationChecks(page) {
   await page.waitForSelector(".army-build-modal", { state: "detached" });
   assert((await page.locator(".troop-section-reinforcement").count()) === 0, "Reinforcement troop section is hidden before selecting a territory.");
   assert((await page.locator(".turn-action-instruction").getByText("Select a territory").count()) === 1, "Reinforcement placement asks for a territory before selection.");
+  const beforeShrinkCamera = await mapCameraSnapshot(page);
   const reinforcementTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="yellow"]').first().getAttribute("data-territory-fill");
   assert(reinforcementTerritoryId, "Current player still owns a territory for reinforcements.");
   await clickTerritory(page, reinforcementTerritoryId);
   await page.waitForSelector(".troop-section-reinforcement .allocation-target");
+  const afterShrinkCamera = await mapCameraSnapshot(page);
+  const shrinkAnchor = resizeAnchor(beforeShrinkCamera.rect, afterShrinkCamera.rect);
+  assert(mapPointDistance(mapPointAtScreen(beforeShrinkCamera, shrinkAnchor), mapPointAtScreen(afterShrinkCamera, shrinkAnchor)) < 140, "Showing the troop section preserves the overlap map anchor.");
   const reinforcementTerritoryName = (await page.locator(".troop-section-reinforcement .allocation-target").textContent())?.trim();
   assert(reinforcementTerritoryName, "Selected reinforcement territory shows its name.");
   assert((await page.locator(".turn-action-instruction").getByText(`Add troops to ${reinforcementTerritoryName}`).count()) === 1, "Reinforcement placement instruction names the selected territory.");
@@ -1391,8 +1439,12 @@ async function runRandomAllocationChecks(page) {
   const reinforcementBottomCounts = (await page.locator(".troop-section-reinforcement .troop-action-row").nth(1).locator(".troop-count-bubble").allTextContents()).map(Number);
   assert(reinforcementBottomCounts.reduce((sum, count) => sum + count, 0) > 0, "Reinforcement remove row shows existing territory troops.");
   assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(1).locator(".troop-icon-button:not(:disabled)").count()) === 0, "Existing troops shown during reinforcement cannot be removed.");
+  const beforeExpandCamera = await mapCameraSnapshot(page);
   await clickTerritory(page, reinforcementTerritoryId);
   assert((await page.locator(".troop-section-reinforcement").count()) === 0, "Pressing the selected reinforcement territory again hides the troop section.");
+  const afterExpandCamera = await mapCameraSnapshot(page);
+  const expandAnchor = resizeAnchor(beforeExpandCamera.rect, afterExpandCamera.rect);
+  assert(mapPointDistance(mapPointAtScreen(beforeExpandCamera, expandAnchor), mapPointAtScreen(afterExpandCamera, expandAnchor)) < 140, "Hiding the troop section preserves the overlap map anchor.");
   await clickTerritory(page, reinforcementTerritoryId);
   await page.waitForSelector(".troop-section-reinforcement .allocation-target");
   await finishReinforcementPlacement(page);

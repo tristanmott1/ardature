@@ -293,6 +293,8 @@ Layer order:
 
 While a focus animation is running, manual camera gestures are locked. Pointer panning, pinch zooming, and wheel zooming are ignored until the animation finishes. Territory taps and skin changes remain active; selecting a different territory redirects the focus animation from the current view. The SVG exposes `data-map-animating="true"` while the camera is moving. Camera controls are DOM overlay buttons outside the SVG interaction path, not SVG map content.
 
+When layout sections change the rendered map size, `MapView` preserves camera continuity instead of letting the same `viewBox` stretch into a new shape. A resize observer keeps the current map scale as much as bounds allow and anchors the map coordinate under the old/new overlap center to the same screen position. This is presentation-only camera state; it is not synced or persisted. Focus and return-to-map animations override resize preservation.
+
 One-finger touch pans use restrained release momentum. `MapView` derives velocity only from the final 100ms of a touch-only, single-pointer gesture, then applies short exponential friction while continuing to use the normal bounded viewport. Momentum never changes zoom or locks input. A new gesture, pinch, wheel event, focus movement, return-to-map action, blocking UI, resize, cancellation, or unmount stops it immediately. Mouse, pen, wheel, and pinch gestures do not launch momentum.
 
 ### TerritoryFillLayer
