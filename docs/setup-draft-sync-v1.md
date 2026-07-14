@@ -298,6 +298,8 @@ The app should be a map-first shell. During every stage, the map remains a full-
 
 Camera movement is explicit. Local handoff and selected-territory automatic focus create app-level camera intents after the resulting persistent UI layout has rendered and been measured. Manual return-to-map is the same kind of explicit camera action, handled directly inside the map with the current measured aperture. A draft pick that opens a confirmation sheet does not move the camera unless automatic focus is enabled on that device. If automatic focus is off, selection may highlight the territory locally but the `viewBox` remains unchanged.
 
+The home/fill view is not the maximum zoomed-out view. `MapView` keeps one stable maximum zoomed-out camera world per orientation by fitting the full generated map frame to the screen aspect. Manual pan and zoom use that world until the orientation changes, so zooming in does not reduce the accessible padded paper around the map. Mobile browser height changes inside the same orientation do not recalculate that world.
+
 Reusable map modes for this milestone:
 
 - Setup/draft ownership map: pan and zoom only.

@@ -61,6 +61,8 @@ type MapVisibleAperture = {
   width: number;
 };
 
+type OrientationKey = "landscape" | "portrait";
+
 const MIN_FOCUS_ANIMATION_MS = 180;
 const MAX_FOCUS_ANIMATION_MS = 850;
 const FOCUS_DURATION_PER_DISTANCE = 900;
@@ -115,6 +117,8 @@ export function MapView({
   const isAnimatingRef = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
   const consumedCameraIntentIdRef = useRef(0);
+  const cameraBoundsRef = useRef(orientationCameraBounds(mapData, screenAspect()));
+  const orientationKeyRef = useRef(orientationKey());
   const viewportRef = useRef<MapViewport>(mapData.homeViewport);
   const [isAnimating, setIsAnimatingState] = useState(false);
   const [viewport, setViewportState] = useState<MapViewport>(viewportRef.current);
@@ -135,7 +139,7 @@ export function MapView({
   } as CSSProperties;
 
   function setViewport(nextViewport: MapViewport) {
-    const next = constrainViewport(nextViewport, mapData.width, mapData.height);
+    const next = constrainViewport(nextViewport, cameraBoundsRef.current);
     viewportRef.current = next;
     setViewportState(next);
     return next;
@@ -450,7 +454,7 @@ export function MapView({
   function startFocusAnimation(targetViewport: MapViewport) {
     stopFocusAnimation();
 
-    const target = constrainViewport(targetViewport, mapData.width, mapData.height);
+    const target = constrainViewport(targetViewport, cameraBoundsRef.current);
     const startViewport = viewportRef.current;
     const duration = focusAnimationDuration(startViewport, target);
 
@@ -606,8 +610,33 @@ export function MapView({
 
   useLayoutEffect(() => {
     stopPanMomentum();
-    setViewport(mapData.homeViewport);
+    cameraBoundsRef.current = orientationCameraBounds(mapData, screenAspect());
+    orientationKeyRef.current = orientationKey();
+    setViewport(apertureTargetForViewport(mapData.homeViewport));
   }, [mapData.homeViewport]);
+
+  useEffect(() => {
+    function updateOrientationBounds() {
+      const nextOrientationKey = orientationKey();
+
+      if (nextOrientationKey === orientationKeyRef.current) {
+        return;
+      }
+
+      orientationKeyRef.current = nextOrientationKey;
+      stopFocusAnimation();
+      cameraBoundsRef.current = orientationCameraBounds(mapData, screenAspect());
+      stopPanMomentum();
+      setViewport(viewportRef.current);
+    }
+
+    window.addEventListener("resize", updateOrientationBounds);
+    window.addEventListener("orientationchange", updateOrientationBounds);
+    return () => {
+      window.removeEventListener("resize", updateOrientationBounds);
+      window.removeEventListener("orientationchange", updateOrientationBounds);
+    };
+  }, [mapData]);
 
   useEffect(() => {
     if (!cameraIntent || cameraIntent.id <= consumedCameraIntentIdRef.current) {
@@ -760,16 +789,7 @@ function fitBoundsToAspect(bounds: MapBounds, aspect: number): MapViewport {
   };
 }
 
-function fullMapViewport(mapWidth: number, mapHeight: number): MapViewport {
-  return {
-    x: 0,
-    y: 0,
-    width: mapWidth,
-    height: mapHeight,
-  };
-}
-
-function constrainViewport(viewport: MapViewport, mapWidth: number, mapHeight: number): MapViewport {
+function constrainViewport(viewport: MapViewport, bounds: MapViewport): MapViewport {
   if (
     !Number.isFinite(viewport.x) ||
     !Number.isFinite(viewport.y) ||
@@ -778,7 +798,7 @@ function constrainViewport(viewport: MapViewport, mapWidth: number, mapHeight: n
     viewport.width <= 0 ||
     viewport.height <= 0
   ) {
-    return fullMapViewport(mapWidth, mapHeight);
+    return bounds;
   }
 
   const center = viewportCenter(viewport);
@@ -790,16 +810,52 @@ function constrainViewport(viewport: MapViewport, mapWidth: number, mapHeight: n
   let width = viewport.width * minimumScale;
   let height = viewport.height * minimumScale;
 
-  // Let each dimension reach the map edge so the whole map can be viewed.
-  width = clamp(width, Math.min(MIN_VIEWPORT_SIZE, mapWidth), mapWidth);
-  height = clamp(height, Math.min(MIN_VIEWPORT_SIZE, mapHeight), mapHeight);
+  // Keep every camera move inside the stable orientation world.
+  width = clamp(width, Math.min(MIN_VIEWPORT_SIZE, bounds.width), bounds.width);
+  height = clamp(height, Math.min(MIN_VIEWPORT_SIZE, bounds.height), bounds.height);
 
   return {
     width,
     height,
-    x: clamp(center.x - width / 2, 0, Math.max(0, mapWidth - width)),
-    y: clamp(center.y - height / 2, 0, Math.max(0, mapHeight - height)),
+    x: clamp(center.x - width / 2, bounds.x, bounds.x + bounds.width - width),
+    y: clamp(center.y - height / 2, bounds.y, bounds.y + bounds.height - height),
   };
+}
+
+function orientationCameraBounds(mapData: GeneratedMapData, aspect: number): MapViewport {
+  if (!Number.isFinite(aspect) || aspect <= 0) {
+    return {
+      height: mapData.height,
+      width: mapData.width,
+      x: 0,
+      y: 0,
+    };
+  }
+
+  // This is the maximum zoomed-out world for the current orientation. The
+  // home view is smaller; pan and zoom limits use this stable outer frame.
+  return fitBoundsToAspect({
+    maxX: mapData.width,
+    maxY: mapData.height,
+    minX: 0,
+    minY: 0,
+  }, aspect);
+}
+
+function orientationKey(): OrientationKey {
+  if (typeof window === "undefined") {
+    return "portrait";
+  }
+
+  return window.innerHeight >= window.innerWidth ? "portrait" : "landscape";
+}
+
+function screenAspect() {
+  if (typeof window === "undefined" || window.innerHeight <= 0) {
+    return 1;
+  }
+
+  return window.innerWidth / window.innerHeight;
 }
 
 function viewportForApertureTarget(target: MapViewport, aperture: MapVisibleAperture): MapViewport {

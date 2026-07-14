@@ -348,7 +348,8 @@ async function runSourceChecks() {
   assert(syncTransportSource.includes("ardature-sync-offer") && syncTransportSource.includes("ARO:"), "Sync transport uses Ardatúrë QR payloads.");
   assert(syncTransportSource.includes("isAnswer && fields.length === 6") && syncTransportSource.includes("isRecoveryAnswer && fields.length === 6") && syncTransportSource.includes("playerColor: playerColor as PlayerColor"), "Compact sync QR answers carry validated player colors.");
   assert(mapViewSource.includes("viewBox") && mapViewSource.includes("MapViewport"), "Map view owns the viewport camera.");
-  assert(mapViewSource.includes("constrainViewport"), "Map view constrains the viewport inside the map.");
+  assert(mapViewSource.includes("orientationCameraBounds") && mapViewSource.includes("orientationKeyRef") && mapViewSource.includes("cameraBoundsRef"), "Map view keeps stable orientation-derived camera bounds.");
+  assert(mapViewSource.includes("constrainViewport(nextViewport, cameraBoundsRef.current)") && mapViewSource.includes("constrainViewport(targetViewport, cameraBoundsRef.current)"), "Map view constrains pan, zoom, and focus against stable camera bounds.");
   assert(mapViewSource.includes("viewportTransitionDistance"), "Map view uses combined pan and zoom focus distance.");
   assert(mapViewSource.includes("onMapPress"), "Map view supports map-background presses.");
   assert(mapViewSource.includes("setPointerCapture") && mapViewSource.includes("territoryIdFromTarget"), "Map view captures and classifies every pointer gesture.");
@@ -530,6 +531,49 @@ function assertViewBoxInside(value, size, message) {
   assert(viewport.y + viewport.height <= size.height + epsilon, message);
 }
 
+async function assertViewBoxInsideCameraBounds(page, message) {
+  const result = {
+    bounds: await cameraBoundsForPage(page),
+    viewport: parseViewBox(await viewBox(page)),
+  };
+  const epsilon = 0.001;
+  const { bounds, viewport } = result;
+
+  assert(viewport.x >= bounds.x - epsilon, message);
+  assert(viewport.y >= bounds.y - epsilon, message);
+  assert(viewport.x + viewport.width <= bounds.x + bounds.width + epsilon, message);
+  assert(viewport.y + viewport.height <= bounds.y + bounds.height + epsilon, message);
+}
+
+async function cameraBoundsForPage(page) {
+  return page.evaluate(() => {
+    const svg = document.querySelector(".map-svg");
+    const background = document.querySelector("[data-background-piece]");
+
+    if (!(svg instanceof SVGSVGElement) || !(background instanceof SVGElement)) {
+      throw new Error("Missing map SVG or background.");
+    }
+
+    const mapWidth = Number(background.getAttribute("width"));
+    const mapHeight = Number(background.getAttribute("height"));
+    function orientationCameraBoundsForTest(mapWidth, mapHeight) {
+      const aspect = window.innerWidth / window.innerHeight;
+      const mapAspect = mapWidth / mapHeight;
+      const centerX = mapWidth / 2;
+      const centerY = mapHeight / 2;
+
+      if (aspect > mapAspect) {
+        const width = mapHeight * aspect;
+        return { x: centerX - width / 2, y: 0, width, height: mapHeight };
+      }
+
+      const height = mapWidth / aspect;
+      return { x: 0, y: centerY - height / 2, width: mapWidth, height };
+    }
+    return orientationCameraBoundsForTest(mapWidth, mapHeight);
+  });
+}
+
 function homeViewportFromSize(size) {
   return {
     x: 1500,
@@ -564,6 +608,21 @@ async function apertureViewBoxForTarget(page, target) {
     };
     const mapWidth = Number(background.getAttribute("width"));
     const mapHeight = Number(background.getAttribute("height"));
+    function orientationCameraBoundsForTest(mapWidth, mapHeight) {
+      const aspect = window.innerWidth / window.innerHeight;
+      const mapAspect = mapWidth / mapHeight;
+      const centerX = mapWidth / 2;
+      const centerY = mapHeight / 2;
+
+      if (aspect > mapAspect) {
+        const width = mapHeight * aspect;
+        return { x: centerX - width / 2, y: 0, width, height: mapHeight };
+      }
+
+      const height = mapWidth / aspect;
+      return { x: 0, y: centerY - height / 2, width: mapWidth, height };
+    }
+    const bounds = orientationCameraBoundsForTest(mapWidth, mapHeight);
     const aspect = aperture.width / aperture.height;
     const targetAspect = targetViewport.width / targetViewport.height;
     const targetCenterX = targetViewport.x + targetViewport.width / 2;
@@ -589,15 +648,15 @@ async function apertureViewBoxForTarget(page, target) {
       height: aperture.svgHeight / scale,
     };
     const minimumScale = Math.max(400 / requested.width, 400 / requested.height, 1);
-    const width = Math.max(Math.min(requested.width * minimumScale, mapWidth), Math.min(400, mapWidth));
-    const height = Math.max(Math.min(requested.height * minimumScale, mapHeight), Math.min(400, mapHeight));
+    const width = Math.max(Math.min(requested.width * minimumScale, bounds.width), Math.min(400, bounds.width));
+    const height = Math.max(Math.min(requested.height * minimumScale, bounds.height), Math.min(400, bounds.height));
     const centerX = requested.x + requested.width / 2;
     const centerY = requested.y + requested.height / 2;
     const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
     return {
-      x: clamp(centerX - width / 2, 0, Math.max(0, mapWidth - width)),
-      y: clamp(centerY - height / 2, 0, Math.max(0, mapHeight - height)),
+      x: clamp(centerX - width / 2, bounds.x, bounds.x + bounds.width - width),
+      y: clamp(centerY - height / 2, bounds.y, bounds.y + bounds.height - height),
       width,
       height,
     };
@@ -1062,8 +1121,7 @@ async function runLocalDraftChecks(page) {
 
   const size = await mapSize(page);
   const homeViewport = homeViewportFromSize(size);
-  assertViewBoxInside(await viewBox(page), size, "Initial draft viewBox stays inside the map.");
-  assertViewBoxEquals(await viewBox(page), homeViewport, "Initial draft viewBox uses the home viewport.");
+  await assertViewBoxInsideCameraBounds(page, "Initial draft viewBox stays inside the stable camera bounds.");
   assert((await page.locator("[data-territory-fill]").count()) === 42, "Map renders 42 territory fill groups.");
   assert((await page.locator("[data-territory-hit]").count()) === 42, "Draft renders 42 hit targets.");
   const controlsBox = await page.locator(".player-bar").boundingBox();
@@ -1189,17 +1247,26 @@ async function runLocalDraftChecks(page) {
   const box = await page.locator(".map-svg").boundingBox();
   assert(box, "Map SVG has a bounding box.");
   const beforeWheel = await viewBox(page);
-  await page.locator(".map-svg").dispatchEvent("wheel", {
-    bubbles: true,
-    cancelable: true,
-    clientX: box.x + box.width / 2,
-    clientY: box.y + box.height / 2,
-    deltaY: 500,
-  });
+  for (let step = 0; step < 8; step += 1) {
+    await page.locator(".map-svg").dispatchEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: box.x + box.width / 2,
+      clientY: box.y + box.height / 2,
+      deltaY: 500,
+    });
+  }
   await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeWheel);
   const zoomedOutViewport = parseViewBox(await viewBox(page));
   assert(zoomedOutViewport.width > homeViewport.width, "Manual wheel zoom can zoom out past the home viewport.");
-  assertViewBoxInside(await viewBox(page), size, "Wheel zoom keeps the viewBox inside the framed map.");
+  assertViewBoxEquals(await viewBox(page), await cameraBoundsForPage(page), "Manual wheel zoom-out reaches the stable orientation camera bounds.");
+  const beforeSameOrientationResize = await viewBox(page);
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.waitForTimeout(80);
+  assert((await viewBox(page)) === beforeSameOrientationResize, "Same-orientation viewport changes do not recalculate camera bounds or move the viewBox.");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(80);
+  assert((await viewBox(page)) === beforeSameOrientationResize, "Restoring the same orientation keeps the stable camera bounds.");
   await page.getByRole("button", { name: "Return to map view" }).click();
   const expectedHomeAperture = await apertureViewBoxForTarget(page, homeViewport);
   await page.waitForFunction(
@@ -1383,7 +1450,7 @@ async function runMobileMapInteractionChecks(page) {
   // A fast edge swipe remains constrained and settles without bouncing.
   await touchDrag(client, center, { x: center.x + 170, y: center.y, id: 9 });
   await page.waitForTimeout(950);
-  assertViewBoxInside(await viewBox(page), size, "Touch momentum remains inside map bounds.");
+  await assertViewBoxInsideCameraBounds(page, "Touch momentum remains inside stable camera bounds.");
   const atMomentumRest = parseViewBox(await viewBox(page));
   await page.waitForTimeout(140);
   assertViewBoxEquals(await viewBox(page), atMomentumRest, "Touch momentum stops at the map edge.");
