@@ -56,7 +56,7 @@ The exact file list can evolve, but the boundaries should stay clear:
 - `src/game/armyBuild.ts` owns the tunable starting budgets and fixed-point troop costs, plus the deterministic integer army selector.
 - `src/sync/` owns Qwixx-style local network synchronization adapted for Ardatúrë.
 
-The service worker owns installed-app caching. When a change must force already-installed devices onto fresh shell assets, bump `CACHE_NAME` in `public/sw.js` so old cached HTML, manifest, and bundles are discarded on activation.
+The service worker owns installed-app caching. When a change must force already-installed devices onto fresh shell assets, bump `CACHE_NAME` in `public/sw.js` so old cached HTML, manifest, and bundles are discarded on activation. Troop and spy icons are core UI assets, not optional decorations, so the service worker should precache the committed icon PNGs.
 
 ## Public Assets
 
@@ -87,6 +87,8 @@ Additional spy and future-use portrait crops in the same directory include `crow
 Army build, troop allocation controls, and future troop displays should use these circular icon crops instead of letter badges. When an icon has a count, render the count as a small white circle attached to the edge of the character circle.
 
 Troop and spy icon ownership should be communicated by a runtime outer ring colored with the owning player's color. The portrait communicates unit type; the ring communicates owner. Captured spies should use the committed captured spy PNGs, currently `smeagul-captured.png` and `crow-captured.png`, with the spy owner's color on the runtime outer ring.
+
+Troop and spy icon paths are centralized in `src/game/troopIcons.tsx`. The app should preload the full troop/spy icon set once at startup so spy buttons, captured-spy rows, army build, allocation, reinforcement, and inspection screens do not show a first-use blank or decode delay.
 
 ## Map Data Flow
 
@@ -201,7 +203,7 @@ Generated territory lookup helpers live in `src/map/territoryLookup.ts`. Compone
 
 App-level lifecycle hooks live in `src/app/`. Local refresh/close recovery is isolated in `useLocalPauseRecovery`, which writes a paused local snapshot for active local game stages. `App.tsx` should install that hook rather than owning pagehide/beforeunload persistence wiring inline.
 
-Troop and spy icon rendering lives in `src/game/troopIcons.tsx`. Screens should reuse `TroopIconCount`, `TroopIconImage`, `troopIconSrc`, `spyIconSrc`, and `troopName` instead of defining their own troop asset paths, labels, or side mappings.
+Troop and spy icon rendering lives in `src/game/troopIcons.tsx`. Screens should reuse `TroopIconCount`, `TroopIconImage`, `troopIconSrc`, `spyIconSrc`, `preloadTroopIcons`, and `troopName` instead of defining their own troop asset paths, labels, preload behavior, or side mappings.
 
 Troop rows and captured-spy rows live in `src/ui/TroopControls.tsx`. Allocation, reinforcement, army build, and map-inspection screens should import `TroopPlacementRows`, `TroopCountRow`, and `CapturedSpyRow` instead of defining local add/remove row markup or captured-spy layouts.
 

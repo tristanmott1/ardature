@@ -1437,6 +1437,8 @@ The game should use these assets where appropriate, especially for troop icons, 
 
 The circular troop icon crops under `public/troops/icons/` are raster PNGs, not SVGs. They should be used anywhere the UI needs troop type icons. Counts should be rendered as small white circular badges attached to the icon. Troop and spy icons should render with a runtime outer ring colored by the owning player's color. Captured spy icons should use the committed `smeagul-captured.png` and `crow-captured.png` assets.
 
+Troop and spy icons are core UI assets. The app should preload the full icon set at startup, and the service worker should precache the committed troop/spy PNGs, so first-use spy buttons, captured spies, allocation rows, army build, reinforcement rows, and inspection rows render without a visible blank or decode delay.
+
 ## Not Yet Fixed
 
 The following decisions are intentionally open:

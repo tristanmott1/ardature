@@ -1,4 +1,4 @@
-const CACHE_NAME = "ardature-v2";
+const CACHE_NAME = "ardature-v3";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -6,6 +6,18 @@ const CORE_ASSETS = [
   "./app-icons/apple-touch-icon.png",
   "./app-icons/icon-192.png",
   "./app-icons/icon-512.png",
+  "./troops/icons/crow-captured.png",
+  "./troops/icons/crow.png",
+  "./troops/icons/dwarf.png",
+  "./troops/icons/elf.png",
+  "./troops/icons/orc.png",
+  "./troops/icons/rohirrim.png",
+  "./troops/icons/smeagul-captured.png",
+  "./troops/icons/smeagul.png",
+  "./troops/icons/uruk-hai.png",
+  "./troops/icons/warg.png",
+  "./troops/icons/witch-king.png",
+  "./troops/icons/wizard.png",
 /* __VITE_ASSETS__ */
 ];
 

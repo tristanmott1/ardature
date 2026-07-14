@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const baseUrl = "http://127.0.0.1:5174/";
@@ -123,6 +123,7 @@ async function runSourceChecks() {
   const qrCodeUiSource = await readFile(new URL("../src/sync/QrCodeUi.tsx", import.meta.url), "utf8");
   const syncErrorsSource = await readFile(new URL("../src/sync/syncErrors.ts", import.meta.url), "utf8");
   const syncTransportSource = await readFile(new URL("../src/sync/syncTransport.ts", import.meta.url), "utf8");
+  const troopIconFiles = await readdir(new URL("../public/troops/icons/", import.meta.url));
   const verifySource = await readFile(new URL("../scripts/verify-ui.mjs", import.meta.url), "utf8");
   const formControlsSource = await readFile(new URL("../src/ui/FormControls.tsx", import.meta.url), "utf8");
   const gameSectionsSource = await readFile(new URL("../src/ui/GameSections.tsx", import.meta.url), "utf8");
@@ -190,7 +191,7 @@ async function runSourceChecks() {
       gameSpecDocs.includes("| Rhûn | 4 heavy |"),
     "User-facing names preserve required special characters.",
   );
-  assert(serviceWorkerSource.includes('const CACHE_NAME = "ardature-v2"'), "Service worker cache version is bumped for refreshed shell assets.");
+  assert(serviceWorkerSource.includes('const CACHE_NAME = "ardature-v3"'), "Service worker cache version is bumped for refreshed shell assets.");
   assert(territoryLookupSource.includes("territoryForId") && !appSource.includes("generatedMapData.territories.find") && !gameSectionsSource.includes("generatedMapData.territories.find") && !gameViewSource.includes("new Map<string, GeneratedTerritoryData>"), "Territory lookup uses one shared generated-data helper.");
   assert(mapWidth === sourceWidth * 10 + 3000 && mapHeight === sourceHeight * 10 + 3000, "Generated app data includes the 1500-unit display frame.");
   assert(
@@ -380,6 +381,14 @@ async function runSourceChecks() {
   assert(localPauseRecoverySource.includes('current.phase !== "home" && current.phase !== "setup"'), "Pagehide local recovery does not overwrite storage from home or setup.");
   assert(!appSource.includes("draft-status") && !appSource.includes("allocation-summary"), "Old game-stage header markup is removed.");
   assert(troopControlsSource.includes("TroopIconCount") && troopIconsSource.includes("troopIconSrc") && troopIconsSource.includes("function TroopIconImage"), "Allocation UI uses troop image icons.");
+  for (const iconName of ["crow", "crow-captured", "dwarf", "elf", "orc", "rohirrim", "smeagul", "smeagul-captured", "uruk-hai", "warg", "witch-king", "wizard"]) {
+    assert(troopIconFiles.includes(`${iconName}.png`), `Committed troop icon exists: ${iconName}.png.`);
+    assert(troopIconsSource.includes(`"${iconName}"`), `Troop icon preload list includes ${iconName}.`);
+    assert(serviceWorkerSource.includes(`./troops/icons/${iconName}.png`), `Service worker precaches ${iconName}.png.`);
+  }
+  assert(appSource.includes('from "./game/troopIcons"') && appSource.includes("preloadTroopIcons();"), "App preloads troop and spy icons at startup.");
+  assert(troopIconsSource.includes("function preloadTroopIcons") && troopIconsSource.includes("troopIconSources") && troopIconsSource.includes("new Image()"), "Troop icon helper owns eager image preloading.");
+  assert(troopIconsSource.includes('loading="eager"') && troopIconsSource.includes('decoding="async"'), "Troop icon images are requested eagerly and decoded asynchronously.");
   assert(troopMarkerSource.includes('circle r="156"') && stylesSource.includes("font-size: 184px"), "Territory troop total markers use the larger map count size.");
   assert(troopIconsSource.includes('from "./playerColors"') && formControlsSource.includes('from "../game/playerColors"') && playerColorsSource.includes("function colorCss") && playerColorsSource.includes("function colorLabel") && playerColorsSource.includes("function isLightColor"), "Player color display helpers are centralized.");
   assert(!appSource.includes("function TroopIconCount") && !appSource.includes("const TROOP_ICON_BY_SIDE") && !appSource.includes("function troopIconSrc"), "App imports troop icon primitives instead of defining duplicate troop asset mappings.");
@@ -1565,6 +1574,7 @@ async function runRandomAllocationChecks(page) {
   assert(turnMapBox && turnActionBox && turnActionBox.y < turnMapBox.y + turnMapBox.height, "Turn action bar overlays the full-screen map.");
   await assertCameraControlsInsideVisibleAperture(page, "Turn camera controls stay inside the visible map aperture.");
   assert((await page.getByRole("button", { name: "Spy" }).count()) === 1, "Turn controls include the spy button.");
+  await assertNoBrokenTroopIconImages(page, "Turn spy button image is loaded.");
   assert((await page.getByRole("button", { name: "Reinforcements" }).count()) === 1, "Turn starts at reinforcements.");
   assert((await page.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Turn action bar starts with an instruction row.");
   const opponentTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="red"]').first().getAttribute("data-territory-fill");
@@ -1731,6 +1741,23 @@ async function assertUnknownTroopRow(page, message, expectedHeavyIcon = null) {
   }
 }
 
+async function assertNoBrokenTroopIconImages(page, message) {
+  const images = page.locator(".troop-icon-frame img");
+
+  await images.first().waitFor();
+  await page.waitForFunction(() =>
+    Array.from(document.querySelectorAll(".troop-icon-frame img")).every((image) => image instanceof HTMLImageElement && image.complete),
+  );
+
+  const brokenSources = await images.evaluateAll((nodes) =>
+    nodes
+      .filter((node) => node instanceof HTMLImageElement && node.naturalWidth === 0)
+      .map((node) => node.getAttribute("src") ?? ""),
+  );
+
+  assert(brokenSources.length === 0, `${message} Broken sources: ${brokenSources.join(", ")}`);
+}
+
 async function dismissQueuedNotifications(page) {
   while ((await page.getByRole("alertdialog", { name: "Game notification" }).count()) > 0) {
     await page.getByRole("button", { name: "Dismiss notification" }).click();
@@ -1766,6 +1793,7 @@ async function runTurnSpyOutcomeChecks(browser) {
   assert((await success.locator(".troop-section-info .selected-territory-name").getByText("Bree").count()) === 1, "Successful spy shows the target territory name.");
   assert((await success.locator(".troop-section-info .troop-icon-count").count()) === 4, "Successful spy shows the target troop breakdown.");
   assert((await success.locator(".troop-section-info .captured-spy-icon").count()) === 1, "Successful spy shows captured spies imprisoned on the target.");
+  await assertNoBrokenTroopIconImages(success, "Successful spy troop and captured-spy icons are loaded.");
   const capturedSpySource = await success.locator(".troop-section-info .captured-spy-icon img").first().getAttribute("src");
   assert(capturedSpySource?.includes("-captured.png"), "Captured spy icon uses the captured spy asset.");
   const spyIconSources = await success.locator(".troop-section-info .troop-icon-count img").evaluateAll((images) =>

@@ -81,6 +81,7 @@ import {
   saveSyncProfilePreference,
   syncProfileFromPreferences,
 } from "./game/setupPreferences";
+import { preloadTroopIcons } from "./game/troopIcons";
 import { notificationMessage } from "./game/notificationText";
 import {
   activeOverlayForState,
@@ -276,6 +277,11 @@ function App() {
   const playerBarRef = useRef<HTMLDivElement | null>(null);
   const upperSectionRef = useRef<HTMLDivElement | null>(null);
   const actionSectionRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    preloadTroopIcons();
+  }, []);
+
   const {
     allocationSelectedTerritoryId,
     gameMapSelectedTerritoryId,
