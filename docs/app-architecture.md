@@ -1,6 +1,6 @@
 # App Architecture
 
-Ardatúrë is a static GitHub Pages PWA, organized similarly to the sibling `../qwixx` app: Vite, React, TypeScript, a web manifest, a service worker, and QR/WebRTC sync. The first screen should be the usable game surface, not a landing page.
+Ardatúrë is a static GitHub Pages PWA, organized similarly to the sibling `../qwixx` app: Vite, React, TypeScript, a web manifest, a service worker, and QR/WebRTC sync. The first screen should be the usable game surface, not a landing page. The PWA manifest requests portrait orientation so installed mobile app sessions stay in the vertical game layout when the platform honors web app orientation.
 
 ## Top-Level Structure
 
@@ -318,7 +318,7 @@ Landmarks affect where border strokes are visible, so these should be treated as
 
 ### TroopMarkerLayer
 
-Dynamic game marker layer. During allocation and the read-only game map, this layer renders troop-count circles at generated territory visual centers. These centers come from the large green circles in the territory drawing, not from territory seed points. Later it may show other map-local gameplay markers, but non-map game UI should stay outside the map.
+Dynamic game marker layer. During allocation and the read-only game map, this layer renders larger troop-count circles at generated territory visual centers. These centers come from the large green circles in the territory drawing, not from territory seed points. Later it may show other map-local gameplay markers, but non-map game UI should stay outside the map.
 
 ### HitTargetLayer
 

@@ -140,12 +140,12 @@ button:focus-visible,
 .troop-marker circle {
   fill: rgba(255, 255, 255, 0.9);
   stroke: #111111;
-  stroke-width: 22;
+  stroke-width: 26;
 }
 
 .troop-marker text {
   fill: #111111;
-  font-size: 154px;
+  font-size: 184px;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
 }
