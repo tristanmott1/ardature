@@ -86,8 +86,9 @@ button:focus-visible,
 }
 
 .map-camera-control {
+  --map-camera-control-offset: 14px;
   position: absolute;
-  bottom: max(14px, env(safe-area-inset-bottom));
+  bottom: var(--map-camera-control-offset);
   z-index: 8;
   display: grid;
   place-items: center;
@@ -108,11 +109,11 @@ button:focus-visible,
 }
 
 .map-zoom-out {
-  left: max(14px, env(safe-area-inset-left));
+  left: max(var(--map-camera-control-offset), env(safe-area-inset-left));
 }
 
 .map-auto-focus {
-  right: max(14px, env(safe-area-inset-right));
+  right: max(var(--map-camera-control-offset), env(safe-area-inset-right));
 }
 
 .map-auto-focus[data-enabled="false"] {

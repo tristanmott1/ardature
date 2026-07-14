@@ -299,7 +299,7 @@ If the active player's spy is captured, the spy button is unavailable until that
 
 The selected spy target must be owned by an opponent. Any opponent territory may be selected because the gameplay graph is connected.
 
-When spy targeting is selected, the action section instruction is `Select a territory`. Selecting an opponent territory opens a compact confirmation sheet with X and check controls. While this confirmation sheet is active, the map is frozen, manual pan/zoom controls are hidden, troop/action sections are hidden, and the target is canceled with the sheet X rather than by tapping the selected target again.
+The action section instruction row describes the current local turn prompt. When no action is selected, it says `Choose an action`. When spy targeting is selected, it says `Select a territory`. During reinforcement placement, it says `Select a territory` until an owned territory is selected, then `Add troops to {territory}`. Starting, canceling, or finishing a turn action clears the default map inspection selection so normal map exploration does not resume with an action territory preselected. Selecting an opponent territory while spying opens a compact confirmation sheet with X and check controls. While this confirmation sheet is active, the map is frozen, manual pan/zoom controls are hidden, troop/action sections are hidden, and the target is canceled with the sheet X rather than by tapping the selected target again.
 
 The capture probability is based on the shortest gameplay-connection distance from the target territory to the active player's nearest owned territory:
 

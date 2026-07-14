@@ -95,6 +95,7 @@ function InitialAllocationTroopSection({
 
 export function TurnActionPanel({
   canSpy,
+  instruction,
   spyMissing,
   onDismissSpy,
   onFortify,
@@ -105,6 +106,7 @@ export function TurnActionPanel({
   spyReturnStage,
 }: {
   canSpy: boolean;
+  instruction: string;
   spyMissing: boolean;
   onDismissSpy: () => void;
   onFortify: () => void;
@@ -120,7 +122,6 @@ export function TurnActionPanel({
       ? "reinforcementReady"
       : stage;
   const spySelected = stage === "spyTarget";
-  const instruction = spySelected ? "Select a territory" : "Choose an action";
 
   return (
     <section className="game-section-panel turn-action-panel">

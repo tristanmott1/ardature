@@ -67,6 +67,7 @@ The action section has a single-line instruction row above the buttons:
 
 - When no action is selected, the instruction is `Choose an action`.
 - When spy targeting is selected, the instruction is `Select a territory`.
+- During reinforcement placement, the instruction is `Select a territory` until an owned territory is selected, then `Add troops to {territory}`.
 
 The turn action section indicates the active turn options:
 
@@ -74,7 +75,7 @@ The turn action section indicates the active turn options:
 - A larger stage button that initially says `Reinforcements`.
 - After reinforcements are complete, the stage area becomes `Attack` and `Fortify` buttons next to the spy button.
 
-Pressing a stage button changes the current local action prompt. Pressing another stage button while choosing a spy target aborts the spy selection. Popups and modals may appear above the map area, but they should not cover the player bar.
+Pressing a stage button changes the current local action prompt. Pressing another stage button while choosing a spy target aborts the spy selection. Starting, canceling, or finishing an action clears the default map inspection selection so the normal map explorer never resumes with an action territory preselected. Popups and modals may appear above the map area, but they should not cover the player bar.
 
 ## Gameplay Connections
 

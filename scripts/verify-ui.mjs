@@ -228,7 +228,7 @@ async function runSourceChecks() {
   assert(appSource.includes("function renderUpperSection()") && appSource.includes("function renderActionSection()") && appSource.includes("{upperSectionElement}") && appSource.includes("{actionSectionElement}"), "App renders game-stage sections through explicit section slots.");
   assert(!troopControlsSource.includes("Select a territory"), "Allocation troop controls do not render a placeholder sliver when no territory is selected.");
   assert(gameSectionsSource.includes('className="troop-icon-button turn-spy-button"') && gameSectionsSource.includes("turn-spy-spacer") && !gameSectionsSource.includes('className="icon-button turn-spy-button"'), "Turn spy button reuses troop icon button styling and keeps a spacer when lost.");
-  assert(gameSectionsSource.includes("turn-action-instruction") && stylesSource.includes(".turn-action-instruction"), "Turn action bar includes a dedicated instruction row.");
+  assert(gameSectionsSource.includes("turn-action-instruction") && stylesSource.includes(".turn-action-instruction") && appSource.includes("turnActionInstructionForGame(game, turnSelectedTerritoryId)") && gameViewSource.includes("Add troops to ${territory.name}"), "Turn action bar includes a derived instruction row for each action.");
   assert(stylesSource.includes('.turn-spy-button[data-selected="true"]') && stylesSource.includes(".turn-spy-spacer"), "Turn spy selected and missing states have dedicated styling.");
   assert(appSource.includes("syncSnapshotForViewer") && appSource.includes("hostTransportRef.current?.sendToPeer(player.id") && gameViewSource.includes("spyIntel: null") && gameViewSource.includes("reinforcement: null"), "Sync snapshots hide private turn sub-state from passive viewers.");
   assert(gameTypesSource.includes("GameNotification") && gameTypesSource.includes("notifications: Record<string, GameNotification[]>") && gameTypesSource.includes("regionControl: Record<string, string | null>"), "Game state stores authoritative per-player notification queues and region control.");
@@ -355,6 +355,7 @@ async function runSourceChecks() {
   assert(!hitTargetSource.includes("onPointerDown") && !hitTargetSource.includes("onPointerUp") && !hitTargetSource.includes("pendingPress"), "Hit targets do not duplicate map pointer gesture state.");
   assert(mapViewSource.includes("Maximize") && mapViewSource.includes("Return to map view"), "Map view uses a corner-only return-to-map control.");
   assert(mapViewSource.includes("Crosshair") && mapViewSource.includes("Disable automatic focus") && mapViewSource.includes("Enable automatic focus"), "Map view exposes an auto-focus toggle.");
+  assert(mapViewSource.includes("{showCameraControls ? (") && !mapViewSource.includes("showCameraControls && !isAnimating") && mapViewSource.includes("aria-disabled={isAnimating}"), "Map camera controls stay mounted during camera animations.");
   assert(mapPreferencesSource.includes("ardature.mapPreferences.v1") && mapPreferencesSource.includes("autoFocusEnabled: false"), "Map preferences persist auto-focus with a default-off state.");
   assert(territoryFillSource.includes("mixWithWhite") && territoryFillSource.includes("SELECTED_WHITE_MIX = 0.35"), "Selected territory fill blends the current color with white.");
   assert(!territoryFillSource.includes('state.status === "selected" ? "#ffffff"'), "Selected territory fill is not hard-coded to white.");
@@ -1131,6 +1132,12 @@ async function runDesktopMapInteractionChecks(page) {
   await page.waitForFunction((previous) => document.querySelector(".map-svg")?.getAttribute("viewBox") !== previous, beforeWheelViewBox);
   assertBoxEquals(await page.getByRole("button", { name: "Return to map view" }).boundingBox(), returnButtonBox, "Return-to-map control stays anchored after desktop wheel zoom.");
   assertBoxEquals(await page.getByRole("button", { name: "Enable automatic focus" }).boundingBox(), focusButtonBox, "Auto-focus control stays anchored after desktop wheel zoom.");
+  const afterWheelMapBox = await page.locator(".map-shell").boundingBox();
+  const afterWheelReturnBox = await page.getByRole("button", { name: "Return to map view" }).boundingBox();
+  assert(afterWheelMapBox && afterWheelReturnBox, "Map and camera control boxes are measurable.");
+  const sideOffset = Math.round(afterWheelReturnBox.x - afterWheelMapBox.x);
+  const bottomOffset = Math.round(afterWheelMapBox.y + afterWheelMapBox.height - (afterWheelReturnBox.y + afterWheelReturnBox.height));
+  assert(Math.abs(sideOffset - bottomOffset) <= 1, "Return-to-map control uses equal side and bottom spacing.");
 
   const beforeControlClickViewBox = await viewBox(page);
   await page.getByRole("button", { name: "Enable automatic focus" }).click();
@@ -1234,6 +1241,19 @@ async function runMobileMapInteractionChecks(page) {
   await page.waitForTimeout(140);
   assertViewBoxEquals(await viewBox(page), atMomentumRest, "Touch momentum stops at the map edge.");
   await page.getByRole("button", { name: "Return to map view" }).click();
+  await page.waitForFunction(() => document.querySelector(".map-svg")?.getAttribute("data-map-animating") === "true");
+  assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Return-to-map control remains visible during camera animation.");
+  assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Auto-focus control remains visible during camera animation.");
+  await page.waitForFunction(() => {
+    if (document.querySelector(".map-svg")?.getAttribute("data-map-animating") !== "true") {
+      return false;
+    }
+
+    const button = document.querySelector('button[aria-label="Enable automatic focus"]');
+    button?.click();
+    return Boolean(button);
+  });
+  assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Auto-focus press is inert during camera animation.");
   await waitForViewBox(page, homeViewport);
 
   // Confirm sheets freeze map selection until the sheet is dismissed.
@@ -1331,7 +1351,12 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Turn action bar starts with an instruction row.");
   const opponentTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="red"]').first().getAttribute("data-territory-fill");
   assert(opponentTerritoryId, "Random draft gives the opponent at least one territory.");
+  const ownedInspectTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="yellow"]').first().getAttribute("data-territory-fill");
+  assert(ownedInspectTerritoryId, "Current player owns a territory for default inspection.");
+  await clickTerritory(page, ownedInspectTerritoryId);
+  await page.waitForSelector(".troop-section-info");
   await page.getByRole("button", { name: "Spy" }).click();
+  assert((await page.locator(".troop-section-info").count()) === 0, "Starting spy clears the default inspected territory.");
   assert((await page.locator(".turn-action-instruction").getByText("Select a territory").count()) === 1, "Spy targeting changes the action instruction.");
   await clickTerritory(page, opponentTerritoryId);
   await page.getByRole("dialog", { name: "Confirm spy" }).waitFor();
@@ -1340,6 +1365,7 @@ async function runRandomAllocationChecks(page) {
   assert((await page.locator(".turn-action-panel").count()) === 0, "Turn action bar hides during spy confirmation.");
   assert((await page.getByRole("dialog", { name: "Confirm spy" }).getByText("% captured").count()) === 1, "Spy confirmation shows capture probability.");
   await page.getByRole("button", { name: "Cancel spy" }).click();
+  assert((await page.locator(".troop-section-info").count()) === 0, "Canceling spy returns to the default turn view with no inspected territory.");
   await page.getByRole("button", { name: "Reinforcements" }).click();
   await page.waitForSelector(".army-build-modal .army-triangle");
   await capture(page, "16-reinforcement-army-mobile.png");
@@ -1348,10 +1374,14 @@ async function runRandomAllocationChecks(page) {
   await page.getByRole("button", { name: "Confirm army" }).click();
   await page.waitForSelector(".army-build-modal", { state: "detached" });
   assert((await page.locator(".troop-section-reinforcement").count()) === 0, "Reinforcement troop section is hidden before selecting a territory.");
+  assert((await page.locator(".turn-action-instruction").getByText("Select a territory").count()) === 1, "Reinforcement placement asks for a territory before selection.");
   const reinforcementTerritoryId = await page.locator('[data-territory-fill][data-territory-skin="yellow"]').first().getAttribute("data-territory-fill");
   assert(reinforcementTerritoryId, "Current player still owns a territory for reinforcements.");
   await clickTerritory(page, reinforcementTerritoryId);
   await page.waitForSelector(".troop-section-reinforcement .allocation-target");
+  const reinforcementTerritoryName = (await page.locator(".troop-section-reinforcement .allocation-target").textContent())?.trim();
+  assert(reinforcementTerritoryName, "Selected reinforcement territory shows its name.");
+  assert((await page.locator(".turn-action-instruction").getByText(`Add troops to ${reinforcementTerritoryName}`).count()) === 1, "Reinforcement placement instruction names the selected territory.");
   await capture(page, "17-reinforcement-placement-mobile.png");
   assert((await page.locator(".troop-section-reinforcement .troop-action-row").count()) === 2, "Reinforcement placement has add and remove rows.");
   assert((await page.locator(".troop-section-reinforcement .troop-action-row").nth(0).locator(".troop-icon-button").count()) === 4, "Reinforcement add row keeps all four troop icon slots.");
@@ -1365,6 +1395,7 @@ async function runRandomAllocationChecks(page) {
   await page.waitForSelector(".troop-section-reinforcement .allocation-target");
   await finishReinforcementPlacement(page);
   await page.waitForSelector(".turn-action-panel");
+  assert((await page.locator(".troop-section-info").count()) === 0, "Finishing reinforcements returns to the default turn view with no inspected territory.");
   await capture(page, "18-turn-actions-mobile.png");
   assert(await page.getByRole("button", { name: "Attack" }).isDisabled(), "Attack is visible but disabled.");
   await page.getByRole("button", { name: "Fortify" }).click();

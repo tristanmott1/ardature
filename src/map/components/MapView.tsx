@@ -329,6 +329,22 @@ export function MapView({
     onAutoFocusChange?.(!autoFocusEnabled);
   }
 
+  function handleReturnToMapView() {
+    if (isAnimatingRef.current) {
+      return;
+    }
+
+    returnToMapView();
+  }
+
+  function handleToggleAutoFocus() {
+    if (isAnimatingRef.current) {
+      return;
+    }
+
+    toggleAutoFocus();
+  }
+
   function startFocusAnimation(targetViewport: MapViewport) {
     stopFocusAnimation();
 
@@ -602,22 +618,24 @@ export function MapView({
           ) : null}
         </g>
       </svg>
-      {showCameraControls && !isAnimating ? (
+      {showCameraControls ? (
         <>
           <button
             aria-label="Return to map view"
+            aria-disabled={isAnimating}
             className="map-camera-control map-zoom-out"
-            onClick={returnToMapView}
+            onClick={handleReturnToMapView}
             type="button"
           >
             <Maximize size={34} strokeWidth={2.2} />
           </button>
           <button
             aria-label={autoFocusEnabled ? "Disable automatic focus" : "Enable automatic focus"}
+            aria-disabled={isAnimating}
             aria-pressed={autoFocusEnabled}
             className="map-camera-control map-auto-focus"
             data-enabled={autoFocusEnabled ? "true" : "false"}
-            onClick={toggleAutoFocus}
+            onClick={handleToggleAutoFocus}
             type="button"
           >
             <Crosshair size={31} strokeWidth={2.2} />

@@ -521,6 +521,24 @@ export function clearNonDraftMapSelections(selections: MapSelectionState): MapSe
   });
 }
 
+export function turnActionInstructionForGame(game: GameState, turnSelectedTerritoryId: string | null) {
+  if (game.phase !== "turn") {
+    return "Choose an action";
+  }
+
+  if (game.turn?.stage === "spyTarget") {
+    return "Select a territory";
+  }
+
+  if (game.turn?.stage === "reinforcementBuild" || game.turn?.stage === "reinforcementPlace") {
+    const territory = turnSelectedTerritoryId ? territoryForId(turnSelectedTerritoryId) : null;
+
+    return territory ? `Add troops to ${territory.name}` : "Select a territory";
+  }
+
+  return "Choose an action";
+}
+
 export function mapPressModeForGame({
   activeDraftPlayer,
   allocationBuildSubmitted,

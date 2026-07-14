@@ -103,6 +103,7 @@ import {
   selectedTerritoryForMap,
   syncSnapshotForViewer,
   territoryInspectionForViewer,
+  turnActionInstructionForGame,
   visibleNotification,
   type ActiveOverlay,
   type DecisionPrompt,
@@ -1174,7 +1175,7 @@ function App() {
       return;
     }
 
-    updateMapSelections({ pendingSpyTerritoryId: null });
+    updateMapSelections({ gameMapSelectedTerritoryId: null, pendingSpyTerritoryId: null });
     setGame((current) => startTurnReinforcements(current, turnPlayerId));
   }
 
@@ -1208,7 +1209,7 @@ function App() {
     }
 
     const reinforcement = game.turn.reinforcement;
-    updateMapSelections({ turnSelectedTerritoryId: null });
+    updateMapSelections({ gameMapSelectedTerritoryId: null, turnSelectedTerritoryId: null });
 
     if (isSyncJoiner) {
       sendTurnCommand({ type: "commitReinforcements", reinforcement });
@@ -1229,7 +1230,7 @@ function App() {
       return;
     }
 
-    updateMapSelections({ pendingSpyTerritoryId: null });
+    updateMapSelections({ gameMapSelectedTerritoryId: null, pendingSpyTerritoryId: null });
     setGame((current) => startSpySelection(current, turnPlayerId));
   }
 
@@ -1239,7 +1240,7 @@ function App() {
     }
 
     const territoryId = pendingSpyTerritoryId;
-    updateMapSelections({ pendingSpyTerritoryId: null });
+    updateMapSelections({ gameMapSelectedTerritoryId: null, pendingSpyTerritoryId: null });
 
     if (isSyncJoiner) {
       sendTurnCommand({ type: "confirmSpy", territoryId });
@@ -1250,7 +1251,7 @@ function App() {
   }
 
   function cancelTurnSpy() {
-    updateMapSelections({ pendingSpyTerritoryId: null });
+    updateMapSelections({ gameMapSelectedTerritoryId: null, pendingSpyTerritoryId: null });
     setGame((current) => cancelSpySelection(current));
   }
 
@@ -1263,6 +1264,7 @@ function App() {
       sendTurnCommand({ type: "dismissSpy" });
     }
 
+    updateMapSelections({ gameMapSelectedTerritoryId: null });
     setGame((current) => dismissSpyIntel(current, turnPlayerId));
   }
 
@@ -1601,6 +1603,7 @@ function App() {
     return (
       <TurnActionPanel
         canSpy={Boolean(turnPlayerId && (canUseSpy(game, turnPlayerId) || game.turn?.stage === "spyTarget"))}
+        instruction={turnActionInstructionForGame(game, turnSelectedTerritoryId)}
         onDismissSpy={dismissTurnSpy}
         onFortify={endTurnWithFortify}
         onReinforce={beginTurnReinforcements}
