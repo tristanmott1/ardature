@@ -368,6 +368,7 @@ button:focus-visible,
 
 .turn-action-buttons.action-cancel-row {
   display: flex;
+  gap: 12px;
   justify-content: center;
 }
 
@@ -380,8 +381,21 @@ button:focus-visible,
 }
 
 .turn-action-buttons .action-cancel-button {
+  flex: 0 1 220px;
   justify-self: center;
+  width: min(220px, 100%);
   min-width: min(220px, 100%);
+}
+
+.turn-action-buttons.action-cancel-row .action-cancel-button {
+  flex-basis: min(170px, calc((100vw - 48px) / 2));
+  width: min(170px, calc((100vw - 48px) / 2));
+  min-width: 0;
+}
+
+.turn-action-buttons.action-cancel-row .action-cancel-button:only-child {
+  flex-basis: min(220px, 100%);
+  width: min(220px, 100%);
 }
 
 .turn-spy-button {

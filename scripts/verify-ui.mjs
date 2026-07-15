@@ -2373,6 +2373,9 @@ async function runTurnFortifyChecks(browser) {
   assert((await page.getByRole("button", { name: "Skip" }).count()) === 1, "Fortify setup shows a skip button.");
   assert((await page.getByRole("button", { name: "Skip" }).getAttribute("class"))?.includes("primary"), "Fortify skip button uses the black primary action style.");
   await assertActionCancelGroupCentered(page, ["Cancel Fortify", "Skip"]);
+  const fortifyCancelWidths = await page.locator(".turn-action-buttons.action-cancel-row button").evaluateAll((buttons) =>
+    buttons.map((button) => button.getBoundingClientRect().width));
+  assert(fortifyCancelWidths.every((width) => width <= 180), "Fortify cancel and skip buttons stay compact instead of reaching screen edges.");
 
   await clickTerritory(page, "shire");
   await capture(page, "19b-fortify-target-mobile.png");
