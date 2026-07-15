@@ -95,9 +95,10 @@ Random allocation rules:
 - The existing `armyCountsForMarker()` economy is used to convert that marker into the player's base army. Random allocation does not duplicate or bypass starting budget, leader, or troop-cost rules.
 - For each player, owned territories are shuffled and the player's generated troop pool is shuffled.
 - Every owned territory receives exactly one random troop first.
-- Remaining troops are placed one at a time on a random owned territory, with replacement, but only among owned territories with an outgoing directed edge to at least one opponent territory.
-- Outgoing directed gameplay connections from `maps/territory-key.md` determine opponent borders. Both land and ship connections count. Physical map borders do not matter for this rule.
-- Because the directed gameplay graph remains reachable and at least two players are active, every player with extra troops should have at least one eligible outgoing opponent-border territory.
+- Remaining troops are placed one at a time on a random owned territory, with replacement, but only among owned territories with an active outgoing directed edge to at least one opponent territory.
+- Active outgoing directed gameplay connections determine opponent borders. Both land and ship connections count. Physical map borders do not matter for this rule.
+- The generated directed graph from `maps/territory-key.md` is filtered by authoritative game-state edge modifiers such as the Caradhras pass. If `caradhrasPassState` is `6-10`, Rivendell and Caradhras are not opponent-border candidates for each other.
+- Because the active directed gameplay graph remains reachable enough for a valid game and at least two players are active, every player with extra troops should have at least one eligible outgoing opponent-border territory.
 
 ## Territory Allocation
 
@@ -237,10 +238,10 @@ Visibility rules:
 - Selecting an opponent territory shows the territory name plus exactly four side-aware troop icons disabled/grayed with `?` in the count bubbles.
 - Unknown opponent rows never show captured spy icons.
 - Opponent territory breakdowns are never shown in normal read-only inspection, even when the viewer can see that territory's total troop count on the map.
-- Opponent territories that can be reached by one outgoing directed edge from one of the viewer's territories show total troop count only.
-- Opponent territories with no outgoing directed connection from the viewer's territories show ownership only.
+- Opponent territories that can be reached by one active outgoing directed edge from one of the viewer's territories show total troop count only.
+- Opponent territories with no active outgoing directed connection from the viewer's territories show ownership only.
 - Captured spies are shown only when the viewer can see the exact contents for that territory.
-- Connections for visibility come from the territory key's outgoing directed gameplay connections, including both land and ship connections.
+- Connections for visibility come from active outgoing directed gameplay connections, including both land and ship connections and excluding any currently blocked Caradhras pass edge.
 - Visibility connections are decoupled from physical shared borders in the generated map geometry.
 
 Local read-only map:
@@ -253,7 +254,7 @@ Sync read-only map:
 
 - Each device uses that device's local player as the viewer.
 - The host does not automatically see every player's troop breakdown.
-- The host only sees the host player's own breakdowns, plus opponent total counts for territories reachable by outgoing directed edges from the host player's territories according to the same viewer rules.
+- The host only sees the host player's own breakdowns, plus opponent total counts for territories reachable by active outgoing directed edges from the host player's territories according to the same viewer rules.
 
 ## Map Generation Requirement
 

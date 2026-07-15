@@ -170,7 +170,7 @@ After all territories have owners, the app either enters manual initial troop al
 Rules:
 
 - Manual allocation has players build and place their army through the allocation UI.
-- Random allocation skips the allocation UI, randomly samples each player's army mixture, uses the same budget/cost rules as manual allocation, gives every owned territory one troop, then places extras only on owned territories with an outgoing directed gameplay edge to an opponent territory.
+- Random allocation skips the allocation UI, randomly samples each player's army mixture, uses the same budget/cost rules as manual allocation, gives every owned territory one troop, then places extras only on owned territories with an active outgoing directed gameplay edge to an opponent territory.
 - In manual allocation, each player first chooses an army mixture using a reusable triangle component.
 - The triangle uses barycentric coordinates for army building.
 - Light-side colors (`green`, `blue`, `yellow`) use dwarf, rohirrim, and elf circular troop icons.
@@ -233,6 +233,52 @@ Owning every territory in a region grants that region's reinforcement bonus duri
 | Rhûn | 4 heavy |
 | Mordor | 3 heavy |
 
+## Gameplay Connections And Caradhras Pass
+
+All gameplay uses the active outgoing directed gameplay graph. The generated directed graph from `maps/territory-key.md` is the base graph. Game code must not import or use generated connections directly for rules; it should ask the shared graph helpers for active outgoing edges, active reachability, and active distance.
+
+The Rivendell-Caradhras connection has one authoritative pass state stored in `GameState`:
+
+```text
+caradhrasPassState = integer 1-10
+```
+
+The state represents current weather on the pass:
+
+- `1`: completely clear
+- `2-5`: passable, increasingly cloudy/snowy
+- `6-10`: impassable, increasingly severe
+
+When `caradhrasPassState` is `1-5`, the active graph includes every generated directed edge between Rivendell and Caradhras. When `caradhrasPassState` is `6-10`, every directed edge between Rivendell and Caradhras is treated as nonexistent. This affects every edge-based rule and view:
+
+- spy shortest-path capture probability
+- successful-spy same-opponent adjacent total reveals
+- read-only opponent troop-total visibility
+- explore-mode related-territory highlights
+- attack source-target legality
+- fortify immediate-source legality
+- fortify owned-path source eligibility
+- random allocation opponent-border targeting
+- any future gameplay helper that asks for outgoing edges, reachability, or distance
+
+The physical border ink between Rivendell and Caradhras remains visual map data. Weather never deletes or redraws static border ink.
+
+New authoritative games initialize `caradhrasPassState` randomly from `1-10`. The value is fixed through draft, troop allocation, and each player's whole turn. It changes exactly once when a turn actually advances to the next player. Pausing, refreshing, reconnecting, opening handoff, resolving an in-progress battle, confirming elimination, or resuming the same current turn does not drift the pass by itself.
+
+At turn advance, sample this drift table from the current state:
+
+| Delta | Base weight |
+| --- | --- |
+| -2 | 15 |
+| -1 | 20 |
+| 0 | 30 |
+| +1 | 20 |
+| +2 | 15 |
+
+Before sampling, discard deltas that would leave the `1-10` range, then normalize the remaining weights. For example, from state `10`, only deltas `-2`, `-1`, and `0` remain, so the next state is `8` with probability `15 / 65 = 23.1%`, `9` with probability `20 / 65 = 30.8%`, and `10` with probability `30 / 65 = 46.2%`.
+
+The map renders the matching committed icon from `public/caradhras-pass/pass-01.svg` through `pass-10.svg` above the Rivendell-Caradhras connection. The icon is visual, pointer-inert, and synced/persisted only through the authoritative integer state.
+
 ## Information Visibility
 
 Every player has access to the map throughout the game, but the map is rendered differently per viewer.
@@ -244,12 +290,12 @@ For territories owned by the viewing player:
 - Total troop count is visible.
 - Captured spies imprisoned on that territory are visible with owner-colored spy icons and black prison bars.
 
-For non-owned territories that cannot be reached by one outgoing directed gameplay edge from any territory owned by the viewing player:
+For non-owned territories that cannot be reached by one active outgoing directed gameplay edge from any territory owned by the viewing player:
 
 - Territory owner color is visible.
 - No troop information is visible.
 
-For non-owned territories that can be reached by one outgoing directed gameplay edge from at least one territory owned by the viewing player:
+For non-owned territories that can be reached by one active outgoing directed gameplay edge from at least one territory owned by the viewing player:
 
 - Territory owner color is visible.
 - Total troop count is visible.
@@ -263,7 +309,7 @@ On a successful spy attempt:
 
 - The selected enemy territory reveals exact troop counts by class.
 - The selected enemy territory reveals captured spies imprisoned there.
-- Enemy territories reachable by one outgoing directed gameplay edge from the selected territory and owned by the same opponent reveal total troop counts.
+- Enemy territories reachable by one active outgoing directed gameplay edge from the selected territory and owned by the same opponent reveal total troop counts.
 - This is an intel snapshot.
 - The intel disappears once the current player advances past the spy phase.
 - The intel does not become permanent memory in the UI unless a later notes/history feature is explicitly added.
@@ -330,7 +376,7 @@ If the spy succeeds:
 
 - reveal the target territory's exact heavy/cavalry/elite/leader counts
 - reveal captured spies imprisoned on the target territory
-- reveal total troop counts in territories reachable by one outgoing directed edge from the selected territory and owned by the same opponent
+- reveal total troop counts in territories reachable by one active outgoing directed edge from the selected territory and owned by the same opponent
 - show outgoing-adjacent totals through normal white map troop counters
 - show the target territory through the troop section in information mode using the same exact-count UI used for own territories
 - replace the action section buttons with a dismiss button
@@ -452,7 +498,7 @@ To declare an attack:
 
 - The target territory must be owned by an opponent.
 - The source territory must be owned by the active player.
-- The source territory must have an outgoing directed gameplay edge to the target territory.
+- The source territory must have an active outgoing directed gameplay edge to the target territory.
 - Outgoing directed land and ship gameplay connections both count.
 - The source territory must contain at least two total troops before committing.
 - The attack must commit at least one troop.
@@ -764,9 +810,9 @@ In allocation-style troop rows, the `+` and `-` icons are buttons. Pressing one 
 
 ### Source Eligibility
 
-A source territory is eligible if it is owned by the active player, is not the target, and can reach the target through a chain of outgoing directed gameplay edges through territories all owned by the active player. This chain uses outgoing directed gameplay connections from `maps/territory-key.md`, including ship connections. Physical generated borders are irrelevant.
+A source territory is eligible if it is owned by the active player, is not the target, and can reach the target through a chain of active outgoing directed gameplay edges through territories all owned by the active player. This chain uses active outgoing directed gameplay connections, including ship connections. Physical generated borders are irrelevant.
 
-An immediately connected source has an outgoing directed gameplay edge to the target. A remote source can reach the target through owned territory chains but does not have a direct outgoing edge to the target.
+An immediately connected source has an active outgoing directed gameplay edge to the target. A remote source can reach the target through owned territory chains but does not have a direct active outgoing edge to the target.
 
 Every source must leave at least one troop behind. Captured spies do not count as troops, so moving spies never satisfies or violates the one-troop-left requirement by itself.
 
@@ -1077,8 +1123,8 @@ Visibility rules:
 - Selecting an opponent territory shows its name and exactly four side-aware troop icons grayed out with `?` in the count bubbles.
 - Unknown opponent rows never show captured spy icons.
 - Opponent territory breakdowns are never shown during normal inspection, even if the viewer can see the total troop count on the map.
-- Opponent territories reachable by one outgoing directed edge from any viewer-owned territory show total troop count only.
-- Opponent territories not reachable by one outgoing directed edge from any viewer-owned territory show ownership only.
+- Opponent territories reachable by one active outgoing directed edge from any viewer-owned territory show total troop count only.
+- Opponent territories not reachable by one active outgoing directed edge from any viewer-owned territory show ownership only.
 - Captured spies are shown only when exact contents are visible.
 - Visibility connections use outgoing directed gameplay connections from the viewer's own territories, including both land and ship connections.
 - Visibility connections are independent of physical shared borders in generated geometry.
@@ -1270,7 +1316,7 @@ Sync frequency should follow a resume-safety rule:
 - Avoid syncing noisy transient UI.
 - Draft confirmations, army-build submission, ready, timeout completion, pause, resume, removal, and phase advance are immediate committed facts.
 - Allocation troop placement is committed game data. It may be batched or lightly throttled, but must be flushed on ready, pause, visibility change, or page unload where practical.
-- Turn-loop facts follow the same pattern: turn start, spy result, captured-spy state, queued spy/region notifications, finalized reinforcement placements, fortify/end-turn, elimination, and game-over are committed facts.
+- Turn-loop facts follow the same pattern: turn start, Caradhras pass state/drift, spy result, captured-spy state, queued spy/region notifications, finalized reinforcement placements, fortify/end-turn, elimination, and game-over are committed facts.
 - Attack and battle events follow this pattern: host must receive enough committed data to resume; local setup previews and controls remain local.
 - Never sync map camera, focus animation, selected inspection territory, open modal state, hover/press state, local pending draft preview, provisional reinforcement edits, successful spy intel view state, or other purely visual state.
 
@@ -1366,6 +1412,7 @@ type GameState = {
   currentPlayerId: string;
   phase: TurnPhase;
   turnNumber: number;
+  caradhrasPassState: number;
   map: MapState;
   territories: Record<TerritoryId, TerritoryState>;
   regions: Record<RegionId, RegionState>;
@@ -1469,6 +1516,7 @@ Setup preferences are separate from active saved games. Each device should remem
 Sync host persistence is conservative:
 
 - Host state should be saved after setup starts, draft starts, each pick, pause, removal, and other authoritative changes.
+- The current Caradhras pass state is part of active game persistence and sync host snapshots.
 - If the host reloads during active sync play, the game restores into paused recovery state instead of trying to continue a live timer.
 - On sync host restore, all non-host players are disconnected immediately because no live heartbeat survives the refresh.
 - The host can close the app while paused, reopen later, reconnect everyone, and unpause.
@@ -1592,7 +1640,8 @@ Before considering the first playable version complete:
 - Verify random allocation skips manual allocation UI and immediately creates valid authoritative troop placements.
 - Verify sync allocation uses simultaneous private allocation, host-authoritative timer, ready/waiting state visible to all players, and host advance only when all remaining players are ready.
 - Verify allocation player removal redistributes territories and troops exactly as specified, unreadying affected sync players and adding second allocation turns for affected local players.
-- Verify read-only game map visibility for own territories, outgoing-connected opponent territories, and distant opponent territories, using directed gameplay connections including ship connections.
+- Verify read-only game map visibility for own territories, outgoing-connected opponent territories, and distant opponent territories, using active directed gameplay connections including ship connections.
+- Verify Caradhras pass states `1-5` keep Rivendell-Caradhras edges active, states `6-10` remove those edges from every graph consumer, turn advance drifts the state with normalized clamped weights, and the matching pass icon renders pointer-inert above the connection.
 - Verify spy success, spy failure, spy loss, and spy intel clearing after the spy phase.
 - Verify reinforcements can be placed only on owned territories.
 - Verify attacks enforce directed gameplay connection, leave-one-behind, commit-at-least-one, and source-target once-per-turn rules.

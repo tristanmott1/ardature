@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Crosshair, Maximize } from "lucide-react";
 import { HitTargetLayer } from "./HitTargetLayer";
+import { MapWeatherLayer, type MapWeatherMarker } from "./MapWeatherLayer";
 import { StaticMapInk } from "./StaticMapInk";
 import { TerritoryFillLayer } from "./TerritoryFillLayer";
 import { TroopMarkerLayer, type TroopMarker } from "./TroopMarkerLayer";
@@ -95,6 +96,7 @@ export function MapView({
   showCameraControls = true,
   territoryStates,
   troopMarkers = [],
+  weatherMarkers = [],
   visibleInsets = EMPTY_VISIBLE_INSETS,
 }: {
   cameraIntent?: MapCameraIntent | null;
@@ -107,6 +109,7 @@ export function MapView({
   showCameraControls?: boolean;
   territoryStates: Record<string, TerritoryState>;
   troopMarkers?: readonly TroopMarker[];
+  weatherMarkers?: readonly MapWeatherMarker[];
   visibleInsets?: MapVisibleInsets;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -718,6 +721,7 @@ export function MapView({
         <g className="map-content" data-map-content="true">
           <TerritoryFillLayer mapData={mapData} territoryStates={territoryStates} />
           <StaticMapInk ink={mapData.staticInk} />
+          <MapWeatherLayer markers={weatherMarkers} />
           <TroopMarkerLayer markers={troopMarkers} />
           {onTerritoryPress ? (
             <HitTargetLayer

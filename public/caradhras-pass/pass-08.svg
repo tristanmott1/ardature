@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Caradhras pass state 8, blizzard</title>
+  <circle cx="64" cy="64" r="58" fill="#97a1a6" stroke="#ffffff" stroke-width="6"/>
+  <g transform="translate(0 -8)">
+    <path d="M23 63c0-8 6-14 14-14 5 0 10 3 12 7 3-3 7-5 12-5 8 0 15 7 15 15s-7 15-15 15H25c-7 0-12-5-12-11 0-5 4-10 10-11z" fill="#ababab"/>
+    <path d="M39 53c0-10 8-18 18-18 7 0 13 4 16 9 3-3 8-5 13-5 9 0 16 7 16 16s-7 16-16 16H41c-8 0-14-6-14-13 0-6 5-11 12-12z" fill="#949494"/>
+    <path d="M62 66c0-8 6-14 14-14 5 0 10 3 12 7 3-3 7-5 11-5 8 0 14 7 14 15s-6 15-14 15H64c-7 0-12-5-12-11 0-5 4-10 10-11z" fill="#ababab"/>
+  </g>
+  <g fill="#ffffff">
+    <circle cx="30" cy="84" r="3"/>
+    <circle cx="42" cy="93" r="3"/>
+    <circle cx="54" cy="84" r="3"/>
+    <circle cx="66" cy="93" r="3"/>
+    <circle cx="78" cy="84" r="3"/>
+    <circle cx="90" cy="93" r="3"/>
+    <circle cx="102" cy="84" r="3"/>
+    <circle cx="54" cy="103" r="3"/>
+    <circle cx="78" cy="103" r="3"/>
+  </g>
+</svg>

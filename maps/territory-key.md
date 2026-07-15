@@ -13,6 +13,8 @@ The map has 6 regions and 42 territories:
 
 Normal land and ship rows describe bidirectional gameplay connections. If territory A lists territory B in one of those rows, the extractor emits both A -> B and B -> A. The `One-way Connections` section describes directed gameplay edges that emit only the listed direction.
 
+This file defines the base directed gameplay graph. Runtime game state can temporarily disable base edges. The Rivendell-Caradhras pass is the first dynamic edge modifier: when `caradhrasPassState` is `6-10`, all directed edges between Rivendell and Caradhras are inactive for every gameplay and visibility rule, while the visual physical border remains.
+
 ## Connection Types
 
 - Land border: normal bidirectional territory adjacency.

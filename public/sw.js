@@ -1,4 +1,4 @@
-const CACHE_NAME = "ardature-v3";
+const CACHE_NAME = "ardature-v4";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -6,6 +6,16 @@ const CORE_ASSETS = [
   "./app-icons/apple-touch-icon.png",
   "./app-icons/icon-192.png",
   "./app-icons/icon-512.png",
+  "./caradhras-pass/pass-01.svg",
+  "./caradhras-pass/pass-02.svg",
+  "./caradhras-pass/pass-03.svg",
+  "./caradhras-pass/pass-04.svg",
+  "./caradhras-pass/pass-05.svg",
+  "./caradhras-pass/pass-06.svg",
+  "./caradhras-pass/pass-07.svg",
+  "./caradhras-pass/pass-08.svg",
+  "./caradhras-pass/pass-09.svg",
+  "./caradhras-pass/pass-10.svg",
   "./troops/icons/crow-captured.png",
   "./troops/icons/crow.png",
   "./troops/icons/dwarf.png",

@@ -88,16 +88,34 @@ In allocation-style troop rows, the `+` and `-` icons are buttons. Pressing one 
 
 ## Gameplay Connections
 
-All gameplay uses outgoing directed gameplay connections from `maps/territory-key.md`.
+All gameplay uses active outgoing directed gameplay connections. The generated directed connections from `maps/territory-key.md` are the base graph, but turn logic must ask the shared active graph helpers instead of reading generated connections directly.
 
 There is no gameplay distinction between directed land and directed ship connections. Both count for:
 
 - spy distance
 - same-opponent outgoing-adjacent troop totals revealed by spy
 - read-only troop total visibility
+- explore-mode related-territory highlights
 - attacks and fortification where applicable
+- random allocation opponent-border targeting
 
 Physical shared borders from generated geometry are visual map data only. Mountains, forests, coastlines, and dotted ship-route art do not define gameplay adjacency in the app.
+
+The Rivendell-Caradhras pass is weather-gated by `caradhrasPassState`, an authoritative integer from `1` to `10` stored in `GameState`. States `1-5` leave the Rivendell-Caradhras directed edges active. States `6-10` remove every directed edge between Rivendell and Caradhras from the active graph. This affects every edge-based rule above, including passive explore highlights.
+
+New authoritative games initialize the pass state randomly from `1-10`. The state is fixed through draft, allocation, and a whole player turn. It drifts exactly once when a turn advances to the next player. Pause, refresh, reconnect, battle resolution, elimination confirmation, and resume do not drift the pass unless they actually advance the turn.
+
+At turn advance, discard out-of-range deltas from this table, normalize the remaining weights, then sample the next pass state:
+
+| Delta | Base weight |
+| --- | --- |
+| -2 | 15 |
+| -1 | 20 |
+| 0 | 30 |
+| +1 | 20 |
+| +2 | 15 |
+
+The map shows the corresponding `public/caradhras-pass/pass-XX.svg` icon above the Rivendell-Caradhras connection. The icon is visual-only and pointer-inert; the synced/persisted game fact is only the integer state.
 
 ## Unit Icon Display
 
@@ -186,8 +204,8 @@ If the spy is not captured:
 
 - reveal the exact known contents of the selected opponent territory
 - reveal any captured spies imprisoned on the selected opponent territory as part of that known-content row
-- reveal total troop counts, but not breakdowns, for territories reachable by one outgoing directed edge from the selected territory that are owned by that same opponent
-- apply the softer suggested map highlight to the selected opponent territory and those same-owner outgoing directed connections while the current player reviews the intel
+- reveal total troop counts, but not breakdowns, for territories reachable by one active outgoing directed edge from the selected territory that are owned by that same opponent
+- apply the softer suggested map highlight to the selected opponent territory and those same-owner active outgoing directed connections while the current player reviews the intel
 - show those outgoing-adjacent totals through the normal white map troop counters
 - show the selected opponent territory through the troop section in `info` mode, using the same exact-count UI that own territories use
 - replace the bottom action buttons with a dismiss button
@@ -341,7 +359,7 @@ Rules:
 
 - The source territory must be owned by the active player.
 - The target territory must be owned by an opponent.
-- The source must have an outgoing directed gameplay edge to the target.
+- The source must have an active outgoing directed gameplay edge to the target.
 - Outgoing directed gameplay connections from `maps/territory-key.md` count, including ship connections.
 - Physical generated borders do not define attack legality.
 - The source territory must contain at least two troops.
@@ -679,13 +697,13 @@ A source territory is eligible if:
 
 - it is owned by the active player
 - it is not the target
-- it can reach the target through a chain of outgoing directed gameplay edges through territories all owned by the active player
+- it can reach the target through a chain of active outgoing directed gameplay edges through territories all owned by the active player
 
 This chain uses outgoing directed gameplay connections from `maps/territory-key.md`, including ship connections. Physical map borders are irrelevant.
 
 Immediate connection matters for which units can move:
 
-- An immediately connected source has an outgoing directed gameplay edge to the target.
+- An immediately connected source has an active outgoing directed gameplay edge to the target.
 - A remote source can reach the target through owned territory chains but does not have a direct outgoing edge to the target.
 
 ### Fortify Movement Rules
@@ -755,7 +773,7 @@ Bottom/target row:
 - tapping a removable troop or spy moves it back only when it belongs to the currently selected source's provisional movement
 - units moved from other sources and units originally in the target remain visible but disabled while this source is selected
 
-The final fortify check button is disabled until at least one troop or captured spy has been committed to move. Confirming commits every provisional move at once, ends the current player's turn, and advances to the next remaining player through the normal local handoff or sync host snapshot flow.
+The final fortify check button is disabled until at least one troop or captured spy has been committed to move. Confirming commits every provisional move at once, drifts the Caradhras pass state exactly once, ends the current player's turn, and advances to the next remaining player through the normal local handoff or sync host snapshot flow.
 
 Sync uses two final-only turn commands:
 
@@ -784,7 +802,7 @@ Sync devices update from committed host facts only. Host snapshots are viewer-sp
 
 - after reinforcements are finalized
 - after attack lock, battle rolls, casualties, retreat, conquest, or final battle dismissal commit
-- after fortify/end-turn commits
+- after fortify/end-turn commits, including any Caradhras pass drift
 - after player removal and redistribution commits
 
 The active player's provisional reinforcement edits are local to that player until commit. Spy target selection, spy confirmation sheets, and successful spy intel are also local/private. The only defender-facing spy event is the failed-spy captured notification.

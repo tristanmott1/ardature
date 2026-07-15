@@ -153,6 +153,10 @@ button:focus-visible,
   pointer-events: none;
 }
 
+.map-weather-layer {
+  pointer-events: none;
+}
+
 .troop-marker-layer {
   pointer-events: none;
 }

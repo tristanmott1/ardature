@@ -56,7 +56,7 @@ The exact file list can evolve, but the boundaries should stay clear:
 - `src/game/armyBuild.ts` owns the tunable starting budgets and fixed-point troop costs, plus the deterministic integer army selector.
 - `src/sync/` owns Qwixx-style local network synchronization adapted for Ardatúrë.
 
-The service worker owns installed-app caching. When a change must force already-installed devices onto fresh shell assets, bump `CACHE_NAME` in `public/sw.js` so old cached HTML, manifest, and bundles are discarded on activation. Troop and spy icons are core UI assets, not optional decorations, so the service worker should precache the committed icon PNGs.
+The service worker owns installed-app caching. When a change must force already-installed devices onto fresh shell assets, bump `CACHE_NAME` in `public/sw.js` so old cached HTML, manifest, and bundles are discarded on activation. Troop, spy, and Caradhras pass icons are core UI assets, not optional decorations, so the service worker should precache the committed icon files.
 
 ## Public Assets
 
@@ -66,6 +66,7 @@ The `public/` directory is organized by runtime asset purpose:
 - `troops/source/`: original uncropped character images. These should be preserved because later screens may need full-size character art.
 - `troops/source/crop-outlines/`: red-outline crop references. These are the persisted source of truth for manual circular crop placement.
 - `troops/icons/`: one-time, manually tuned circular PNG crops for troop UI.
+- `caradhras-pass/`: committed SVG weather icons for Caradhras pass states `1-10`.
 
 Troop portraits are raster art and should remain PNGs. Do not convert them to SVG; SVG would either embed the same raster data or create poor traced art. CSS should provide borders, sizing, and count bubbles around these PNGs at runtime.
 
@@ -89,6 +90,8 @@ Army build, troop allocation controls, and future troop displays should use thes
 Troop and spy icon ownership should be communicated by a runtime outer ring colored with the owning player's color. The portrait communicates unit type; the ring communicates owner. Captured spies should use the committed captured spy PNGs, currently `smeagul-captured.png` and `crow-captured.png`, with the spy owner's color on the runtime outer ring.
 
 Troop and spy icon paths are centralized in `src/game/troopIcons.tsx`. The app should preload the full troop/spy icon set once at startup so spy buttons, captured-spy rows, army build, allocation, reinforcement, and inspection screens do not show a first-use blank or decode delay.
+
+Caradhras pass icons are simple committed SVG assets. They are not generated map geometry and should not be converted into gameplay data. The game syncs and persists the integer `caradhrasPassState`; the map chooses the matching icon asset at render time.
 
 ## Map Data Flow
 
@@ -298,8 +301,9 @@ Layer order:
 
 1. `TerritoryFillLayer`
 2. `StaticMapInk`
-3. `TroopMarkerLayer`
-4. `HitTargetLayer`
+3. `MapWeatherLayer`
+4. `TroopMarkerLayer`
+5. `HitTargetLayer`
 
 `MapView` owns pan, zoom, and camera-intent execution. The generated app map dimensions include a 1500 map-unit display margin around the extracted source map. The generated `homeViewport` is the normal unbuffered map view inside that larger frame, and the bottom-left overlay control returns to that home view rather than to the maximum zoom-out frame. Manual zoom-out can reveal the full stable orientation world. The bottom-right crosshair overlay toggles automatic selected-territory focus and is stored as a device-local map preference. Automatic focus defaults to off. When automatic focus is enabled and the app creates a territory camera intent, `MapView` fits that territory's generated `focusBounds` rectangle to the measured visible aperture, then clamps the result inside the stable orientation world. Nearly identical focus moves happen instantly; visible moves use a short ease-in-out animation. Focus duration is based on a combined pan and zoom distance, with both values normalized against the halfway viewport diagonal. During that animation, camera buttons remain mounted for visual stability but their click handlers are inert. The focus rectangle is generated from the canonical territory fill loops with 500 map units of padding on every side.
 
@@ -328,9 +332,17 @@ One permanent, non-interactive visual layer. It contains:
 
 Landmarks affect where border strokes are visible, so these should be treated as one static visual overlay after generation. The generator groups the same masked canonical border paths into two presentation layers: 10-unit borders within a region and 20-unit borders between regions. Background is a region for this classification, so playable-to-background coastlines use the thicker regional stroke. Red guide strokes in the landmark outline drawing generate visual-only dotted ship route curves; they do not affect gameplay connections or border masking. Directed gameplay edges are generated separately; physical land border ink is still shown when either direction exists. Ordinary borders render first, regional borders render second, ship routes render third, and landmarks remain on top.
 
-Gameplay graph helpers live in `src/game/mapGraph.ts`. Game code should use those helpers instead of importing generated connection data directly. Attack, spy distance, spy adjacent reveal, fortify eligibility, random-allocation border targeting, and opponent troop-total visibility all follow outgoing directed edges.
+Gameplay graph helpers live in `src/game/mapGraph.ts`. Game code should use those helpers instead of importing generated connection data directly. Attack, spy distance, spy adjacent reveal, explore related-territory highlights, fortify eligibility, random-allocation border targeting, and opponent troop-total visibility all follow active outgoing directed edges.
+
+The generated directed graph is the base graph. The active graph additionally applies game-state edge modifiers. The first modifier is the Caradhras pass: if `caradhrasPassState` is `6-10`, every directed edge between Rivendell and Caradhras is omitted from active outgoing edges, active reachability, and active distance. If the state is `1-5`, those generated edges are active. No gameplay code should special-case Rivendell or Caradhras outside `mapGraph.ts`.
 
 `StaticMapInk` should use `pointer-events="none"`.
+
+### MapWeatherLayer
+
+Dynamic, pointer-inert map-local weather markers live above static ink and below troop markers. The first weather marker is the Caradhras pass icon above the Rivendell-Caradhras connection. It renders `public/caradhras-pass/pass-01.svg` through `pass-10.svg` from the authoritative `GameState.caradhrasPassState`.
+
+The weather icon is presentation only. It does not own pass rules, edge filtering, or state drift. Those belong in the game graph/state layer so every consumer receives the same active-edge answer.
 
 ### TroopMarkerLayer
 
@@ -376,7 +388,7 @@ During draft, allocation, and read-only map phases, playable territory fills are
 
 During allocation, only the allocating player's owned territories are selectable. During normal post-allocation inspection, any territory can be selected to open the troop section in `info` mode. Own territories show exact troop breakdowns and captured spies. Opponent territories show the selected territory owner's troop icons with four grayed `?` count bubbles unless a successful spy grants temporary exact-breakdown permission for the spied territory. In local read-only mode, pressing the player name in the player bar cycles the current viewer. Allocation and read-only selected territory IDs are local UI state; sync shares only actual troop allocation data and confirmed ownership.
 
-Territory emphasis has two strengths. Active highlights are for selected, committed, or primary territories and use the brightest blend of the current owner color with white. Suggested highlights use the previous softer selected brightness and mark related local-only territory choices: successful spy intel territory links, valid attack targets after a source is selected, valid fortify sources after a target is selected, and outgoing directed connections from the currently inspected territory. Battle source and target pulse states have priority over both selected and suggested fill. Suggested highlights are presentation state only and are never synced.
+Territory emphasis has two strengths. Active highlights are for selected, committed, or primary territories and use the brightest blend of the current owner color with white. Suggested highlights use the previous softer selected brightness and mark related local-only territory choices: successful spy intel territory links, valid attack targets after a source is selected, valid fortify sources after a target is selected, and active outgoing directed connections from the currently inspected territory. Battle source and target pulse states have priority over both selected and suggested fill. Suggested highlights are presentation state only and are never synced.
 
 Map press handling has one contract. `src/game/gameView.ts` projects the active `MapPressMode`, the local selection update caused by a territory press, selection cleanup, named selection reset scopes, and selection patch merging. `App.tsx` wires the map callback and applies the returned local selection patch; it should not duplicate a second mode switch or field list for allocation, draft, inspect, reinforcement, spy selection, or selection cleanup.
 
@@ -394,6 +406,7 @@ Active-game recovery is intentionally conservative:
 - Local refresh has no reconnect concept because every player shares the same device.
 - Sync host refresh during active play restores the saved host game into paused sync recovery state. Timers are stopped, the host remains connected, and every non-host player is marked disconnected immediately.
 - Sync joiners do not own authoritative active-game recovery. If they lose the host and fail automatic reconnect, they return home and must rejoin through host recovery.
+- `caradhrasPassState` is an authoritative active-game fact and is saved/restored with local games and sync-host games.
 
 ## Sync Architecture
 
@@ -405,7 +418,7 @@ Sync mode should be copied and adapted from Qwixx rather than literally reused:
 - Ardatúrë-specific payload kinds and compact QR prefixes.
 - Host-authoritative setup, draft, timer, ownership, pause, reconnect, and removal state.
 
-The host is always one of the players and owns the canonical `GameState`. Sync connection/session state is separate UI/session state owned by `App`. Joiners send requests and render host snapshots only while connected.
+The host is always one of the players and owns the canonical `GameState`. Sync connection/session state is separate UI/session state owned by `App`. Joiners send requests and render host snapshots only while connected. `caradhrasPassState` is included in those snapshots like ownership, troops, spies, battle state, and notifications.
 
 `connected` has a strict meaning: the device is currently connected to the host, receiving recent host heartbeats/snapshots, and rendering host-authoritative state for the same game page/phase the host is on. A device must not be treated as connected merely because it has stale local state or because a WebRTC channel has not yet reported failure. The session-status type and session-derived viewer/control rules belong to `src/game/gameView.ts`; UI components such as `SyncSessionBlocker` render that projected state but do not define the session contract themselves.
 
@@ -476,7 +489,7 @@ Host transfer is a sync pause authority operation. It is available to the curren
 
 Fortify setup is local UI until committed. `App.tsx` owns one provisional target, one selected source, and provisional movement by source. Source eligibility is derived from owned gameplay-connection chains to the target. Cavalry may move from any eligible source; heavy, elite, leader, and immediately connected captured spies share one regular-source lane; remote captured spies may move only while cavalry from that same remote source is committed and must automatically return if that cavalry is undone. Sync joiners send only `{ type: "commitFortify", targetTerritoryId, movesBySource }` or `{ type: "skipFortify" }`. The host validates those commands in game-state helpers before applying them. Sync passive viewers receive only the final fortify/end-turn committed facts.
 
-Turn action helpers in `src/game/gameState.ts` should own composed game-state cleanup. For example, starting reinforcements and ending the turn with fortify both clear transient spy selection inside game-state helpers; `App.tsx` should call those complete actions rather than composing `cancelSpySelection(...)` with another state transition inline.
+Turn action helpers in `src/game/gameState.ts` should own composed game-state cleanup. For example, starting reinforcements and ending the turn with fortify both clear transient spy selection inside game-state helpers; `App.tsx` should call those complete actions rather than composing `cancelSpySelection(...)` with another state transition inline. Every helper that truly advances to the next player must drift `caradhrasPassState` exactly once through the shared pass-state drift helper.
 
 Spy and region notifications are not local toast effects. They are authoritative per-player queues stored in `GameState`, persisted with active games, and dismissed one at a time. The sync host stores every player's queue, while viewer-specific snapshots include only the receiving player's queue. Local mode shows queued notifications only on the affected player's turn or handoff; sync mode can deliver the affected player's queue after reconnect because the host remains source of truth.
 

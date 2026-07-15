@@ -385,7 +385,7 @@ export function createTroopMarkers(
   }
 
   const visibleIds: Set<string> = game.phase === "gameMap" || game.phase === "turn" || game.phase === "turnHandoff" || (game.phase === "paused" && game.turn)
-    ? visibleTroopTotalTerritoryIds(game.draft.ownership, viewerId)
+    ? visibleTroopTotalTerritoryIds(game.draft.ownership, viewerId, game.caradhrasPassState)
     : new Set(ownedTerritoryIds(game.draft.ownership, viewerId));
 
   if (game.turn?.stage === "spyIntel" && game.turn.currentPlayerId === viewerId && game.turn.spyIntel) {
@@ -994,11 +994,11 @@ function territoryTroopTotalWithTurnPreview(game: GameState, territoryId: string
   return Math.max(0, baseCount + troopTotal(reinforcement.territories[territoryId]) + previewCount);
 }
 
-function visibleTroopTotalTerritoryIds(ownership: Record<string, string | null>, viewerId: string) {
+function visibleTroopTotalTerritoryIds(ownership: Record<string, string | null>, viewerId: string, caradhrasPassState: number) {
   const visibleIds = new Set<string>(ownedTerritoryIds(ownership, viewerId));
 
   for (const territoryId of [...visibleIds]) {
-    for (const connectedId of outgoingTerritoryIds(territoryId)) {
+    for (const connectedId of outgoingTerritoryIds(territoryId, caradhrasPassState)) {
       if (ownership[connectedId] && ownership[connectedId] !== viewerId) {
         visibleIds.add(connectedId);
       }

@@ -144,7 +144,7 @@ import { generatedMapData } from "./map/generated/mapData";
 import { MapView, type MapCameraIntent, type MapVisibleInsets } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import { territoryForId } from "./map/territoryLookup";
-import { directedOwnedSourcesReachingTarget, hasDirectedConnection, outgoingTerritoryIds } from "./game/mapGraph";
+import { createCaradhrasPassState, directedOwnedSourcesReachingTarget, hasDirectedConnection, outgoingTerritoryIds } from "./game/mapGraph";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
 import { formatQrHandshakeError } from "./sync/syncErrors";
 import { QrScanner } from "./sync/QrCodeUi";
@@ -199,6 +199,8 @@ const EMPTY_MAP_VISIBLE_INSETS: MapVisibleInsets = {
   right: 0,
   top: 0,
 };
+const CARADHRAS_PASS_ICON_SIZE = 620;
+const CARADHRAS_PASS_ICON_Y_OFFSET = -520;
 
 type MapInsetRefs = {
   actionSectionRef: RefObject<HTMLDivElement | null>;
@@ -261,6 +263,39 @@ function useMapVisibleInsets({
   }, [hasActionSection, hasPlayerBar, hasUpperSection, measureInsets]);
 
   return visibleInsets;
+}
+
+function caradhrasPassWeatherMarkers(passState: number) {
+  const rivendell = territoryForId("rivendell");
+  const caradhras = territoryForId("caradhras");
+  if (!rivendell || !caradhras) {
+    return [];
+  }
+
+  const displayState = Math.max(1, Math.min(10, Math.round(passState)));
+  const iconNumber = String(displayState).padStart(2, "0");
+
+  return [
+    {
+      center: {
+        x: (rivendell.center.x + caradhras.center.x) / 2,
+        y: (rivendell.center.y + caradhras.center.y) / 2 + CARADHRAS_PASS_ICON_Y_OFFSET,
+      },
+      href: publicAssetUrl(`caradhras-pass/pass-${iconNumber}.svg`),
+      id: "caradhras-pass",
+      label: `Caradhras pass state ${displayState}`,
+      size: CARADHRAS_PASS_ICON_SIZE,
+    },
+  ];
+}
+
+function publicAssetUrl(path: string) {
+  const baseUrl = import.meta.env.BASE_URL || "./";
+  const assetPath = `${baseUrl}${path}`;
+
+  return typeof window === "undefined"
+    ? assetPath
+    : new URL(assetPath, window.location.href).toString();
 }
 
 function sectionBottomInset(element: HTMLElement | null) {
@@ -416,26 +451,26 @@ function fortifyTargetSpies(game: GameState, targetTerritoryId: string | null, m
     : movedSpies;
 }
 
-function fortifyEligibleSourceIds(ownership: Record<string, string | null>, targetTerritoryId: string | null, playerId: string | null) {
+function fortifyEligibleSourceIds(game: GameState, ownership: Record<string, string | null>, targetTerritoryId: string | null, playerId: string | null) {
   const sourceIds = new Set<string>();
   if (!targetTerritoryId || !playerId || ownership[targetTerritoryId] !== playerId) {
     return sourceIds;
   }
 
-  return directedOwnedSourcesReachingTarget(ownership, targetTerritoryId, playerId);
+  return directedOwnedSourcesReachingTarget(ownership, targetTerritoryId, playerId, game.caradhrasPassState);
 }
 
-function fortifySourceIsImmediate(sourceTerritoryId: string | null, targetTerritoryId: string | null) {
-  return Boolean(sourceTerritoryId && targetTerritoryId && hasDirectedConnection(sourceTerritoryId, targetTerritoryId));
+function fortifySourceIsImmediate(game: GameState, sourceTerritoryId: string | null, targetTerritoryId: string | null) {
+  return Boolean(sourceTerritoryId && targetTerritoryId && hasDirectedConnection(sourceTerritoryId, targetTerritoryId, game.caradhrasPassState));
 }
 
 function fortifyMoveUsesRegularLane(move: FortifyMovesBySource[string]) {
   return move.troops.heavy > 0 || move.troops.elite > 0 || move.troops.leader > 0 || move.spyOwnerIds.length > 0;
 }
 
-function fortifyRegularSourceId(targetTerritoryId: string | null, movesBySource: FortifyMovesBySource) {
+function fortifyRegularSourceId(game: GameState, targetTerritoryId: string | null, movesBySource: FortifyMovesBySource) {
   for (const [sourceTerritoryId, move] of Object.entries(movesBySource)) {
-    if (fortifySourceIsImmediate(sourceTerritoryId, targetTerritoryId) && fortifyMoveUsesRegularLane(move)) {
+    if (fortifySourceIsImmediate(game, sourceTerritoryId, targetTerritoryId) && fortifyMoveUsesRegularLane(move)) {
       return sourceTerritoryId;
     }
   }
@@ -448,7 +483,7 @@ function canAddFortifyTroop(game: GameState, ownership: Record<string, string | 
     return false;
   }
 
-  const eligibleSourceIds = fortifyEligibleSourceIds(ownership, setup.targetTerritoryId, playerId);
+  const eligibleSourceIds = fortifyEligibleSourceIds(game, ownership, setup.targetTerritoryId, playerId);
   if (!eligibleSourceIds.has(setup.selectedSourceTerritoryId)) {
     return false;
   }
@@ -463,8 +498,8 @@ function canAddFortifyTroop(game: GameState, ownership: Record<string, string | 
     return true;
   }
 
-  const regularSourceId = fortifyRegularSourceId(setup.targetTerritoryId, setup.movesBySource);
-  return fortifySourceIsImmediate(setup.selectedSourceTerritoryId, setup.targetTerritoryId) &&
+  const regularSourceId = fortifyRegularSourceId(game, setup.targetTerritoryId, setup.movesBySource);
+  return fortifySourceIsImmediate(game, setup.selectedSourceTerritoryId, setup.targetTerritoryId) &&
     (!regularSourceId || regularSourceId === setup.selectedSourceTerritoryId);
 }
 
@@ -473,7 +508,7 @@ function canAddFortifySpy(game: GameState, ownership: Record<string, string | nu
     return false;
   }
 
-  const eligibleSourceIds = fortifyEligibleSourceIds(ownership, setup.targetTerritoryId, playerId);
+  const eligibleSourceIds = fortifyEligibleSourceIds(game, ownership, setup.targetTerritoryId, playerId);
   if (!eligibleSourceIds.has(setup.selectedSourceTerritoryId)) {
     return false;
   }
@@ -483,8 +518,8 @@ function canAddFortifySpy(game: GameState, ownership: Record<string, string | nu
     return false;
   }
 
-  if (fortifySourceIsImmediate(setup.selectedSourceTerritoryId, setup.targetTerritoryId)) {
-    const regularSourceId = fortifyRegularSourceId(setup.targetTerritoryId, setup.movesBySource);
+  if (fortifySourceIsImmediate(game, setup.selectedSourceTerritoryId, setup.targetTerritoryId)) {
+    const regularSourceId = fortifyRegularSourceId(game, setup.targetTerritoryId, setup.movesBySource);
     return !regularSourceId || regularSourceId === setup.selectedSourceTerritoryId;
   }
 
@@ -524,17 +559,17 @@ function suggestedTerritoryIdsForMap({
   }
 
   if (turnPlayerId && attackSetup?.sourceTerritoryId && !attackSetup.targetTerritoryId) {
-    return outgoingTerritoryIds(attackSetup.sourceTerritoryId).filter((territoryId) =>
+    return outgoingTerritoryIds(attackSetup.sourceTerritoryId, game.caradhrasPassState).filter((territoryId) =>
       canSelectAttackTargetTerritory(game, turnPlayerId, attackSetup.sourceTerritoryId!, territoryId),
     );
   }
 
   if (turnPlayerId && fortifySetup?.targetTerritoryId) {
-    return [...fortifyEligibleSourceIds(ownership, fortifySetup.targetTerritoryId, turnPlayerId)];
+    return [...fortifyEligibleSourceIds(game, ownership, fortifySetup.targetTerritoryId, turnPlayerId)];
   }
 
   if (mapPressMode === "inspect" && gameMapSelectedTerritoryId) {
-    return [...outgoingTerritoryIds(gameMapSelectedTerritoryId)];
+    return [...outgoingTerritoryIds(gameMapSelectedTerritoryId, game.caradhrasPassState)];
   }
 
   return [];
@@ -676,6 +711,10 @@ function App() {
   const troopMarkers = useMemo(
     () => createTroopMarkers(game, allocationPlayerId, gameMapViewerId, turnViewerId, troopMarkerPreview),
     [allocationPlayerId, game, gameMapViewerId, troopMarkerPreview, turnViewerId],
+  );
+  const weatherMarkers = useMemo(
+    () => caradhrasPassWeatherMarkers(game.caradhrasPassState),
+    [game.caradhrasPassState],
   );
   const turnReinforcement = game.turn?.reinforcement ?? null;
   const turnProjectedReinforcements = turnPlayerId ? projectReinforcementTroops(game, turnPlayerId) : null;
@@ -879,7 +918,7 @@ function App() {
     if (
       fortifySetup.targetTerritoryId &&
       fortifySetup.selectedSourceTerritoryId &&
-      !fortifyEligibleSourceIds(ownership, fortifySetup.targetTerritoryId, turnPlayerId).has(fortifySetup.selectedSourceTerritoryId)
+      !fortifyEligibleSourceIds(game, ownership, fortifySetup.targetTerritoryId, turnPlayerId).has(fortifySetup.selectedSourceTerritoryId)
     ) {
       setFortifySetup((current) => current
         ? {
@@ -1653,6 +1692,7 @@ function App() {
     const draftState = {
       ...game,
       phase: "draft" as const,
+      caradhrasPassState: createCaradhrasPassState(),
       draft,
       allocation: null,
       turn: null,
@@ -1791,7 +1831,7 @@ function App() {
       return;
     }
 
-    if (!fortifyEligibleSourceIds(ownership, fortifySetup.targetTerritoryId, turnPlayerId).has(territoryId)) {
+    if (!fortifyEligibleSourceIds(game, ownership, fortifySetup.targetTerritoryId, turnPlayerId).has(territoryId)) {
       clearFortifySourceSelection();
       return;
     }
@@ -2145,7 +2185,7 @@ function App() {
     const nextMove = {
       ...sourceMove,
       troops,
-      spyOwnerIds: troopType === "cavalry" && troops.cavalry === 0 && !fortifySourceIsImmediate(sourceTerritoryId, fortifySetup.targetTerritoryId)
+      spyOwnerIds: troopType === "cavalry" && troops.cavalry === 0 && !fortifySourceIsImmediate(game, sourceTerritoryId, fortifySetup.targetTerritoryId)
         ? []
         : sourceMove.spyOwnerIds,
     };
@@ -2191,8 +2231,8 @@ function App() {
     }
 
     const sourceTroops = fortifySourceTroops(game, sourceTerritoryId, sourceMove);
-    const immediate = fortifySourceIsImmediate(sourceTerritoryId, fortifySetup.targetTerritoryId);
-    const regularSourceId = fortifyRegularSourceId(fortifySetup.targetTerritoryId, fortifySetup.movesBySource);
+    const immediate = fortifySourceIsImmediate(game, sourceTerritoryId, fortifySetup.targetTerritoryId);
+    const regularSourceId = fortifyRegularSourceId(game, fortifySetup.targetTerritoryId, fortifySetup.movesBySource);
     const canUseRegularLane = immediate && (!regularSourceId || regularSourceId === sourceTerritoryId);
     const allowedTypes: TroopType[] = canUseRegularLane ? ["heavy", "cavalry", "elite", "leader"] : ["cavalry"];
     const movedTroops = movableTroopsLeavingOne(sourceTroops, allowedTypes);
@@ -2984,6 +3024,7 @@ function App() {
         showCameraControls={layout.canUseMapCameraControls}
         territoryStates={territoryStates}
         troopMarkers={troopMarkers}
+        weatherMarkers={weatherMarkers}
         visibleInsets={visibleInsets}
       />
 

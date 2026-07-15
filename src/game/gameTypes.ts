@@ -240,6 +240,7 @@ export type GameState = {
   phase: AppPhase;
   mode: PlayMode;
   players: GamePlayer[];
+  caradhrasPassState: number;
   config: GameConfig;
   draft: DraftState | null;
   allocation: AllocationState | null;

@@ -200,6 +200,7 @@ The host owns:
 - timers
 - random fallback picks
 - territory ownership
+- Caradhras pass state once the authoritative game has been created
 - pause/resume state
 - removal of players
 
@@ -212,7 +213,7 @@ The completed sync contract separates authoritative game facts from connection/s
 - Host-to-joiner updates are revisioned snapshots: `{ type: "snapshot", revision, game }`.
 - Joiners ignore stale snapshots.
 - Joiner-to-host commands are limited to `profileUpdate`, `draftConfirm`, `allocationUpdate`, `turnCommand`, and `quit`.
-- Turn commands cover committed turn facts only: spy confirmation/dismissal, notification dismissal, committed reinforcements, locked attacks, challenge score submissions, battle rolls, retreat, final battle dismissal, elimination/victory confirmation, and fortify/end-turn.
+- Turn commands cover committed turn facts only: spy confirmation/dismissal, notification dismissal, committed reinforcements, locked attacks, challenge score submissions, battle rolls, retreat, final battle dismissal, elimination/victory confirmation, Caradhras pass drift on true turn advance, and fortify/end-turn.
 - Host intentional end sends `hostEnded`; joiners return home.
 - Host removal sends `removed`; that joiner returns home through the same path as host-ended.
 - Lost host connection blocks joiner gameplay during the 10-second reconnecting grace period. If automatic reconnect fails, the joiner returns home.
