@@ -228,7 +228,7 @@ async function runSourceChecks() {
   assert(caradhrasPassIconSources.slice(0, 5).every((source) => /<circle[^>]+fill="#ffd45a"[^>]+stroke="#111111"[^>]+stroke-width="1"/.test(source)), "Caradhras pass suns use a thin black outline.");
   assert(caradhrasPassIconSources.slice(1).every((source) => !source.includes("<path") || source.includes('stroke="#111111" stroke-width="1"')), "Caradhras pass cloud paths use a thin black outline.");
   assert(Array.from({ length: 10 }, (_, index) => `./caradhras-pass/pass-${String(index + 1).padStart(2, "0")}.svg`).every((asset) => serviceWorkerSource.includes(asset)), "Service worker precaches every Caradhras pass icon.");
-  assert(serviceWorkerSource.includes("./troops/icons/ghost.png") && troopIconFiles.includes("ghost.png"), "Service worker precaches the Paths of the Dead ghost icon.");
+  assert(serviceWorkerSource.includes("./troops/icons/ghost-head.png") && troopIconFiles.includes("ghost-head.png"), "Service worker precaches the Paths of the Dead ghost icon.");
   assert(territoryLookupSource.includes("territoryForId") && !appSource.includes("generatedMapData.territories.find") && !gameSectionsSource.includes("generatedMapData.territories.find") && !gameViewSource.includes("new Map<string, GeneratedTerritoryData>"), "Territory lookup uses one shared generated-data helper.");
   assert(mapWidth === sourceWidth * 10 + 3000 && mapHeight === sourceHeight * 10 + 3000, "Generated app data includes the 1500-unit display frame.");
   assert(
@@ -2231,7 +2231,7 @@ async function runDynamicPassChecks(page) {
   await clickTerritory(page, "rivendell");
   assert((await page.locator('[data-weather-marker="caradhras-pass"]').getAttribute("href"))?.includes("pass-05.svg"), "Open Caradhras pass state renders the matching icon.");
   assert((await page.locator('[data-territory-fill="caradhras"][data-territory-fill-state="suggested"]').count()) === 1, "Open Caradhras pass keeps Rivendell to Caradhras as an active explore connection.");
-  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').getAttribute("href"))?.includes("ghost.png"), "Open Paths of the Dead state renders the ghost icon.");
+  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').getAttribute("href"))?.includes("ghost-head.png"), "Open Paths of the Dead state renders the ghost icon.");
   assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').getAttribute("opacity")) === "0.75", "Paths of the Dead state 4 renders at 75% opacity.");
   await clickTerritory(page, "edoras");
   assert((await page.locator('[data-territory-fill="lamedon"][data-territory-fill-state="suggested"]').count()) === 1, "Open Paths of the Dead keeps Edoras to Lamedon as an active explore connection.");

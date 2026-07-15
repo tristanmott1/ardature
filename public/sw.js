@@ -21,6 +21,7 @@ const CORE_ASSETS = [
   "./troops/icons/dwarf.png",
   "./troops/icons/elf.png",
   "./troops/icons/ghost.png",
+  "./troops/icons/ghost-head.png",
   "./troops/icons/orc.png",
   "./troops/icons/rohirrim.png",
   "./troops/icons/smeagul-captured.png",

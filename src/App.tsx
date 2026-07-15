@@ -204,6 +204,8 @@ const CARADHRAS_PASS_ICON_X_OFFSET = -130;
 const CARADHRAS_PASS_ICON_Y_OFFSET = 300;
 const PATHS_OF_THE_DEAD_ICON_SIZE = 620;
 const PATHS_OF_THE_DEAD_MIN_VISIBLE_STATE = 2;
+const PATHS_OF_THE_DEAD_ICON_X_OFFSET = -900;
+const PATHS_OF_THE_DEAD_ICON_Y_OFFSET = 250;
 
 type MapInsetRefs = {
   actionSectionRef: RefObject<HTMLDivElement | null>;
@@ -312,8 +314,7 @@ function caradhrasPassWeatherMarkers(passState: number | null) {
 
 function pathsOfTheDeadWeatherMarkers(pathsState: number | null) {
   const edoras = territoryForId("edoras");
-  const lamedon = territoryForId("lamedon");
-  if (pathsState === null || pathsState < PATHS_OF_THE_DEAD_MIN_VISIBLE_STATE || !edoras || !lamedon) {
+  if (pathsState === null || pathsState < PATHS_OF_THE_DEAD_MIN_VISIBLE_STATE || !edoras) {
     return [];
   }
 
@@ -321,10 +322,10 @@ function pathsOfTheDeadWeatherMarkers(pathsState: number | null) {
   return [
     {
       center: {
-        x: (edoras.center.x + lamedon.center.x) / 2,
-        y: (edoras.center.y + lamedon.center.y) / 2,
+        x: edoras.center.x + PATHS_OF_THE_DEAD_ICON_X_OFFSET,
+        y: edoras.center.y + PATHS_OF_THE_DEAD_ICON_Y_OFFSET,
       },
-      href: publicAssetUrl("troops/icons/ghost.png"),
+      href: publicAssetUrl("troops/icons/ghost-head.png"),
       id: "paths-of-the-dead",
       label: `Paths of the Dead state ${displayState}`,
       opacity: (displayState - 1) / 4,

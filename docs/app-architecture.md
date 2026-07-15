@@ -93,7 +93,7 @@ Troop and spy icon paths are centralized in `src/game/troopIcons.tsx`. The app s
 
 Caradhras pass icons are simple committed SVG assets. They are clipped circular weather badges without a separate outer outline stroke; sun and cloud shapes use only a thin black outline. They are not generated map geometry and should not be converted into gameplay data. The game syncs and persists `caradhrasPassState`, which is `null` before the first regular turn and an integer from `1-10` during regular turns. The map chooses the matching icon asset only once that integer exists.
 
-Paths of the Dead uses the existing `troops/icons/ghost.png` portrait as a dynamic map marker. The game syncs and persists `pathsOfTheDeadState`, which is `null` before the first regular turn and an integer from `1-5` during regular turns. State `1` renders no icon. States `2-5` render the ghost marker at increasing opacity.
+Paths of the Dead uses the existing `troops/icons/ghost-head.png` portrait as a dynamic map marker. The game syncs and persists `pathsOfTheDeadState`, which is `null` before the first regular turn and an integer from `1-5` during regular turns. State `1` renders no icon. States `2-5` render the ghost marker at increasing opacity.
 
 ## Map Data Flow
 
@@ -342,7 +342,7 @@ The generated directed graph is the base graph. The active graph additionally ap
 
 ### MapWeatherLayer
 
-Dynamic, pointer-inert map-local weather markers live above static ink and below troop markers. Caradhras renders `public/caradhras-pass/pass-01.svg` through `pass-10.svg` from the authoritative `GameState.caradhrasPassState` only during regular-turn game stages. Paths of the Dead renders `public/troops/icons/ghost.png` at the Edoras-Lamedon midpoint only during regular-turn game stages and only for states `2-5`; opacity is `25%`, `50%`, `75%`, and `100%` for states `2`, `3`, `4`, and `5`.
+Dynamic, pointer-inert map-local weather markers live above static ink and below troop markers. Caradhras renders `public/caradhras-pass/pass-01.svg` through `pass-10.svg` from the authoritative `GameState.caradhrasPassState` only during regular-turn game stages. Paths of the Dead renders `public/troops/icons/ghost-head.png` near the southwest corner of Edoras only during regular-turn game stages and only for states `2-5`; opacity is `25%`, `50%`, `75%`, and `100%` for states `2`, `3`, `4`, and `5`.
 
 The weather icon is presentation only. It does not own pass rules, edge filtering, or state drift. Those belong in the game graph/state layer so every consumer receives the same active-edge answer.
 

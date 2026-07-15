@@ -294,7 +294,7 @@ At turn advance, sample this Paths of the Dead drift table from the current stat
 
 Before sampling, discard deltas that would leave the `1-5` range, then normalize the remaining weights.
 
-The map renders the matching committed icon from `public/caradhras-pass/pass-01.svg` through `pass-10.svg` above the Rivendell-Caradhras connection only after regular turns begin and `caradhrasPassState` is an integer. Paths of the Dead renders `public/troops/icons/ghost.png` at the Edoras-Lamedon midpoint only during regular turns and only for states `2-5`. Its opacity is `25%`, `50%`, `75%`, and `100%` for states `2`, `3`, `4`, and `5`. These icons are visual, pointer-inert, and synced/persisted only through the authoritative integer states.
+The map renders the matching committed icon from `public/caradhras-pass/pass-01.svg` through `pass-10.svg` above the Rivendell-Caradhras connection only after regular turns begin and `caradhrasPassState` is an integer. Paths of the Dead renders `public/troops/icons/ghost-head.png` near the southwest corner of Edoras only during regular turns and only for states `2-5`. Its opacity is `25%`, `50%`, `75%`, and `100%` for states `2`, `3`, `4`, and `5`. These icons are visual, pointer-inert, and synced/persisted only through the authoritative integer states.
 
 ## Information Visibility
 
