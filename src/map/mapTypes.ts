@@ -7,7 +7,7 @@ export type MapSkin =
   | "black"
   | "purple";
 
-export type TerritoryStatus = "unselected" | "selected" | "battleSource" | "battleTarget";
+export type TerritoryStatus = "unselected" | "suggested" | "selected" | "battleSource" | "battleTarget";
 
 export type TerritoryState = {
   skin: MapSkin;

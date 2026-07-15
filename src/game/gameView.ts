@@ -423,7 +423,7 @@ export function selectedTerritoryForMap({
   }
 
   if (game.turn?.stage === "spyIntel") {
-    return game.turn.spyIntel?.targetTerritoryId ?? null;
+    return null;
   }
 
   if (game.turn?.stage === "reinforcementPlace" || game.turn?.stage === "spyTarget") {

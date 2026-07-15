@@ -257,10 +257,12 @@ export function createTerritoryStates(
   players: GamePlayer[],
   ownership: TerritoryOwnerMap | null,
   selectedTerritoryId: string | string[] | null,
+  suggestedTerritoryId: string | string[] | null = null,
   battleCue: { sourceTerritoryId: string; targetTerritoryId: string } | null = null,
 ): Record<string, TerritoryState> {
   const playerById = new Map(players.map((player) => [player.id, player]));
   const selectedTerritoryIds = new Set(Array.isArray(selectedTerritoryId) ? selectedTerritoryId : selectedTerritoryId ? [selectedTerritoryId] : []);
+  const suggestedTerritoryIds = new Set(Array.isArray(suggestedTerritoryId) ? suggestedTerritoryId : suggestedTerritoryId ? [suggestedTerritoryId] : []);
 
   return Object.fromEntries(
     TERRITORY_IDS.map((territoryId) => {
@@ -271,7 +273,9 @@ export function createTerritoryStates(
           ? "battleTarget"
           : selectedTerritoryIds.has(territoryId)
             ? "selected"
-            : "unselected";
+            : suggestedTerritoryIds.has(territoryId)
+              ? "suggested"
+              : "unselected";
 
       return [
         territoryId,

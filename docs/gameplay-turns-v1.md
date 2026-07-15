@@ -187,6 +187,7 @@ If the spy is not captured:
 - reveal the exact known contents of the selected opponent territory
 - reveal any captured spies imprisoned on the selected opponent territory as part of that known-content row
 - reveal total troop counts, but not breakdowns, for territories reachable by one outgoing directed edge from the selected territory that are owned by that same opponent
+- apply the softer suggested map highlight to the selected opponent territory and those same-owner outgoing directed connections while the current player reviews the intel
 - show those outgoing-adjacent totals through the normal white map troop counters
 - show the selected opponent territory through the troop section in `info` mode, using the same exact-count UI that own territories use
 - replace the bottom action buttons with a dismiss button
@@ -355,8 +356,11 @@ The source-target restriction is not meaningfully directional in normal play bec
 During setup:
 
 - After the source is selected, it remains highlighted.
+- After the source is selected, valid directed opponent targets receive the softer suggested map highlight.
+- Source-target pairs already attacked this turn are not suggested again.
 - Selecting the source does not open a confirmation sheet; the action immediately advances to target selection.
 - After the target is selected, both source and target remain highlighted.
+- Once the target is selected, valid-target suggestions disappear.
 - Selecting the target does not open a confirmation sheet; the action immediately advances to troop commitment.
 - During troop commitment, the troop section uses allocation mode.
 - The top row has the add symbol and shows troops currently on the attacking territory that are still available to commit.
@@ -664,7 +668,7 @@ Instruction text:
 - after target selection and before choosing a source: `Select territories to fortify from`
 - while a source is selected and the troop section is open: keep the fortify-source instruction in the action section while the troop section names the current movement as `{source} to {target}`
 
-Only the target and currently selected source need to be emphasized as local setup selections. The target remains selected while choosing and switching sources. Pressing a selected source again unselects that source but keeps the fortify target.
+The target remains selected while choosing and switching sources. After the target is chosen, all eligible directed owned-path sources receive the softer suggested map highlight. If a source is selected, the target and selected source use the bright active highlight while the remaining eligible sources stay suggested. Pressing a selected source again unselects that source but keeps the fortify target.
 
 ### Fortify Source Eligibility
 

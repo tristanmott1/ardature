@@ -358,7 +358,7 @@ type MapSkin =
   | "black"
   | "purple";
 
-type TerritoryStatus = "unselected" | "selected";
+type TerritoryStatus = "unselected" | "suggested" | "selected" | "battleSource" | "battleTarget";
 
 type TerritoryState = {
   skin: MapSkin;
@@ -375,6 +375,8 @@ Before draft ownership is assigned, playable territories render with the backgro
 During draft, allocation, and read-only map phases, playable territory fills are derived from ownership. Owned territories use the owner's unique player color, and unowned territories use the background color. The background component always uses the background skin and is not selectable.
 
 During allocation, only the allocating player's owned territories are selectable. During normal post-allocation inspection, any territory can be selected to open the troop section in `info` mode. Own territories show exact troop breakdowns and captured spies. Opponent territories show the selected territory owner's troop icons with four grayed `?` count bubbles unless a successful spy grants temporary exact-breakdown permission for the spied territory. In local read-only mode, pressing the player name in the player bar cycles the current viewer. Allocation and read-only selected territory IDs are local UI state; sync shares only actual troop allocation data and confirmed ownership.
+
+Territory emphasis has two strengths. Active highlights are for selected, committed, or primary territories and use the brightest blend of the current owner color with white. Suggested highlights use the previous softer selected brightness and mark related local-only territory choices: successful spy intel territory links, valid attack targets after a source is selected, valid fortify sources after a target is selected, and outgoing directed connections from the currently inspected territory. Battle source and target pulse states have priority over both selected and suggested fill. Suggested highlights are presentation state only and are never synced.
 
 Map press handling has one contract. `src/game/gameView.ts` projects the active `MapPressMode`, the local selection update caused by a territory press, selection cleanup, named selection reset scopes, and selection patch merging. `App.tsx` wires the map callback and applies the returned local selection patch; it should not duplicate a second mode switch or field list for allocation, draft, inspect, reinforcement, spy selection, or selection cleanup.
 

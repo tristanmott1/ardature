@@ -140,7 +140,7 @@ import { generatedMapData } from "./map/generated/mapData";
 import { MapView, type MapCameraIntent, type MapVisibleInsets } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import { territoryForId } from "./map/territoryLookup";
-import { directedOwnedSourcesReachingTarget, hasDirectedConnection } from "./game/mapGraph";
+import { directedOwnedSourcesReachingTarget, hasDirectedConnection, outgoingTerritoryIds } from "./game/mapGraph";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
 import { formatQrHandshakeError } from "./sync/syncErrors";
 import { QrScanner } from "./sync/QrCodeUi";
@@ -453,6 +453,56 @@ function canAddFortifySpy(game: GameState, ownership: Record<string, string | nu
   return sourceMove.troops.cavalry > 0;
 }
 
+function suggestedTerritoryIdsForMap({
+  activeOverlay,
+  attackSetup,
+  canControlTurnPlayer,
+  fortifySetup,
+  game,
+  gameMapSelectedTerritoryId,
+  mapPressMode,
+  ownership,
+  turnPlayerId,
+}: {
+  activeOverlay: ActiveOverlay | null;
+  attackSetup: AttackSetupState;
+  canControlTurnPlayer: boolean;
+  fortifySetup: FortifySetupState;
+  game: GameState;
+  gameMapSelectedTerritoryId: string | null;
+  mapPressMode: MapPressMode | null;
+  ownership: Record<string, string | null>;
+  turnPlayerId: string | null;
+}) {
+  if (activeOverlay) {
+    return [];
+  }
+
+  if (game.phase === "turn" && canControlTurnPlayer && game.turn?.stage === "spyIntel" && game.turn.currentPlayerId === turnPlayerId && game.turn.spyIntel) {
+    return [
+      game.turn.spyIntel.targetTerritoryId,
+      ...game.turn.spyIntel.totalTerritoryIds,
+    ];
+  }
+
+  if (turnPlayerId && attackSetup?.sourceTerritoryId && !attackSetup.targetTerritoryId) {
+    return outgoingTerritoryIds(attackSetup.sourceTerritoryId).filter((territoryId) =>
+      canAttackTargetTerritory(game, turnPlayerId, attackSetup.sourceTerritoryId!, territoryId) &&
+        !game.turn?.completedAttacks.includes(`${attackSetup.sourceTerritoryId}->${territoryId}`),
+    );
+  }
+
+  if (turnPlayerId && fortifySetup?.targetTerritoryId) {
+    return [...fortifyEligibleSourceIds(ownership, fortifySetup.targetTerritoryId, turnPlayerId)];
+  }
+
+  if (mapPressMode === "inspect" && gameMapSelectedTerritoryId) {
+    return [...outgoingTerritoryIds(gameMapSelectedTerritoryId)];
+  }
+
+  return [];
+}
+
 function App() {
   const initialSyncHostRef = useRef<ReturnType<typeof readSyncHostGame> | undefined>(undefined);
   if (initialSyncHostRef.current === undefined) {
@@ -578,10 +628,6 @@ function App() {
     : fortifySetup
       ? [fortifySetup.targetTerritoryId, fortifySetup.selectedSourceTerritoryId].filter((territoryId): territoryId is string => Boolean(territoryId))
       : viewerSelectedTerritoryId;
-  const territoryStates = useMemo(
-    () => createTerritoryStates(game.players, ownership, mapSelectedTerritoryIds, battleCue),
-    [battleCue, game.players, mapSelectedTerritoryIds, ownership],
-  );
   const troopMarkers = useMemo(
     () => createTroopMarkers(game, allocationPlayerId, gameMapViewerId, turnViewerId),
     [allocationPlayerId, game, gameMapViewerId, turnViewerId],
@@ -642,6 +688,24 @@ function App() {
     syncJoinerBlocked,
     turnPlayerId,
   });
+  const mapSuggestedTerritoryIds = useMemo(
+    () => suggestedTerritoryIdsForMap({
+      activeOverlay,
+      attackSetup,
+      canControlTurnPlayer,
+      fortifySetup,
+      game,
+      gameMapSelectedTerritoryId,
+      mapPressMode,
+      ownership,
+      turnPlayerId,
+    }),
+    [activeOverlay, attackSetup, canControlTurnPlayer, fortifySetup, game, gameMapSelectedTerritoryId, mapPressMode, ownership, turnPlayerId],
+  );
+  const territoryStates = useMemo(
+    () => createTerritoryStates(game.players, ownership, mapSelectedTerritoryIds, mapSuggestedTerritoryIds, battleCue),
+    [battleCue, game.players, mapSelectedTerritoryIds, mapSuggestedTerritoryIds, ownership],
+  );
   const playerBarPlayer = playerBarPlayerForGame({
     activeDraftPlayer: active,
     allocationPlayer,

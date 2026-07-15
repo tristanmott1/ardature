@@ -1,6 +1,7 @@
 import type { GeneratedMapData, TerritoryState } from "../mapTypes";
 
-const SELECTED_WHITE_MIX = 0.35;
+const SELECTED_WHITE_MIX = 0.55;
+const SUGGESTED_WHITE_MIX = 0.35;
 
 export function TerritoryFillLayer({
   mapData,
@@ -16,6 +17,8 @@ export function TerritoryFillLayer({
         const baseColor = territory.skins[state.skin];
         const color = state.status === "selected" || state.status === "battleSource" || state.status === "battleTarget"
           ? mixWithWhite(baseColor, SELECTED_WHITE_MIX)
+          : state.status === "suggested"
+            ? mixWithWhite(baseColor, SUGGESTED_WHITE_MIX)
           : baseColor;
 
         return (

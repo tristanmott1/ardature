@@ -107,6 +107,7 @@ async function runSourceChecks() {
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapConnectionsSource = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
   const mapGraphSource = await readFile(new URL("../src/game/mapGraph.ts", import.meta.url), "utf8");
+  const mapTypesSource = await readFile(new URL("../src/map/mapTypes.ts", import.meta.url), "utf8");
   const hitTargetSource = await readFile(new URL("../src/map/components/HitTargetLayer.tsx", import.meta.url), "utf8");
   const mapViewSource = await readFile(new URL("../src/map/components/MapView.tsx", import.meta.url), "utf8");
   const staticMapInkSource = await readFile(new URL("../src/map/components/StaticMapInk.tsx", import.meta.url), "utf8");
@@ -402,7 +403,10 @@ async function runSourceChecks() {
   assert(appSource.includes("useMapVisibleInsets") && appSource.includes("visibleInsets={visibleInsets}") && mapViewSource.includes("visibleInsets?: MapVisibleInsets") && mapViewSource.includes("viewportForApertureTarget"), "Map focus and return-to-map use a measured visible aperture.");
   assert(stylesSource.includes(".game-action-slot") && stylesSource.includes("position: fixed") && !stylesSource.includes(".game-layout .map-shell"), "Game-stage sections overlay the full-screen map instead of resizing it.");
   assert(mapPreferencesSource.includes("ardature.mapPreferences.v1") && mapPreferencesSource.includes("autoFocusEnabled: false"), "Map preferences persist auto-focus with a default-off state.");
-  assert(territoryFillSource.includes("mixWithWhite") && territoryFillSource.includes("SELECTED_WHITE_MIX = 0.35"), "Selected territory fill blends the current color with white.");
+  assert(mapTypesSource.includes('"suggested"') && territoryFillSource.includes("SUGGESTED_WHITE_MIX = 0.35"), "Territory fill supports subtle suggested highlights.");
+  assert(territoryFillSource.includes("mixWithWhite") && territoryFillSource.includes("SELECTED_WHITE_MIX = 0.55"), "Selected territory fill uses a brighter blend of the current color with white.");
+  assert(appSource.includes("suggestedTerritoryIdsForMap") && appSource.includes("outgoingTerritoryIds") && appSource.includes("directedOwnedSourcesReachingTarget"), "Suggested territory highlights use directed graph helpers.");
+  assert(gameStateSource.includes("suggestedTerritoryId: string | string[] | null") && gameStateSource.includes('suggestedTerritoryIds.has(territoryId)') && appSource.includes("createTerritoryStates(game.players, ownership, mapSelectedTerritoryIds, mapSuggestedTerritoryIds, battleCue)"), "Territory state creation accepts selected and suggested ids.");
   assert(!territoryFillSource.includes('state.status === "selected" ? "#ffffff"'), "Selected territory fill is not hard-coded to white.");
   assert(troopMarkerSource.includes("data-troop-marker"), "Troop markers expose territory ids for visibility verification.");
   assert(pausePanelSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
@@ -1919,8 +1923,13 @@ async function runRandomAllocationChecks(page) {
   assert(ownedInspectTerritoryId, "Current player owns a territory for default inspection.");
   await clickTerritory(page, ownedInspectTerritoryId);
   await page.waitForSelector(".troop-section-info");
+  assert((await page.locator(`[data-territory-fill="${ownedInspectTerritoryId}"][data-territory-fill-state="selected"]`).count()) === 1, "Explore selection uses the bright selected highlight.");
+  assert((await page.locator('[data-territory-fill-state="suggested"]').count()) > 0, "Explore selection subtly highlights outgoing directed connections.");
+  const exploreSuggestedFill = await page.locator('[data-territory-fill-state="suggested"] [data-territory-fill-piece]').first().getAttribute("fill");
+  assert(exploreSuggestedFill && exploreSuggestedFill.toLowerCase() !== "#ffffff", "Suggested explore highlight is not pure white.");
   await page.getByRole("button", { name: "Spy" }).click();
   assert((await page.locator(".troop-section-info").count()) === 0, "Starting spy clears the default inspected territory.");
+  assert((await page.locator('[data-territory-fill-state="suggested"]').count()) === 0, "Starting spy clears explore suggested highlights.");
   assert((await page.locator(".turn-action-instruction").getByText("Select a territory to spy on").count()) === 1, "Spy targeting changes the action instruction.");
   assert((await page.getByRole("button", { name: "Cancel Spy" }).count()) === 1, "Spy targeting replaces action buttons with one cancel button.");
   await assertActionCancelCentered(page, "Cancel Spy");
@@ -2000,8 +2009,12 @@ async function runRandomAllocationChecks(page) {
   const attackPair = await findAttackPair(page);
   await clickTerritory(page, attackPair.sourceTerritoryId);
   assert((await page.locator(".turn-action-instruction").getByText("Select a territory to attack").count()) === 1, "Attack setup asks for a target after source selection.");
+  assert((await page.locator(`[data-territory-fill="${attackPair.sourceTerritoryId}"][data-territory-fill-state="selected"]`).count()) === 1, "Attack source uses the bright selected highlight.");
+  assert((await page.locator(`[data-territory-fill="${attackPair.targetTerritoryId}"][data-territory-fill-state="suggested"]`).count()) === 1, "Attack source selection subtly highlights valid directed targets.");
   await clickTerritory(page, attackPair.targetTerritoryId);
   await page.waitForSelector(".troop-section-attack .allocation-target");
+  assert((await page.locator(`[data-territory-fill="${attackPair.targetTerritoryId}"][data-territory-fill-state="selected"]`).count()) === 1, "Attack target becomes a bright selected highlight after selection.");
+  assert((await page.locator('[data-territory-fill-state="suggested"]').count()) === 0, "Attack target suggestions clear once a target is selected.");
   assert((await page.locator(".turn-action-instruction").getByText("Choose attacking troops").count()) === 1, "Attack setup asks for committed troops after source and target selection.");
   assert((await page.locator(".troop-section-attack .allocation-target").textContent())?.includes(" to "), "Attack troop section names the source and target.");
   await assertTroopAffordanceButtons(page, ".troop-section-attack", "Attack setup");
@@ -2188,6 +2201,8 @@ async function runTurnSpyOutcomeChecks(browser) {
   await capture(success, "13c-spy-success-mobile.png");
   assert((await success.locator(".turn-action-instruction").getByText("View territory").count()) === 1, "Successful spy intel uses the view-territory instruction.");
   assert((await success.locator(".troop-section-info .selected-territory-name").getByText("Bree").count()) === 1, "Successful spy shows the target territory name.");
+  assert((await success.locator('[data-territory-fill="bree"][data-territory-fill-state="suggested"]').count()) === 1, "Successful spy subtly highlights the spied territory.");
+  assert((await success.locator('[data-territory-fill="rivendell"][data-territory-fill-state="suggested"]').count()) === 1, "Successful spy subtly highlights same-owner outgoing directed connections.");
   assert((await success.locator(".troop-section-info .troop-icon-count").count()) === 1, "Successful spy shows only nonzero target troop types.");
   assert((await success.locator(".troop-section-info .captured-spy-icon").count()) === 1, "Successful spy shows captured spies imprisoned on the target.");
   await assertNoBrokenTroopIconImages(success, "Successful spy troop and captured-spy icons are loaded.");
@@ -2363,10 +2378,15 @@ async function runTurnFortifyChecks(browser) {
   await capture(page, "19b-fortify-target-mobile.png");
   assert((await page.locator(".turn-action-instruction").getByText("Select territories to fortify from").count()) === 1, "Fortify asks for sources after target selection.");
   assert((await page.locator(".troop-section-fortify").count()) === 0, "Fortify target selection alone does not show the troop section.");
+  assert((await page.locator('[data-territory-fill="shire"][data-territory-fill-state="selected"]').count()) === 1, "Fortify target uses the bright selected highlight.");
+  assert((await page.locator('[data-territory-fill="bree"][data-territory-fill-state="suggested"]').count()) === 1, "Fortify subtly highlights adjacent valid sources.");
+  assert((await page.locator('[data-territory-fill="rivendell"][data-territory-fill-state="suggested"]').count()) === 1, "Fortify subtly highlights remote directed-path valid sources.");
 
   await clickTerritory(page, "bree");
   await page.waitForSelector(".troop-section-fortify .allocation-target");
   await capture(page, "19c-fortify-adjacent-source-mobile.png");
+  assert((await page.locator('[data-territory-fill="bree"][data-territory-fill-state="selected"]').count()) === 1, "Selected fortify source becomes a bright selected highlight.");
+  assert((await page.locator('[data-territory-fill="rivendell"][data-territory-fill-state="suggested"]').count()) === 1, "Other eligible fortify sources remain subtly highlighted after source selection.");
   assert(((await page.locator(".troop-section-fortify .allocation-target").textContent()) ?? "").includes("Bree to Shire"), "Fortify troop section names source and target.");
   await assertTroopAffordanceButtons(page, ".troop-section-fortify", "Fortify adjacent source");
   assert((await page.locator(".troop-section-fortify .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").count()) >= 5, "Adjacent fortify source can move regular troops, cavalry, leader, and local captured spies.");
