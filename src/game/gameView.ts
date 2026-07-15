@@ -364,7 +364,13 @@ export function gameViewContextForState({
   };
 }
 
-export function createTroopMarkers(game: GameState, allocationPlayerId: string | null, gameMapViewerId: string | null, turnViewerId: string | null) {
+export function createTroopMarkers(
+  game: GameState,
+  allocationPlayerId: string | null,
+  gameMapViewerId: string | null,
+  turnViewerId: string | null,
+  troopTotalPreview: Record<string, number> = {},
+) {
   if (!game.allocation || !game.draft) {
     return [];
   }
@@ -392,7 +398,7 @@ export function createTroopMarkers(game: GameState, allocationPlayerId: string |
   return [...visibleIds]
     .map((territoryId) => {
       const territory = territoryForId(territoryId);
-      const count = territoryTroopTotalWithTurnPreview(game, territoryId);
+      const count = territoryTroopTotalWithTurnPreview(game, territoryId, troopTotalPreview);
 
       return territory && count > 0
         ? { territoryId, center: territory.center, count }
@@ -950,15 +956,16 @@ function toggledSelection(currentTerritoryId: string | null, territoryId: string
   return currentTerritoryId === territoryId ? null : territoryId;
 }
 
-function territoryTroopTotalWithTurnPreview(game: GameState, territoryId: string) {
+function territoryTroopTotalWithTurnPreview(game: GameState, territoryId: string, troopTotalPreview: Record<string, number>) {
   const baseCount = territoryTroopTotal(game.allocation, territoryId);
   const reinforcement = game.turn?.reinforcement;
+  const previewCount = troopTotalPreview[territoryId] ?? 0;
 
   if (!reinforcement || !reinforcement.territories[territoryId]) {
-    return baseCount;
+    return Math.max(0, baseCount + previewCount);
   }
 
-  return baseCount + troopTotal(reinforcement.territories[territoryId]);
+  return Math.max(0, baseCount + troopTotal(reinforcement.territories[territoryId]) + previewCount);
 }
 
 function visibleTroopTotalTerritoryIds(ownership: Record<string, string | null>, viewerId: string) {

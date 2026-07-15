@@ -1172,6 +1172,18 @@ async function troopCountFromState(page, territoryId) {
   }, territoryId);
 }
 
+async function troopMarkerCount(page, territoryId) {
+  const text = await page.locator(`[data-troop-marker="${territoryId}"] text`).textContent();
+  return Number(text);
+}
+
+async function waitForTroopMarkerCount(page, territoryId, expectedCount) {
+  await page.waitForFunction(
+    ({ targetId, count }) => document.querySelector(`[data-troop-marker="${targetId}"] text`)?.textContent === String(count),
+    { targetId: territoryId, count: expectedCount },
+  );
+}
+
 async function assertReadyColumnHeadersLeftAligned(page) {
   const columns = await page.locator(".ready-column").evaluateAll((elements) => elements.map((column) => {
     const header = column.querySelector("h2")?.getBoundingClientRect();
@@ -2464,7 +2476,13 @@ async function runTurnFortifyChecks(browser) {
   assert((await page.locator(".troop-section-fortify .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").count()) >= 5, "Adjacent fortify source can move regular troops, cavalry, leader, and local captured spies.");
   assert((await page.getByRole("button", { name: "Remove Boromir spy" }).isDisabled()), "Captured spies originally on the target are visible but disabled.");
 
+  const breeMarkerBeforeFortify = await troopMarkerCount(page, "bree");
+  const shireMarkerBeforeFortify = await troopMarkerCount(page, "shire");
   await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add all" }).click();
+  await waitForTroopMarkerCount(page, "bree", 1);
+  await waitForTroopMarkerCount(page, "shire", shireMarkerBeforeFortify + breeMarkerBeforeFortify - 1);
+  assert(await troopMarkerCount(page, "bree") === 1, "Fortify locally previews removed source troops on the map marker before commit.");
+  assert(await troopMarkerCount(page, "shire") === shireMarkerBeforeFortify + breeMarkerBeforeFortify - 1, "Fortify locally previews added target troops on the map marker before commit.");
   const targetAfterBreeMove = await fortifyTargetUnitSummary(page);
   assert(targetAfterBreeMove.troops >= 5 && targetAfterBreeMove.spies >= 2, "Bulk adjacent fortify moves regular troops, cavalry, leader, and legal captured spies.");
 
@@ -2486,8 +2504,12 @@ async function runTurnFortifyChecks(browser) {
   assert((await page.getByRole("button", { name: "Remove Elrond spy" }).count()) === 0, "Removing remote cavalry automatically returns remote spies to their source.");
 
   await page.getByRole("button", { name: "Cancel Fortify" }).click();
+  await waitForTroopMarkerCount(page, "bree", breeMarkerBeforeFortify);
+  await waitForTroopMarkerCount(page, "shire", shireMarkerBeforeFortify);
   assert((await page.locator(".turn-action-instruction").getByText("Choose an action").count()) === 1, "Canceling fortify returns to normal action choice.");
   assert((await page.locator(".troop-section-fortify").count()) === 0, "Canceling fortify hides the fortify troop section.");
+  assert(await troopMarkerCount(page, "bree") === breeMarkerBeforeFortify, "Canceling fortify clears the local source troop marker preview.");
+  assert(await troopMarkerCount(page, "shire") === shireMarkerBeforeFortify, "Canceling fortify clears the local target troop marker preview.");
 
   await page.getByRole("button", { name: "Fortify" }).click();
   await page.getByRole("button", { name: "Skip" }).click();

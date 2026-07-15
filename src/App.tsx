@@ -359,6 +359,25 @@ function fortifyTotalMovedTroops(movesBySource: FortifyMovesBySource) {
   return total;
 }
 
+function fortifyTroopMarkerPreview(targetTerritoryId: string | null, movesBySource: FortifyMovesBySource) {
+  const preview: Record<string, number> = {};
+  if (!targetTerritoryId) {
+    return preview;
+  }
+
+  for (const [sourceTerritoryId, move] of Object.entries(movesBySource)) {
+    const movedCount = troopTotal(move.troops);
+    if (movedCount <= 0) {
+      continue;
+    }
+
+    preview[sourceTerritoryId] = (preview[sourceTerritoryId] ?? 0) - movedCount;
+    preview[targetTerritoryId] = (preview[targetTerritoryId] ?? 0) + movedCount;
+  }
+
+  return preview;
+}
+
 function fortifyTargetTroops(game: GameState, targetTerritoryId: string | null, movesBySource: FortifyMovesBySource) {
   return targetTerritoryId
     ? addTroops(territoryTroops(game.allocation, targetTerritoryId), fortifyTotalMovedTroops(movesBySource))
@@ -649,9 +668,13 @@ function App() {
     : fortifySetup
       ? [fortifySetup.targetTerritoryId, fortifySetup.selectedSourceTerritoryId].filter((territoryId): territoryId is string => Boolean(territoryId))
       : viewerSelectedTerritoryId;
+  const troopMarkerPreview = useMemo(
+    () => fortifySetup ? fortifyTroopMarkerPreview(fortifySetup.targetTerritoryId, fortifySetup.movesBySource) : {},
+    [fortifySetup],
+  );
   const troopMarkers = useMemo(
-    () => createTroopMarkers(game, allocationPlayerId, gameMapViewerId, turnViewerId),
-    [allocationPlayerId, game, gameMapViewerId, turnViewerId],
+    () => createTroopMarkers(game, allocationPlayerId, gameMapViewerId, turnViewerId, troopMarkerPreview),
+    [allocationPlayerId, game, gameMapViewerId, troopMarkerPreview, turnViewerId],
   );
   const turnReinforcement = game.turn?.reinforcement ?? null;
   const turnProjectedReinforcements = turnPlayerId ? projectReinforcementTroops(game, turnPlayerId) : null;
