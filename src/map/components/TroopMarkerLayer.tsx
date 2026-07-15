@@ -11,8 +11,8 @@ export function TroopMarkerLayer({ markers = [] }: { markers?: readonly TroopMar
     <g className="troop-marker-layer">
       {markers.map((marker) => (
         <g className="troop-marker" data-troop-marker={marker.territoryId} key={marker.territoryId} transform={`translate(${marker.center.x} ${marker.center.y})`}>
-          <circle r="156" />
-          <text dominantBaseline="central" textAnchor="middle">
+          <circle r="187" />
+          <text x="0" y="0" dy="0.08em" dominantBaseline="middle" textAnchor="middle">
             {marker.count}
           </text>
         </g>
