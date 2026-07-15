@@ -200,7 +200,8 @@ const EMPTY_MAP_VISIBLE_INSETS: MapVisibleInsets = {
   top: 0,
 };
 const CARADHRAS_PASS_ICON_SIZE = 620;
-const CARADHRAS_PASS_ICON_Y_OFFSET = -520;
+const CARADHRAS_PASS_ICON_X_OFFSET = -130;
+const CARADHRAS_PASS_ICON_Y_OFFSET = 300;
 
 type MapInsetRefs = {
   actionSectionRef: RefObject<HTMLDivElement | null>;
@@ -278,7 +279,7 @@ function caradhrasPassWeatherMarkers(passState: number) {
   return [
     {
       center: {
-        x: (rivendell.center.x + caradhras.center.x) / 2,
+        x: (rivendell.center.x + caradhras.center.x) / 2 + CARADHRAS_PASS_ICON_X_OFFSET,
         y: (rivendell.center.y + caradhras.center.y) / 2 + CARADHRAS_PASS_ICON_Y_OFFSET,
       },
       href: publicAssetUrl(`caradhras-pass/pass-${iconNumber}.svg`),
