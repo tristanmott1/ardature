@@ -119,6 +119,7 @@ import {
   gameStageLayoutForState,
   gameViewContextForState,
   mapPressModeForGame,
+  mapSelectionUpdateForBackgroundPress,
   mapSelectionUpdateForPress,
   notificationPlayerId,
   pausePanelPolicyForGame,
@@ -1711,6 +1712,26 @@ function App() {
     }
   }
 
+  function pressMapBackground() {
+    if (attackSetup) {
+      return;
+    }
+
+    if (fortifySetup) {
+      clearFortifySourceSelection();
+      return;
+    }
+
+    const updates = mapSelectionUpdateForBackgroundPress({
+      mapPressMode,
+      selections: mapSelections,
+    });
+
+    if (updates) {
+      updateMapSelections(updates);
+    }
+  }
+
   function pressAttackTerritory(territoryId: string) {
     if (!turnPlayerId || !attackSetup) {
       return;
@@ -1766,10 +1787,12 @@ function App() {
     }
 
     if (territoryId === fortifySetup.targetTerritoryId) {
+      clearFortifySourceSelection();
       return;
     }
 
     if (!fortifyEligibleSourceIds(ownership, fortifySetup.targetTerritoryId, turnPlayerId).has(territoryId)) {
+      clearFortifySourceSelection();
       return;
     }
 
@@ -1780,6 +1803,17 @@ function App() {
     if (autoFocusEnabled) {
       requestTerritoryCameraIntent(territoryId);
     }
+  }
+
+  function clearFortifySourceSelection() {
+    if (!fortifySetup?.selectedSourceTerritoryId) {
+      return;
+    }
+
+    setFortifySetup({
+      ...fortifySetup,
+      selectedSourceTerritoryId: null,
+    });
   }
 
   function cancelPendingPick() {
@@ -2945,6 +2979,7 @@ function App() {
         frozen={layout.freezeMapGestures}
         mapData={generatedMapData}
         onTerritoryPress={!layout.freezeMapGestures && mapPressMode ? pressTerritory : undefined}
+        onMapPress={!layout.freezeMapGestures && mapPressMode ? pressMapBackground : undefined}
         onAutoFocusChange={changeAutoFocusEnabled}
         showCameraControls={layout.canUseMapCameraControls}
         territoryStates={territoryStates}

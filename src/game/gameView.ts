@@ -619,7 +619,9 @@ export function mapSelectionUpdateForPress({
     case "allocation":
       return allocationPlayerId && ownership[territoryId] === allocationPlayerId
         ? { allocationSelectedTerritoryId: toggledSelection(selections.allocationSelectedTerritoryId, territoryId) }
-        : null;
+        : selections.allocationSelectedTerritoryId
+          ? { allocationSelectedTerritoryId: null }
+          : null;
     case "draft":
       return canPickTerritory(game, territoryId)
         ? { pendingDraftTerritoryId: territoryId }
@@ -629,12 +631,36 @@ export function mapSelectionUpdateForPress({
     case "reinforcement":
       return turnPlayerId && ownership[territoryId] === turnPlayerId
         ? { turnSelectedTerritoryId: toggledSelection(selections.turnSelectedTerritoryId, territoryId) }
-        : null;
+        : selections.turnSelectedTerritoryId
+          ? { turnSelectedTerritoryId: null }
+          : null;
     case "spy":
       return turnPlayerId && ownership[territoryId] && ownership[territoryId] !== turnPlayerId
         ? { pendingSpyTerritoryId: territoryId }
         : null;
     case null:
+      return null;
+  }
+}
+
+export function mapSelectionUpdateForBackgroundPress({
+  mapPressMode,
+  selections,
+}: Pick<MapSelectionPressContext, "mapPressMode" | "selections">): Partial<MapSelectionState> | null {
+  switch (mapPressMode) {
+    case "allocation":
+      return selections.allocationSelectedTerritoryId
+        ? { allocationSelectedTerritoryId: null }
+        : null;
+    case "inspect":
+      return selections.gameMapSelectedTerritoryId
+        ? { gameMapSelectedTerritoryId: null }
+        : null;
+    case "reinforcement":
+      return selections.turnSelectedTerritoryId
+        ? { turnSelectedTerritoryId: null }
+        : null;
+    default:
       return null;
   }
 }
