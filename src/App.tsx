@@ -554,13 +554,17 @@ function App() {
   const [fortifySetup, setFortifySetup] = useState<FortifySetupState>(null);
   const hostTransportRef = useRef<SyncHostTransport | null>(null);
   const joinTransportRef = useRef<SyncJoinTransport | null>(null);
+  const localPlayerIdRef = useRef<string | null>(restoredSyncHost?.localPlayerId ?? null);
   const previousPhaseRef = useRef(game.phase);
   const lastSentAllocationRef = useRef("");
+  const pendingHostTransferPlayerRef = useRef<string | null>(null);
+  const pendingHostTransferTimeoutRef = useRef<number | null>(null);
   const syncRevisionRef = useRef(restoredSyncHost?.revision ?? 0);
   const lastSnapshotRevisionRef = useRef(0);
   const playerBarRef = useRef<HTMLDivElement | null>(null);
   const upperSectionRef = useRef<HTMLDivElement | null>(null);
   const actionSectionRef = useRef<HTMLDivElement | null>(null);
+  localPlayerIdRef.current = localPlayerId;
 
   useEffect(() => {
     preloadTroopIcons();
@@ -1366,8 +1370,9 @@ function App() {
   }
 
   function acceptHostTransfer(nextGame: GameState, revision: number) {
-    const hostPlayer = localPlayerId
-      ? nextGame.players.find((player) => player.id === localPlayerId)
+    const activeLocalPlayerId = localPlayerIdRef.current;
+    const hostPlayer = activeLocalPlayerId
+      ? nextGame.players.find((player) => player.id === activeLocalPlayerId)
       : null;
     if (!hostPlayer?.color) {
       resetAppToHome();
@@ -1448,6 +1453,18 @@ function App() {
       return;
     }
 
+    if (rawMessage.type === "hostTransferAccepted") {
+      if (pendingHostTransferPlayerRef.current === playerId) {
+        if (pendingHostTransferTimeoutRef.current !== null) {
+          window.clearTimeout(pendingHostTransferTimeoutRef.current);
+        }
+        pendingHostTransferPlayerRef.current = null;
+        pendingHostTransferTimeoutRef.current = null;
+        resetAppToHome();
+      }
+      return;
+    }
+
     if (rawMessage.type === "quit") {
       hostTransportRef.current?.removePeer(playerId);
       setGame((current) => applySyncPlayerQuit(current, playerId));
@@ -1460,11 +1477,12 @@ function App() {
     }
 
     if (rawMessage.type === "hostTransfer") {
-      if (rawMessage.revision <= lastSnapshotRevisionRef.current) {
+      if (rawMessage.revision < lastSnapshotRevisionRef.current) {
         return;
       }
 
       lastSnapshotRevisionRef.current = rawMessage.revision;
+      joinTransportRef.current?.send({ type: "hostTransferAccepted" });
       acceptHostTransfer(rawMessage.game, rawMessage.revision);
       return;
     }
@@ -2351,13 +2369,26 @@ function App() {
   }
 
   function transferHostToPlayer(playerId: string) {
-    if (!isSyncHost || !localPlayerId || !game.hostTransfer) {
+    if (!isSyncHost || !localPlayerId || game.phase !== "paused") {
       return;
     }
 
     const nextGame = transferHostAuthority(game, localPlayerId, playerId);
+    if (nextGame === game) {
+      return;
+    }
+
     const revision = syncRevisionRef.current + 1;
     syncRevisionRef.current = revision;
+    pendingHostTransferPlayerRef.current = playerId;
+    if (pendingHostTransferTimeoutRef.current !== null) {
+      window.clearTimeout(pendingHostTransferTimeoutRef.current);
+    }
+    pendingHostTransferTimeoutRef.current = window.setTimeout(() => {
+      pendingHostTransferPlayerRef.current = null;
+      pendingHostTransferTimeoutRef.current = null;
+      resetAppToHome();
+    }, 6000);
     hostTransportRef.current?.sendToPeer(playerId, {
       type: "hostTransfer",
       revision,
@@ -2368,7 +2399,6 @@ function App() {
         hostTransportRef.current?.sendToPeer(player.id, { type: "hostEnded" });
       }
     }
-    resetAppToHome();
   }
 
   function pauseCurrentGame() {
@@ -2439,6 +2469,11 @@ function App() {
   }
 
   function resetAppToHome() {
+    if (pendingHostTransferTimeoutRef.current !== null) {
+      window.clearTimeout(pendingHostTransferTimeoutRef.current);
+    }
+    pendingHostTransferPlayerRef.current = null;
+    pendingHostTransferTimeoutRef.current = null;
     endSyncTransports();
     clearLocalGame();
     clearSyncHostGame();
@@ -2651,6 +2686,7 @@ function App() {
           <PausePanel
             canRemove={pausePanelPolicy.canRemove}
             canResume={pausePanelPolicy.canResume}
+            hostTransferRequired={pausePanelPolicy.hostTransferRequired}
             localPlayerId={localPlayerId}
             mode={game.mode}
             onRemovePlayer={removePlayer}

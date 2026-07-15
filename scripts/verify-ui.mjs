@@ -365,10 +365,12 @@ async function runSourceChecks() {
   assert(syncMessagesSource.includes('command.type === "commitAttack"') && syncMessagesSource.includes('command.type === "rollBattle"') && syncMessagesSource.includes('command.type === "retreatBattle"'), "Sync message validation covers battle commands.");
   assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)") && battleModalSource.includes("/ 10") && battleModalSource.includes("defeated") && battleModalSource.includes("battle-pip"), "Battle modal renders pip dice, retreat, result text, and one-decimal scores out of ten.");
   assert(battleModalSource.includes("function BattleDiceRows") && battleModalSource.includes("latestDice ? [...latestDice].sort") && battleModalSource.includes('battle.result.type === "attackerWon"') && battleModalSource.includes('battle.result.type === "defenderWon"'), "Battle modal displays sorted latest-roll dice and keeps final dice in victory layouts.");
-  assert(gameTypesSource.includes("export type PendingResolution") && gameTypesSource.includes("export type HostTransferState") && gameStateSource.includes("function confirmPendingElimination") && gameStateSource.includes("function restartVictoryGameToSetup") && gameStateSource.includes("function transferHostAuthority"), "Game state has explicit pending elimination, victory restart, and forced host-transfer helpers.");
+  assert(gameTypesSource.includes("export type PendingResolution") && gameTypesSource.includes("export type HostTransferState") && gameStateSource.includes("function confirmPendingElimination") && gameStateSource.includes("function restartVictoryGameToSetup") && gameStateSource.includes("function transferHostAuthority"), "Game state has explicit pending elimination, victory restart, and host-transfer helpers.");
   assert(gameViewSource.includes('type: "elimination"') && gameViewSource.includes('type: "victory"') && overlaysSource.includes("function EliminationDialog") && overlaysSource.includes("function VictoryDialog"), "Elimination and victory render through explicit overlay types.");
   assert(!gameStateSource.includes("markDeadSpiesForEliminatedPlayers") && gameStateSource.includes("beginPostBattleResolution") && gameStateSource.includes("killPlayerSpy"), "Conquest does not silently kill eliminated spies before the elimination confirmation.");
-  assert(syncMessagesSource.includes('type: "hostTransfer"') && appSource.includes("acceptHostTransfer") && appSource.includes('type: "hostTransfer"') && appSource.includes('setSyncRole("host")'), "Sync host transfer uses an explicit terminal transfer message and the selected joiner becomes host authority.");
+  assert(syncMessagesSource.includes('type: "hostTransfer"') && syncMessagesSource.includes('type: "hostTransferAccepted"') && appSource.includes("acceptHostTransfer") && appSource.includes('type: "hostTransfer"') && appSource.includes('type: "hostTransferAccepted"') && appSource.includes('setSyncRole("host")'), "Sync host transfer uses an explicit acknowledged terminal transfer message and the selected joiner becomes host authority.");
+  assert(appSource.includes("if (rawMessage.revision < lastSnapshotRevisionRef.current)") && appSource.includes("acceptHostTransfer(rawMessage.game, rawMessage.revision)"), "Host-transfer terminal snapshots accept the current revision instead of being rejected like duplicate ordinary snapshots.");
+  assert(gameViewSource.includes("connectedSyncPlayers.length > 1") && gameViewSource.includes("hostTransferRequired || connectedSyncPlayers.length > 1") && !appSource.includes("!game.hostTransfer)"), "Host transfer is available on normal sync pause, not only forced host-transfer pause.");
   assert(combatSource.includes("COMBAT_SCORE_VALUES") && combatSource.includes("challengeScoreForTroops") && combatSource.includes("rollCombatDice") && combatSource.includes("sampleCasualty"), "Combat math stores centralized score, challenge, dice, and casualty helpers.");
   assert(gameStateSource.includes("function randomCompleteAllAllocations") && gameStateSource.includes("function randomArmyMarker") && gameStateSource.includes("function bordersOpponentTerritory"), "Random allocation has dedicated army and border placement helpers.");
   assert(gameStateSource.includes("outgoingTerritoryIds(territoryId).some") && gameStateSource.includes("ownership[connectedId] !== playerId"), "Random allocation uses outgoing directed connections to find opponent borders.");
@@ -3456,6 +3458,47 @@ async function runSyncHostLossChecks(browser) {
   await joiner.close();
 }
 
+async function runSyncVoluntaryHostTransferChecks(browser) {
+  console.log("Checking sync voluntary host transfer");
+  const host = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const joiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  host.setDefaultTimeout(20000);
+  joiner.setDefaultTimeout(20000);
+
+  await connectSyncPair(host, joiner, {
+    hostName: "Elrond",
+    hostColor: "Green",
+    joinerName: "Boromir",
+    joinerColor: "Red",
+  });
+  await host.getByRole("button", { name: "Start game" }).click();
+  await host.waitForSelector('.app-shell[data-app-phase="draft"]', { timeout: 15000 });
+  await joiner.waitForSelector('.app-shell[data-app-phase="draft"]', { timeout: 15000 });
+  await host.getByRole("button", { name: "Pause draft" }).click();
+  await host.getByRole("dialog", { name: "Paused" }).waitFor();
+  await joiner.getByRole("dialog", { name: "Paused" }).waitFor({ timeout: 15000 });
+  await capture(host, "28b-sync-voluntary-transfer-offered-mobile.png");
+  assert((await host.getByRole("dialog", { name: "Paused" }).getByText("Transfer host").count()) === 1, "Normal sync host pause offers voluntary host transfer.");
+  assert((await host.getByRole("dialog", { name: "Paused" }).getByText("Transfer host before resuming.").count()) === 0, "Normal sync host pause does not use forced-transfer wording.");
+  assert(await host.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Resume" }).isEnabled(), "Normal sync host pause can still resume when transfer is optional.");
+  await host.getByRole("button", { name: "Transfer to Boromir" }).click();
+  try {
+    await joiner.getByRole("dialog", { name: "Paused" }).waitFor({ timeout: 15000 });
+  } catch (error) {
+    const phase = await joiner.locator(".app-shell").getAttribute("data-app-phase").catch(() => "missing");
+    const text = ((await joiner.locator("body").textContent().catch(() => "")) ?? "").replace(/\s+/g, " ").slice(0, 240);
+    throw new Error(`Transferred joiner did not become paused host. phase=${phase}; text=${text}`);
+  }
+  await host.waitForSelector('.app-shell[data-app-phase="home"]', { timeout: 15000 });
+  await joiner.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").waitFor({ timeout: 15000 });
+  await capture(joiner, "28c-sync-voluntary-transfer-new-host-mobile.png");
+  assert((await joiner.locator('.pause-modal [data-player-status="disconnected"]').filter({ hasText: "Elrond" }).count()) === 1, "Voluntary transfer keeps the old host as a disconnected recoverable player.");
+  assert((await joiner.getByRole("dialog", { name: "Paused" }).locator(".qr-code[data-qr-text]").count()) === 1, "New host shows a recovery QR after voluntary transfer.");
+
+  await host.close();
+  await joiner.close();
+}
+
 async function runSyncTerminalEventChecks(browser) {
   console.log("Checking sync terminal events");
   const endedHost = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
@@ -3499,7 +3542,7 @@ async function runSyncTerminalEventChecks(browser) {
   assert((await removeHost.getByRole("button", { name: "Remove Denethor" }).count()) === 0, "Host setup removes the player after sending removed.");
 
   await loadForcedHostTransferFixture(forcedTransferHost);
-  await capture(forcedTransferHost, "28b-sync-forced-host-transfer-mobile.png");
+  await capture(forcedTransferHost, "28d-sync-forced-host-transfer-mobile.png");
   assert((await forcedTransferHost.getByRole("dialog", { name: "Paused" }).getByText("Transfer host before resuming.").count()) === 1, "Forced host transfer pause tells the host to transfer before resuming.");
   assert(await forcedTransferHost.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Resume" }).isDisabled(), "Forced host transfer pause disables resume.");
 
@@ -3604,6 +3647,7 @@ async function main() {
     await runSyncRestartChecks(browser);
     await runSyncRecoveryChecks(browser);
     await runSyncHostLossChecks(browser);
+    await runSyncVoluntaryHostTransferChecks(browser);
     await runSyncTerminalEventChecks(browser);
 
     console.log("Closing browser");

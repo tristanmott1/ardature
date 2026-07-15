@@ -817,6 +817,7 @@ export function canAdvanceAllocationWaiting(game: GameState, isSyncHost: boolean
 export function pausePanelPolicyForGame(game: GameState, isSyncHost: boolean): PausePanelPolicy {
   const canControlPausedGame = game.mode === "local" || isSyncHost;
   const hostTransferRequired = Boolean(game.hostTransfer);
+  const connectedSyncPlayers = game.players.filter((player) => player.connectionStatus === "connected");
 
   return {
     canRemove: canControlPausedGame && !hostTransferRequired,
@@ -824,7 +825,7 @@ export function pausePanelPolicyForGame(game: GameState, isSyncHost: boolean): P
       (game.mode === "local" || (isSyncHost && game.players.every((player) => player.connectionStatus === "connected"))),
     canRestart: canControlPausedGame,
     canScanRecoveryAnswer: isSyncHost,
-    canTransferHost: isSyncHost && hostTransferRequired,
+    canTransferHost: isSyncHost && (hostTransferRequired || connectedSyncPlayers.length > 1),
     hostTransferRequired,
   };
 }

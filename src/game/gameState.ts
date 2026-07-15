@@ -1327,24 +1327,27 @@ export function restartVictoryGameToSetup(state: GameState): GameState {
 }
 
 export function transferHostAuthority(state: GameState, oldHostPlayerId: string | null, newHostPlayerId: string): GameState {
-  if (state.mode !== "sync" || state.phase !== "paused" || !state.hostTransfer || state.hostTransfer.oldHostPlayerId !== oldHostPlayerId) {
+  if (state.mode !== "sync" || state.phase !== "paused" || !oldHostPlayerId || oldHostPlayerId === newHostPlayerId) {
     return state;
   }
 
   const newHost = state.players.find((player) => player.id === newHostPlayerId);
-  if (!newHost || newHost.connectionStatus !== "connected" || newHost.id === oldHostPlayerId) {
+  const oldHost = state.players.find((player) => player.id === oldHostPlayerId);
+  if (!oldHost || !newHost || newHost.connectionStatus !== "connected") {
     return state;
   }
 
-  return removeEliminatedPlayer({
+  const transferred = {
     ...state,
     players: state.players.map((player) => player.id === newHostPlayerId
-      ? { ...player, connectionStatus: "connected" }
-      : player.id === state.hostTransfer?.oldHostPlayerId
-        ? player
-        : { ...player, connectionStatus: "disconnected" }),
+      ? { ...player, connectionStatus: "connected" as const }
+      : { ...player, connectionStatus: "disconnected" as const }),
     hostTransfer: null,
-  }, state.hostTransfer.oldHostPlayerId);
+  };
+
+  return state.hostTransfer?.oldHostPlayerId === oldHostPlayerId
+    ? removeEliminatedPlayer(transferred, oldHostPlayerId)
+    : transferred;
 }
 
 export function commitReinforcements(state: GameState, playerId: string, reinforcement: ReinforcementState): GameState {

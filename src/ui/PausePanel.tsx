@@ -6,6 +6,7 @@ import { PlayerIdentity } from "./PlayerChrome";
 export function PausePanel({
   canRemove,
   canResume,
+  hostTransferRequired,
   localPlayerId,
   mode,
   onRemovePlayer,
@@ -19,6 +20,7 @@ export function PausePanel({
 }: {
   canRemove: boolean;
   canResume: boolean;
+  hostTransferRequired: boolean;
   localPlayerId: string | null;
   mode: "local" | "sync";
   onRemovePlayer: (playerId: string) => void;
@@ -65,7 +67,7 @@ export function PausePanel({
         </div>
         {onTransferHost ? (
           <div className="host-transfer-panel">
-            <p className="sync-status">Transfer host before resuming.</p>
+            <p className="sync-status">{hostTransferRequired ? "Transfer host before resuming." : "Transfer host"}</p>
             {transferPlayers.map((player) => (
               <button className="secondary icon-text-button wide-button" type="button" key={player.id} onClick={() => onTransferHost(player.id)}>
                 Transfer to {player.name}

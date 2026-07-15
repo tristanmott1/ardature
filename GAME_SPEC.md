@@ -839,7 +839,7 @@ Elimination is resolved after the battle result is dismissed:
 - Confirming elimination removes that player from the game, disconnects that peer immediately if sync transport exists, kills that player's spy whether it was available or captured, and continues the current player's turn.
 - Elimination does not redistribute anything because the eliminated player owns no territories.
 - Eliminated players are forgotten by the active game. They cannot reconnect, receive reinforcements, take turns, or appear in future restart lobbies.
-- If the eliminated player is the current sync host and at least two players remain, confirmation moves the game into a forced paused host-transfer state before the player is removed. The game cannot resume until the host transfers authority to a different connected player. After transfer succeeds, the old host is immediately removed/disconnected and the new host may resume.
+- If the eliminated player is the current sync host and at least two players remain, confirmation moves the game into a forced paused host-transfer state before the player is removed. The game cannot resume until the host transfers authority to a different connected player. After transfer succeeds, the old host is removed from the game and the new host may resume after all remaining players are connected or recovered.
 
 If elimination leaves exactly one remaining player, the game is over instead of showing the normal elimination confirmation:
 
@@ -1254,13 +1254,13 @@ The host applies valid actions, persists active sync-host state separately from 
 
 Host transfer is a paused sync-only authority change:
 
-- Transfer can be started only by the current connected host while the game is paused.
+- Transfer can be started by the current connected host whenever a sync game is paused and at least one non-host player is currently connected.
 - The destination must be a currently connected non-host player.
-- The old host remains the source of truth until the chosen player acknowledges the transfer and receives the latest authoritative snapshot.
-- During transfer, resume is disabled for everyone.
-- Existing WebRTC data channels are host-centered and cannot be reassigned. The old host's still-live channels are used only as a temporary signaling bridge so remaining connected peers can establish channels to the new host.
-- No gameplay may resume until the new host has the authoritative snapshot and every remaining player is either connected to the new host or explicitly disconnected for the new host's recovery flow.
-- After successful transfer, the chosen player becomes the new host and broadcaster/recovery authority. The old host is then removed from the game, disconnected, and returned home through the same local outcome as a removed player.
+- Voluntary transfer does not block resume before it is chosen; forced transfer after host elimination does block resume.
+- The old host remains the source of truth until the chosen player receives the latest authoritative paused snapshot and acknowledges the transfer.
+- Existing WebRTC data channels are host-centered and cannot be reassigned. The chosen player receives the transfer snapshot and becomes the new host. Every other connected peer returns home and can rejoin through the new host's pause recovery QR.
+- During voluntary transfer, the old host app returns home and that player remains in the game as disconnected/recoverable.
+- During forced transfer, the old host is eliminated and removed from the game after the chosen player becomes host.
 - If the old host was eliminated and at least two players remain, the game enters a forced pause that cannot resume until host transfer succeeds.
 - If the host is gone before transfer completes, there is no source of truth to transfer from. Recovery must use the old host's persisted paused model after that host device returns.
 

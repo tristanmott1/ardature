@@ -679,7 +679,7 @@ export class SyncHostTransport {
   sendToPeer(playerId: string, message: SyncWireMessage) {
     const peer = this.peers.get(playerId);
 
-    if (peer && !peer.closedNotified && peer.status === "connected") {
+    if (peer && !peer.closedNotified) {
       sendChannelMessage(peer.channel, message);
     }
   }

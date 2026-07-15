@@ -27,6 +27,9 @@ export type ArdatureSyncMessage =
       type: "quit";
     }
   | {
+      type: "hostTransferAccepted";
+    }
+  | {
       type: "hostEnded";
     }
   | {
@@ -72,7 +75,7 @@ export function isArdatureSyncMessage(value: unknown): value is ArdatureSyncMess
     return Number.isInteger(message.revision) && isGameState(message.game);
   }
 
-  return message.type === "quit" || message.type === "hostEnded" || message.type === "removed";
+  return message.type === "quit" || message.type === "hostTransferAccepted" || message.type === "hostEnded" || message.type === "removed";
 }
 
 function isGameState(value: unknown): value is GameState {

@@ -278,14 +278,16 @@ Connected pause UI is different:
 - Connected pause may show roster and connection statuses because the device is still receiving source-of-truth data from the host.
 - A disconnected/reconnecting joiner must never infer or display those statuses from stale local state.
 
-Host transfer is available only from connected sync pause:
+Host transfer is available from connected sync pause:
 
 - Only the current connected host can start it.
 - The destination must be a currently connected non-host player.
-- Resume is disabled while transfer is pending.
-- The old host remains source of truth until the selected player receives the latest authoritative snapshot and acknowledges becoming host.
-- Existing channels are host-centered, so the old host acts only as a temporary signaling bridge while remaining peers connect to the new host.
-- After transfer succeeds, the old host is removed/disconnected and returns home.
+- In normal paused games, transfer is optional and resume remains available until the host chooses to transfer.
+- If the old host was eliminated, transfer is required and resume is disabled until transfer succeeds.
+- The old host remains source of truth until the selected player receives the latest authoritative paused snapshot, acknowledges the transfer, and becomes host.
+- Existing channels are host-centered, so they are not migrated. The selected player receives the transfer snapshot, every other connected peer returns home, and those peers can rejoin through the new host's pause recovery QR.
+- During a voluntary transfer, the old host app returns home and that player remains in the game as disconnected/recoverable.
+- During a forced elimination transfer, the old host is removed from the game after the selected player becomes host.
 - If host transfer is required because the old host was eliminated, the game cannot resume until this transfer succeeds.
 
 Sync should share committed game facts promptly enough for the host to resume without outside help:
