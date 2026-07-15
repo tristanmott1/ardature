@@ -17,11 +17,13 @@ const DIE_PIPS: Record<number, number[]> = {
 
 export function BattleModal({
   attacker,
+  attackerTerritoryName,
   battle,
   canChallenge,
   canControl,
   defender,
   defenderSpies,
+  defenderTerritoryName,
   onChallenge,
   onDismiss,
   onRetreat,
@@ -29,11 +31,13 @@ export function BattleModal({
   players,
 }: {
   attacker: GamePlayer;
+  attackerTerritoryName: string;
   battle: BattleState;
   canChallenge: boolean;
   canControl: boolean;
   defender: GamePlayer;
   defenderSpies: CapturedSpyView[];
+  defenderTerritoryName: string;
   onChallenge: () => void;
   onDismiss: () => void;
   onRetreat: () => void;
@@ -94,7 +98,7 @@ export function BattleModal({
     <div className="modal-scrim battle-scrim">
       <section className="modal-panel battle-modal" role="dialog" aria-label="Battle">
         {message ? <p className="battle-message">{message}</p> : <p className="battle-message" aria-hidden="true">&nbsp;</p>}
-        <strong className="battle-player-name">{defender.name}</strong>
+        <strong className="battle-player-name">{defender.name} at {defenderTerritoryName}</strong>
         <BattleTroops player={defender} players={players} spies={defenderSpies} troops={battle.defendingTroops} />
         <BattleScore score={battle.defenderScore} />
         <div className="battle-dice-area">
@@ -104,7 +108,7 @@ export function BattleModal({
         </div>
         <BattleScore score={battle.attackerScore} />
         <BattleTroops player={attacker} players={players} troops={battle.attackingTroops} />
-        <strong className="battle-player-name">{attacker.name}</strong>
+        <strong className="battle-player-name">{attacker.name} at {attackerTerritoryName}</strong>
         {battle.result ? (
           <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl} aria-label="Dismiss battle">
             <Check size={20} />

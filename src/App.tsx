@@ -290,13 +290,28 @@ const MOVE_FIRST_TROOP_TYPES = [...LEAVE_BEHIND_TROOP_TYPES].reverse();
 
 function movableTroopsLeavingReserve(sourceTroops: TroopCounts, reserveCount: number, allowedTypes: TroopType[] = LEAVE_BEHIND_TROOP_TYPES) {
   const movableTroops = createTroopCounts();
+  const allowedTypeSet = new Set(allowedTypes);
   let remainingReserve = Math.max(0, reserveCount);
 
+  // Troops that cannot move already satisfy the leave-behind requirement.
+  for (const troopType of LEAVE_BEHIND_TROOP_TYPES) {
+    if (allowedTypeSet.has(troopType)) {
+      continue;
+    }
+
+    remainingReserve = Math.max(0, remainingReserve - sourceTroops[troopType]);
+  }
+
+  // Reserve movable troops only when the immovable troops are not enough.
   for (const troopType of LEAVE_BEHIND_TROOP_TYPES) {
     const count = sourceTroops[troopType];
+    if (!allowedTypeSet.has(troopType)) {
+      continue;
+    }
+
     const reserved = Math.min(count, remainingReserve);
     remainingReserve -= reserved;
-    movableTroops[troopType] = allowedTypes.includes(troopType) ? count - reserved : 0;
+    movableTroops[troopType] = count - reserved;
   }
 
   return movableTroops;
@@ -2329,6 +2344,10 @@ function App() {
 
     clearActiveGameUiState();
     setGame(restartVictoryGameToSetup);
+    if (isSyncHost) {
+      setSyncQrText("");
+      void createHostOffer();
+    }
   }
 
   function transferHostToPlayer(playerId: string) {
@@ -2403,6 +2422,10 @@ function App() {
     setDecisionPrompt(null);
     clearActiveGameUiState();
     setGame((current) => restartPausedGameToSetup(current, isSyncHost));
+    if (isSyncHost) {
+      setSyncQrText("");
+      void createHostOffer();
+    }
   }
 
   function clearActiveGameUiState() {
@@ -2560,16 +2583,20 @@ function App() {
       case "battle": {
         const attacker = activeBattle ? game.players.find((player) => player.id === activeBattle.attackerPlayerId) ?? null : null;
         const defender = activeBattle ? game.players.find((player) => player.id === activeBattle.defenderPlayerId) ?? null : null;
+        const sourceTerritory = activeBattle ? territoryForId(activeBattle.sourceTerritoryId) : null;
+        const targetTerritory = activeBattle ? territoryForId(activeBattle.targetTerritoryId) : null;
 
-        return activeBattle && attacker && defender
+        return activeBattle && attacker && defender && sourceTerritory && targetTerritory
           ? (
             <BattleModal
               attacker={attacker}
+              attackerTerritoryName={sourceTerritory.name}
               battle={activeBattle}
               canChallenge={canChallengeBattle}
               canControl={canControlBattle}
               defender={defender}
               defenderSpies={battleDefenderSpies}
+              defenderTerritoryName={targetTerritory.name}
               onChallenge={submitCurrentBattleChallenge}
               onDismiss={dismissCurrentBattle}
               onRetreat={() => setDecisionPrompt("retreat")}

@@ -973,6 +973,10 @@ async function assertCompactPlayerRowsAligned(page, selector, message) {
 }
 
 async function assertBattleLayoutSymmetric(page, message) {
+  const battlePlayerNames = await page.locator(".battle-player-name").evaluateAll((elements) =>
+    elements.map((element) => element.textContent ?? ""));
+  assert(battlePlayerNames.length === 2 && battlePlayerNames.every((name) => name.includes(" at ")), `${message}: battle player labels include territory names.`);
+
   const gaps = await page.locator(".battle-modal").evaluate((modal) => {
     const playerNames = Array.from(modal.querySelectorAll(".battle-player-name")).map((element) => element.getBoundingClientRect());
     const troopSlots = Array.from(modal.querySelectorAll(".battle-troops")).map((element) => element.getBoundingClientRect());
@@ -2471,9 +2475,10 @@ async function runTurnFortifyChecks(browser) {
   await page.waitForFunction(() => document.querySelector(".troop-section-fortify .allocation-target")?.textContent?.includes("Rivendell to Shire"));
   await capture(page, "19e-fortify-remote-source-mobile.png");
   assert(!(await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add cavalry" }).isDisabled()), "Remote fortify source can move cavalry.");
-  assert(await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add heavy" }).isDisabled(), "Remote fortify source cannot move heavy troops.");
+  assert(await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add elite" }).isDisabled(), "Remote fortify source cannot move regular troops.");
   assert(await page.getByRole("button", { name: "Add Elrond spy" }).isDisabled(), "Remote captured spy cannot move before same-source cavalry.");
   await page.locator(".troop-section-fortify .troop-action-row").nth(0).getByRole("button", { name: "Add all" }).click();
+  assert(!(await page.locator(".troop-section-fortify .troop-action-row").nth(1).getByRole("button", { name: "Remove cavalry" }).isDisabled()), "Bulk remote fortify moves cavalry even when another troop type is the leave-behind reserve.");
   assert((await page.locator(".troop-section-fortify .troop-action-row").nth(1).locator(".captured-spy-icon").count()) >= 3, "Target row includes spies moved from the current remote source.");
   await page.locator(".troop-section-fortify .troop-action-row").nth(1).getByRole("button", { name: "Remove all" }).click();
   assert((await page.getByRole("button", { name: "Remove Elrond spy" }).count()) === 0, "Removing remote cavalry automatically returns remote spies to their source.");
@@ -2777,7 +2782,7 @@ async function loadTurnFortifyFixture(page) {
     shire: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
     bree: { heavy: 2, cavalry: 1, elite: 1, leader: 1 },
     "north-downs": { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
-    rivendell: { heavy: 1, cavalry: 2, elite: 1, leader: 0 },
+    rivendell: { heavy: 0, cavalry: 1, elite: 1, leader: 0 },
   };
   state.allocation.playerAllocations.opponent.territories = {
     nurn: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
@@ -3237,6 +3242,54 @@ async function runSyncReadyPageChecks(browser) {
   await joiner.close();
 }
 
+async function runSyncRestartChecks(browser) {
+  console.log("Checking sync restart cleanup");
+  const host = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const joiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const newcomer = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  host.setDefaultTimeout(20000);
+  joiner.setDefaultTimeout(20000);
+  newcomer.setDefaultTimeout(20000);
+
+  await connectSyncPair(host, joiner, {
+    hostName: "Elrond",
+    hostColor: "Green",
+    joinerName: "Boromir",
+    joinerColor: "Red",
+  });
+  await host.getByRole("button", { name: "Start game" }).click();
+  await host.waitForSelector('.app-shell[data-app-phase="draft"]', { timeout: 15000 });
+  await joiner.waitForSelector('.app-shell[data-app-phase="draft"]', { timeout: 15000 });
+  await host.getByRole("button", { name: "Pause draft" }).click();
+  await host.getByRole("dialog", { name: "Paused" }).waitFor();
+  await host.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart game" }).click();
+  await host.getByRole("dialog", { name: "Restart this game and return to setup?" }).getByRole("button", { name: "Restart game" }).click();
+  await host.waitForSelector('.app-shell[data-app-phase="setup"]', { timeout: 15000 });
+  await joiner.waitForSelector('.app-shell[data-app-phase="setup"]', { timeout: 15000 });
+  await host.locator(".qr-code[data-qr-text]").waitFor({ timeout: 15000 });
+  await capture(host, "16c-sync-restart-lobby-mobile.png");
+  const restartedNames = await host.locator(".player-row input").evaluateAll((inputs) =>
+    inputs.map((input) => input.value));
+  assert(restartedNames.includes("Elrond") && restartedNames.includes("Boromir"), "Sync restart keeps connected player identities in the setup lobby.");
+  assert((await host.locator(".recovery-slot-list").count()) === 0, "Sync restart setup lobby does not expose active-game recovery slots.");
+
+  await newcomer.goto(baseUrl);
+  await newcomer.evaluate(() => localStorage.clear());
+  await newcomer.reload();
+  await newcomer.getByRole("button", { name: "Sync" }).click();
+  await newcomer.getByLabel("Sync player name").fill("Gimli");
+  await newcomer.getByRole("button", { name: "Join" }).click();
+  await pasteScannerText(newcomer, await qrText(host));
+  await newcomer.waitForSelector(".qr-code[data-qr-text]", { timeout: 15000 });
+  await capture(newcomer, "16d-sync-restart-normal-join-answer-mobile.png");
+  assert((await newcomer.locator(".recovery-slot-list").count()) === 0, "A new player scanning after sync restart gets the normal join answer flow, not recovery slots.");
+  assert((await newcomer.getByText("No disconnected players").count()) === 0, "A new player scanning after sync restart is not shown stale recovery state.");
+
+  await host.close();
+  await joiner.close();
+  await newcomer.close();
+}
+
 async function runSyncRecoveryChecks(browser) {
   console.log("Checking sync recovery");
   const host = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
@@ -3548,6 +3601,7 @@ async function main() {
     await runNotificationQueueChecks(browser);
     await runSyncEntryChecks(mobile);
     await runSyncReadyPageChecks(browser);
+    await runSyncRestartChecks(browser);
     await runSyncRecoveryChecks(browser);
     await runSyncHostLossChecks(browser);
     await runSyncTerminalEventChecks(browser);
