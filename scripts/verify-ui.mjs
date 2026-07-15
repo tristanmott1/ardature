@@ -10,6 +10,8 @@ const chromePaths = [
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
   "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
 ];
+const fixtureInitPages = new WeakSet();
+const fixtureWindowNamePrefix = "ardature-fixture:";
 
 function assert(condition, message) {
   if (!condition) {
@@ -183,9 +185,11 @@ async function runSourceChecks() {
   assert(!appSource.includes("generatedMapConnections") && !gameStateSource.includes("generatedMapConnections") && !gameViewSource.includes("generatedMapConnections"), "Gameplay code does not import the old ambiguous generated connection map.");
   assert(!appSource.includes("generatedDirectedMapConnections") && !gameStateSource.includes("generatedDirectedMapConnections") && !gameViewSource.includes("generatedDirectedMapConnections"), "Gameplay code does not import the raw generated directed graph.");
   assert(mapGraphSource.includes("createCaradhrasPassState") && mapGraphSource.includes("driftCaradhrasPassState") && mapGraphSource.includes("isCaradhrasPassOpen"), "Caradhras pass state helpers are centralized.");
-  assert(mapGraphSource.includes("baseOutgoingTerritoryIds") && mapGraphSource.includes("outgoingTerritoryIds(territoryId: string, caradhrasPassState: number)") && mapGraphSource.includes("isCaradhrasPassConnection"), "Active directed graph filtering lives in mapGraph.");
+  assert(mapGraphSource.includes("baseOutgoingTerritoryIds") && mapGraphSource.includes("outgoingTerritoryIds(territoryId: string, caradhrasPassState: number | null)") && mapGraphSource.includes("isCaradhrasPassConnection"), "Active directed graph filtering lives in mapGraph.");
   assert(mapGraphSource.includes("directedDistanceFromAny") && mapGraphSource.includes("directedOwnedSourcesReachingTarget") && mapGraphSource.includes("caradhrasPassState"), "Directed gameplay graph helpers consume active pass state.");
-  assert(gameTypesSource.includes("caradhrasPassState: number") && gameStateSource.includes("caradhrasPassState: createCaradhrasPassState()") && gameStateSource.includes("caradhrasPassState: driftCaradhrasPassState(state.caradhrasPassState)"), "GameState owns Caradhras pass state and drifts it on turn advance.");
+  assert(mapGraphSource.includes("{ delta: -1, weight: 25 }") && mapGraphSource.includes("{ delta: 0, weight: 20 }") && mapGraphSource.includes("{ delta: 1, weight: 25 }"), "Caradhras pass drift uses the current 15/25/20/25/15 distribution.");
+  assert(gameTypesSource.includes("caradhrasPassState: number | null") && gameStateSource.includes("caradhrasPassState: null") && gameStateSource.includes("caradhrasPassState: state.caradhrasPassState ?? createCaradhrasPassState()") && gameStateSource.includes("caradhrasPassState: driftCaradhrasPassState(state.caradhrasPassState)"), "GameState keeps Caradhras pass null before first turn, samples it at turn start, and drifts it on turn advance.");
+  assert(appSource.includes("regularTurnPhaseHasWeather") && appSource.includes('phase === "turn" || phase === "turnHandoff" || phase === "paused"'), "Caradhras pass icon renders only during regular-turn game stages.");
   assert(!mapConnectionsSource.includes("shipRoute") && !gameStateSource.includes("shipRoute") && !syncMessagesSource.includes("shipRoute"), "Visual ship routes are not consumed by gameplay or sync code.");
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
   assert(!mapDataSource.includes("Infinity"), "Generated map data has no Infinity values.");
@@ -216,9 +220,9 @@ async function runSourceChecks() {
       gameSpecDocs.includes("| Rhûn | 4 heavy |"),
     "User-facing names preserve required special characters.",
   );
-  assert(serviceWorkerSource.includes('const CACHE_NAME = "ardature-v4"'), "Service worker cache version is bumped for refreshed shell assets.");
+  assert(serviceWorkerSource.includes('const CACHE_NAME = "ardature-v5"'), "Service worker cache version is bumped for refreshed shell assets.");
   assert(caradhrasPassIconFiles.filter((fileName) => /^pass-\d\d\.svg$/.test(fileName)).length === 10, "Caradhras pass has ten committed SVG icons.");
-  assert(caradhrasPassIconSources.every((source) => /<circle[^>]+r="58"[^>]+stroke="#ffffff"/.test(source) || /<circle[^>]+r="58"[^>]+fill="none"[^>]+stroke="#ffffff"/.test(source)), "Every Caradhras pass icon uses a white outer circle outline.");
+  assert(caradhrasPassIconSources.every((source) => !source.includes('stroke="#ffffff"') && !source.includes('fill="none"')), "Caradhras pass icons do not render an outer circle outline.");
   assert(Array.from({ length: 10 }, (_, index) => `./caradhras-pass/pass-${String(index + 1).padStart(2, "0")}.svg`).every((asset) => serviceWorkerSource.includes(asset)), "Service worker precaches every Caradhras pass icon.");
   assert(territoryLookupSource.includes("territoryForId") && !appSource.includes("generatedMapData.territories.find") && !gameSectionsSource.includes("generatedMapData.territories.find") && !gameViewSource.includes("new Map<string, GeneratedTerritoryData>"), "Territory lookup uses one shared generated-data helper.");
   assert(mapWidth === sourceWidth * 10 + 3000 && mapHeight === sourceHeight * 10 + 3000, "Generated app data includes the 1500-unit display frame.");
@@ -2206,16 +2210,14 @@ async function runCaradhrasPassChecks(page) {
   console.log("Checking Caradhras pass dynamics");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
-  const openState = readOnlyVisibilityGameState(territoryIds);
-  openState.caradhrasPassState = 5;
+  const preTurnState = readOnlyVisibilityGameState(territoryIds);
+  preTurnState.caradhrasPassState = 5;
+  await loadLocalGameFixture(page, preTurnState, '.app-shell[data-app-phase="gameMap"]');
+  assert((await page.locator('[data-weather-marker="caradhras-pass"]').count()) === 0, "Caradhras pass icon is hidden before regular turns even if old state exists.");
 
-  await page.goto(baseUrl);
-  await page.evaluate((state) => {
-    localStorage.clear();
-    localStorage.setItem("ardature.localGame.v1", JSON.stringify(state));
-  }, openState);
-  await page.reload();
-  await page.waitForSelector('.app-shell[data-app-phase="gameMap"]');
+  const openState = turnSpyGameState(territoryIds);
+  openState.caradhrasPassState = 5;
+  await loadLocalGameFixture(page, openState, '.app-shell[data-app-phase="turn"]');
   await page.locator('[data-weather-marker="caradhras-pass"]').waitFor({ timeout: 15000 });
   await clickTerritory(page, "rivendell");
   assert((await page.locator('[data-weather-marker="caradhras-pass"]').getAttribute("href"))?.includes("pass-05.svg"), "Open Caradhras pass state renders the matching icon.");
@@ -2231,26 +2233,47 @@ async function runCaradhrasPassChecks(page) {
       blockedReverse: graph.hasDirectedConnection("caradhras", "rivendell", 6),
       driftFromTenHigh: graph.driftCaradhrasPassState(10, () => 0.999),
       driftFromTenLow: graph.driftCaradhrasPassState(10, () => 0),
+      driftFromTenMiddle: graph.driftCaradhrasPassState(10, () => 0.65),
+      nullForward: graph.hasDirectedConnection("rivendell", "caradhras", null),
       openDistance: graph.directedDistanceFromAny(["rivendell"], "caradhras", 5),
       openForward: graph.hasDirectedConnection("rivendell", "caradhras", 5),
       openReverse: graph.hasDirectedConnection("caradhras", "rivendell", 5),
     };
   });
+  assert(graphProbe.nullForward, "Null Caradhras pass state uses the base generated graph.");
   assert(graphProbe.openForward && graphProbe.openReverse && graphProbe.openDistance === 1, "Open Caradhras pass keeps both generated directed edges active.");
   assert(!graphProbe.blockedForward && !graphProbe.blockedReverse && graphProbe.blockedDistance !== 1, "Blocked Caradhras pass removes both direct edges from active graph traversal.");
-  assert(graphProbe.driftFromTenLow === 8 && graphProbe.driftFromTenHigh === 10, "Caradhras pass drift discards and normalizes out-of-range moves before sampling.");
+  assert(graphProbe.driftFromTenLow === 8 && graphProbe.driftFromTenMiddle === 9 && graphProbe.driftFromTenHigh === 10, "Caradhras pass drift discards and normalizes out-of-range moves before sampling.");
 
-  await page.addInitScript((state) => {
-    localStorage.clear();
-    localStorage.setItem("ardature.localGame.v1", JSON.stringify(state));
-  }, { ...openState, caradhrasPassState: 6 });
-  await page.reload();
-  await page.waitForSelector('.app-shell[data-app-phase="gameMap"]', { timeout: 15000 });
+  await loadLocalGameFixture(page, { ...openState, caradhrasPassState: 6 }, '.app-shell[data-app-phase="turn"]');
   await page.locator('[data-weather-marker="caradhras-pass"]').waitFor({ timeout: 15000 });
   await clickTerritory(page, "rivendell");
   assert((await page.locator('[data-weather-marker="caradhras-pass"]').getAttribute("href"))?.includes("pass-06.svg"), "Blocked Caradhras pass state renders the matching icon.");
   assert((await page.locator('[data-territory-fill="caradhras"][data-territory-fill-state="suggested"]').count()) === 0, "Blocked Caradhras pass removes Rivendell to Caradhras from explore connections.");
   await capture(page, "13bb-caradhras-pass-blocked-mobile.png");
+}
+
+async function loadLocalGameFixture(page, state, selector) {
+  if (!fixtureInitPages.has(page)) {
+    await page.addInitScript(({ prefix }) => {
+      if (window.name.startsWith(prefix)) {
+        localStorage.clear();
+        localStorage.setItem("ardature.localGame.v1", window.name.slice(prefix.length));
+      }
+    }, { prefix: fixtureWindowNamePrefix });
+    fixtureInitPages.add(page);
+  }
+
+  await page.evaluate(({ fixture, prefix }) => {
+    window.name = `${prefix}${JSON.stringify(fixture)}`;
+  }, { fixture: state, prefix: fixtureWindowNamePrefix }).catch(() => undefined);
+  await page.goto(baseUrl);
+  await page.waitForSelector(selector, { timeout: 15000 });
+  await page.evaluate(({ prefix }) => {
+    if (window.name.startsWith(prefix)) {
+      window.name = "";
+    }
+  }, { prefix: fixtureWindowNamePrefix });
 }
 
 async function assertUnknownTroopRow(page, message, expectedHeavyIcon = null) {
@@ -3101,7 +3124,7 @@ function readOnlyVisibilityGameState(territoryIds) {
   return {
     phase: "gameMap",
     mode: "local",
-    caradhrasPassState: 5,
+    caradhrasPassState: null,
     players: [
       {
         id: "viewer",

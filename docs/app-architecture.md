@@ -91,7 +91,7 @@ Troop and spy icon ownership should be communicated by a runtime outer ring colo
 
 Troop and spy icon paths are centralized in `src/game/troopIcons.tsx`. The app should preload the full troop/spy icon set once at startup so spy buttons, captured-spy rows, army build, allocation, reinforcement, and inspection screens do not show a first-use blank or decode delay.
 
-Caradhras pass icons are simple committed SVG assets. They are not generated map geometry and should not be converted into gameplay data. The game syncs and persists the integer `caradhrasPassState`; the map chooses the matching icon asset at render time.
+Caradhras pass icons are simple committed SVG assets. They are clipped circular weather badges without a separate outer outline stroke. They are not generated map geometry and should not be converted into gameplay data. The game syncs and persists `caradhrasPassState`, which is `null` before the first regular turn and an integer from `1-10` during regular turns. The map chooses the matching icon asset only once that integer exists.
 
 ## Map Data Flow
 
@@ -334,13 +334,13 @@ Landmarks affect where border strokes are visible, so these should be treated as
 
 Gameplay graph helpers live in `src/game/mapGraph.ts`. Game code should use those helpers instead of importing generated connection data directly. Attack, spy distance, spy adjacent reveal, explore related-territory highlights, fortify eligibility, random-allocation border targeting, and opponent troop-total visibility all follow active outgoing directed edges.
 
-The generated directed graph is the base graph. The active graph additionally applies game-state edge modifiers. The first modifier is the Caradhras pass: if `caradhrasPassState` is `6-10`, every directed edge between Rivendell and Caradhras is omitted from active outgoing edges, active reachability, and active distance. If the state is `1-5`, those generated edges are active. No gameplay code should special-case Rivendell or Caradhras outside `mapGraph.ts`.
+The generated directed graph is the base graph. The active graph additionally applies game-state edge modifiers. The first modifier is the Caradhras pass: before regular turns begin, `caradhrasPassState` is `null` and no weather modifier is applied. When regular turns begin, the first pass state is sampled. If `caradhrasPassState` is `6-10`, every directed edge between Rivendell and Caradhras is omitted from active outgoing edges, active reachability, and active distance. If the state is `1-5`, those generated edges are active. No gameplay code should special-case Rivendell or Caradhras outside `mapGraph.ts`.
 
 `StaticMapInk` should use `pointer-events="none"`.
 
 ### MapWeatherLayer
 
-Dynamic, pointer-inert map-local weather markers live above static ink and below troop markers. The first weather marker is the Caradhras pass icon above the Rivendell-Caradhras connection. It renders `public/caradhras-pass/pass-01.svg` through `pass-10.svg` from the authoritative `GameState.caradhrasPassState`.
+Dynamic, pointer-inert map-local weather markers live above static ink and below troop markers. The first weather marker is the Caradhras pass icon above the Rivendell-Caradhras connection. It renders `public/caradhras-pass/pass-01.svg` through `pass-10.svg` from the authoritative `GameState.caradhrasPassState` only during regular-turn game stages. It does not render on home, setup, draft, or troop allocation screens.
 
 The weather icon is presentation only. It does not own pass rules, edge filtering, or state drift. Those belong in the game graph/state layer so every consumer receives the same active-edge answer.
 
@@ -406,7 +406,7 @@ Active-game recovery is intentionally conservative:
 - Local refresh has no reconnect concept because every player shares the same device.
 - Sync host refresh during active play restores the saved host game into paused sync recovery state. Timers are stopped, the host remains connected, and every non-host player is marked disconnected immediately.
 - Sync joiners do not own authoritative active-game recovery. If they lose the host and fail automatic reconnect, they return home and must rejoin through host recovery.
-- `caradhrasPassState` is an authoritative active-game fact and is saved/restored with local games and sync-host games.
+- `caradhrasPassState` is `null` before regular turns and an authoritative active-turn fact after the first turn starts. It is saved/restored with local games and sync-host games.
 
 ## Sync Architecture
 
@@ -418,7 +418,7 @@ Sync mode should be copied and adapted from Qwixx rather than literally reused:
 - Ardatúrë-specific payload kinds and compact QR prefixes.
 - Host-authoritative setup, draft, timer, ownership, pause, reconnect, and removal state.
 
-The host is always one of the players and owns the canonical `GameState`. Sync connection/session state is separate UI/session state owned by `App`. Joiners send requests and render host snapshots only while connected. `caradhrasPassState` is included in those snapshots like ownership, troops, spies, battle state, and notifications.
+The host is always one of the players and owns the canonical `GameState`. Sync connection/session state is separate UI/session state owned by `App`. Joiners send requests and render host snapshots only while connected. `caradhrasPassState` is included in those snapshots like ownership, troops, spies, battle state, and notifications; before the first regular turn, it is `null`.
 
 `connected` has a strict meaning: the device is currently connected to the host, receiving recent host heartbeats/snapshots, and rendering host-authoritative state for the same game page/phase the host is on. A device must not be treated as connected merely because it has stale local state or because a WebRTC channel has not yet reported failure. The session-status type and session-derived viewer/control rules belong to `src/game/gameView.ts`; UI components such as `SyncSessionBlocker` render that projected state but do not define the session contract themselves.
 
@@ -489,7 +489,7 @@ Host transfer is a sync pause authority operation. It is available to the curren
 
 Fortify setup is local UI until committed. `App.tsx` owns one provisional target, one selected source, and provisional movement by source. Source eligibility is derived from owned gameplay-connection chains to the target. Cavalry may move from any eligible source; heavy, elite, leader, and immediately connected captured spies share one regular-source lane; remote captured spies may move only while cavalry from that same remote source is committed and must automatically return if that cavalry is undone. Sync joiners send only `{ type: "commitFortify", targetTerritoryId, movesBySource }` or `{ type: "skipFortify" }`. The host validates those commands in game-state helpers before applying them. Sync passive viewers receive only the final fortify/end-turn committed facts.
 
-Turn action helpers in `src/game/gameState.ts` should own composed game-state cleanup. For example, starting reinforcements and ending the turn with fortify both clear transient spy selection inside game-state helpers; `App.tsx` should call those complete actions rather than composing `cancelSpySelection(...)` with another state transition inline. Every helper that truly advances to the next player must drift `caradhrasPassState` exactly once through the shared pass-state drift helper.
+Turn action helpers in `src/game/gameState.ts` should own composed game-state cleanup. For example, starting reinforcements and ending the turn with fortify both clear transient spy selection inside game-state helpers; `App.tsx` should call those complete actions rather than composing `cancelSpySelection(...)` with another state transition inline. Creating the first regular turn samples `caradhrasPassState` if it is `null`. Every helper that truly advances to the next player after that must drift `caradhrasPassState` exactly once through the shared pass-state drift helper.
 
 Spy and region notifications are not local toast effects. They are authoritative per-player queues stored in `GameState`, persisted with active games, and dismissed one at a time. The sync host stores every player's queue, while viewer-specific snapshots include only the receiving player's queue. Local mode shows queued notifications only on the affected player's turn or handoff; sync mode can deliver the affected player's queue after reconnect because the host remains source of truth.
 

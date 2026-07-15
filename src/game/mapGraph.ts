@@ -10,9 +10,9 @@ const CARADHRAS_ID = "caradhras";
 const RIVENDELL_ID = "rivendell";
 const PASS_DRIFT_WEIGHTS = [
   { delta: -2, weight: 15 },
-  { delta: -1, weight: 20 },
-  { delta: 0, weight: 30 },
-  { delta: 1, weight: 20 },
+  { delta: -1, weight: 25 },
+  { delta: 0, weight: 20 },
+  { delta: 1, weight: 25 },
   { delta: 2, weight: 15 },
 ];
 
@@ -20,7 +20,11 @@ export function createCaradhrasPassState(random = Math.random) {
   return Math.floor(random() * CARADHRAS_PASS_MAX) + CARADHRAS_PASS_MIN;
 }
 
-export function driftCaradhrasPassState(currentState: number, random = Math.random) {
+export function driftCaradhrasPassState(currentState: number | null, random = Math.random) {
+  if (currentState === null) {
+    return createCaradhrasPassState(random);
+  }
+
   const current = normalizeCaradhrasPassState(currentState);
   const choices = PASS_DRIFT_WEIGHTS
     .map((choice) => ({ state: current + choice.delta, weight: choice.weight }))
@@ -39,7 +43,11 @@ export function driftCaradhrasPassState(currentState: number, random = Math.rand
   return choices[choices.length - 1]?.state ?? current;
 }
 
-export function isCaradhrasPassOpen(caradhrasPassState: number) {
+export function isCaradhrasPassOpen(caradhrasPassState: number | null) {
+  if (caradhrasPassState === null) {
+    return true;
+  }
+
   return normalizeCaradhrasPassState(caradhrasPassState) < CARADHRAS_PASS_BLOCKED_AT;
 }
 
@@ -47,7 +55,7 @@ export function baseOutgoingTerritoryIds(territoryId: string): readonly string[]
   return generatedDirectedMapConnections[territoryId as keyof DirectedConnectionMap] ?? [];
 }
 
-export function outgoingTerritoryIds(territoryId: string, caradhrasPassState: number): readonly string[] {
+export function outgoingTerritoryIds(territoryId: string, caradhrasPassState: number | null): readonly string[] {
   const baseIds = baseOutgoingTerritoryIds(territoryId);
   if (isCaradhrasPassOpen(caradhrasPassState) || !isCaradhrasPassTerritory(territoryId)) {
     return baseIds;
@@ -56,11 +64,11 @@ export function outgoingTerritoryIds(territoryId: string, caradhrasPassState: nu
   return baseIds.filter((connectedId) => !isCaradhrasPassConnection(territoryId, connectedId));
 }
 
-export function hasDirectedConnection(fromTerritoryId: string, toTerritoryId: string, caradhrasPassState: number) {
+export function hasDirectedConnection(fromTerritoryId: string, toTerritoryId: string, caradhrasPassState: number | null) {
   return outgoingTerritoryIds(fromTerritoryId, caradhrasPassState).includes(toTerritoryId);
 }
 
-export function directedDistanceFromAny(sourceTerritoryIds: Iterable<string>, targetTerritoryId: string, caradhrasPassState: number) {
+export function directedDistanceFromAny(sourceTerritoryIds: Iterable<string>, targetTerritoryId: string, caradhrasPassState: number | null) {
   const queue: Array<{ id: string; distance: number }> = [];
   const visited = new Set<string>();
 
@@ -96,7 +104,7 @@ export function directedDistanceFromAny(sourceTerritoryIds: Iterable<string>, ta
   return null;
 }
 
-export function directedOwnedSourcesReachingTarget(ownership: TerritoryOwnerMap, targetTerritoryId: string, playerId: string, caradhrasPassState: number) {
+export function directedOwnedSourcesReachingTarget(ownership: TerritoryOwnerMap, targetTerritoryId: string, playerId: string, caradhrasPassState: number | null) {
   const sourceIds = new Set<string>();
 
   for (const [territoryId, ownerId] of Object.entries(ownership)) {
@@ -108,7 +116,7 @@ export function directedOwnedSourcesReachingTarget(ownership: TerritoryOwnerMap,
   return sourceIds;
 }
 
-function directedOwnedPathExists(ownership: TerritoryOwnerMap, sourceTerritoryId: string, targetTerritoryId: string, playerId: string, caradhrasPassState: number) {
+function directedOwnedPathExists(ownership: TerritoryOwnerMap, sourceTerritoryId: string, targetTerritoryId: string, playerId: string, caradhrasPassState: number | null) {
   const queue = [sourceTerritoryId];
   const visited = new Set(queue);
 

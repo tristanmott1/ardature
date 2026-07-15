@@ -101,21 +101,21 @@ There is no gameplay distinction between directed land and directed ship connect
 
 Physical shared borders from generated geometry are visual map data only. Mountains, forests, coastlines, and dotted ship-route art do not define gameplay adjacency in the app.
 
-The Rivendell-Caradhras pass is weather-gated by `caradhrasPassState`, an authoritative integer from `1` to `10` stored in `GameState`. States `1-5` leave the Rivendell-Caradhras directed edges active. States `6-10` remove every directed edge between Rivendell and Caradhras from the active graph. This affects every edge-based rule above, including passive explore highlights.
+The Rivendell-Caradhras pass is weather-gated by `caradhrasPassState`, an authoritative value stored in `GameState`. It is `null` before the first regular turn. When regular turns begin, the first state is randomly sampled from `1-10`. States `1-5` leave the Rivendell-Caradhras directed edges active. States `6-10` remove every directed edge between Rivendell and Caradhras from the active graph. This affects every edge-based rule above, including passive explore highlights.
 
-New authoritative games initialize the pass state randomly from `1-10`. The state is fixed through draft, allocation, and a whole player turn. It drifts exactly once when a turn advances to the next player. Pause, refresh, reconnect, battle resolution, elimination confirmation, and resume do not drift the pass unless they actually advance the turn.
+The state is fixed through a whole player turn. It drifts exactly once when a turn advances to the next player. Pause, refresh, reconnect, battle resolution, elimination confirmation, and resume do not drift the pass unless they actually advance the turn.
 
 At turn advance, discard out-of-range deltas from this table, normalize the remaining weights, then sample the next pass state:
 
 | Delta | Base weight |
 | --- | --- |
 | -2 | 15 |
-| -1 | 20 |
-| 0 | 30 |
-| +1 | 20 |
+| -1 | 25 |
+| 0 | 20 |
+| +1 | 25 |
 | +2 | 15 |
 
-The map shows the corresponding `public/caradhras-pass/pass-XX.svg` icon above the Rivendell-Caradhras connection. The icon is visual-only and pointer-inert; the synced/persisted game fact is only the integer state.
+The map shows the corresponding `public/caradhras-pass/pass-XX.svg` icon above the Rivendell-Caradhras connection only during regular-turn game stages. The icon is visual-only and pointer-inert; the synced/persisted game fact is only the integer state.
 
 ## Unit Icon Display
 

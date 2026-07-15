@@ -95,9 +95,8 @@ Random allocation rules:
 - The existing `armyCountsForMarker()` economy is used to convert that marker into the player's base army. Random allocation does not duplicate or bypass starting budget, leader, or troop-cost rules.
 - For each player, owned territories are shuffled and the player's generated troop pool is shuffled.
 - Every owned territory receives exactly one random troop first.
-- Remaining troops are placed one at a time on a random owned territory, with replacement, but only among owned territories with an active outgoing directed edge to at least one opponent territory.
-- Active outgoing directed gameplay connections determine opponent borders. Both land and ship connections count. Physical map borders do not matter for this rule.
-- The generated directed graph from `maps/territory-key.md` is filtered by authoritative game-state edge modifiers such as the Caradhras pass. If `caradhrasPassState` is `6-10`, Rivendell and Caradhras are not opponent-border candidates for each other.
+- Remaining troops are placed one at a time on a random owned territory, with replacement, but only among owned territories with an outgoing directed edge to at least one opponent territory.
+- The base outgoing directed gameplay graph determines allocation opponent borders. Both land and ship connections count. Physical map borders do not matter for this rule. The Caradhras pass state is not sampled until regular turns begin, so weather does not affect troop allocation.
 - Because the active directed gameplay graph remains reachable enough for a valid game and at least two players are active, every player with extra troops should have at least one eligible outgoing opponent-border territory.
 
 ## Territory Allocation

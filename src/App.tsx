@@ -144,7 +144,7 @@ import { generatedMapData } from "./map/generated/mapData";
 import { MapView, type MapCameraIntent, type MapVisibleInsets } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import { territoryForId } from "./map/territoryLookup";
-import { createCaradhrasPassState, directedOwnedSourcesReachingTarget, hasDirectedConnection, outgoingTerritoryIds } from "./game/mapGraph";
+import { directedOwnedSourcesReachingTarget, hasDirectedConnection, outgoingTerritoryIds } from "./game/mapGraph";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
 import { formatQrHandshakeError } from "./sync/syncErrors";
 import { QrScanner } from "./sync/QrCodeUi";
@@ -266,7 +266,12 @@ function useMapVisibleInsets({
   return visibleInsets;
 }
 
-function caradhrasPassWeatherMarkers(passState: number) {
+function caradhrasPassWeatherMarkers(game: GameState) {
+  const passState = game.turn && regularTurnPhaseHasWeather(game.phase) ? game.caradhrasPassState : null;
+  if (passState === null) {
+    return [];
+  }
+
   const rivendell = territoryForId("rivendell");
   const caradhras = territoryForId("caradhras");
   if (!rivendell || !caradhras) {
@@ -288,6 +293,10 @@ function caradhrasPassWeatherMarkers(passState: number) {
       size: CARADHRAS_PASS_ICON_SIZE,
     },
   ];
+}
+
+function regularTurnPhaseHasWeather(phase: AppPhase) {
+  return phase === "turn" || phase === "turnHandoff" || phase === "paused";
 }
 
 function publicAssetUrl(path: string) {
@@ -714,8 +723,8 @@ function App() {
     [allocationPlayerId, game, gameMapViewerId, troopMarkerPreview, turnViewerId],
   );
   const weatherMarkers = useMemo(
-    () => caradhrasPassWeatherMarkers(game.caradhrasPassState),
-    [game.caradhrasPassState],
+    () => caradhrasPassWeatherMarkers(game),
+    [game],
   );
   const turnReinforcement = game.turn?.reinforcement ?? null;
   const turnProjectedReinforcements = turnPlayerId ? projectReinforcementTroops(game, turnPlayerId) : null;
@@ -1693,7 +1702,7 @@ function App() {
     const draftState = {
       ...game,
       phase: "draft" as const,
-      caradhrasPassState: createCaradhrasPassState(),
+      caradhrasPassState: null,
       draft,
       allocation: null,
       turn: null,

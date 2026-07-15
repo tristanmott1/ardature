@@ -994,7 +994,7 @@ function territoryTroopTotalWithTurnPreview(game: GameState, territoryId: string
   return Math.max(0, baseCount + troopTotal(reinforcement.territories[territoryId]) + previewCount);
 }
 
-function visibleTroopTotalTerritoryIds(ownership: Record<string, string | null>, viewerId: string, caradhrasPassState: number) {
+function visibleTroopTotalTerritoryIds(ownership: Record<string, string | null>, viewerId: string, caradhrasPassState: number | null) {
   const visibleIds = new Set<string>(ownedTerritoryIds(ownership, viewerId));
 
   for (const territoryId of [...visibleIds]) {

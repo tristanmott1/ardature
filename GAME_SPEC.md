@@ -237,10 +237,11 @@ Owning every territory in a region grants that region's reinforcement bonus duri
 
 All gameplay uses the active outgoing directed gameplay graph. The generated directed graph from `maps/territory-key.md` is the base graph. Game code must not import or use generated connections directly for rules; it should ask the shared graph helpers for active outgoing edges, active reachability, and active distance.
 
-The Rivendell-Caradhras connection has one authoritative pass state stored in `GameState`:
+The Rivendell-Caradhras connection has one authoritative pass state stored in `GameState` after regular turns begin:
 
 ```text
-caradhrasPassState = integer 1-10
+caradhrasPassState = null before the first regular turn
+caradhrasPassState = integer 1-10 during regular turns
 ```
 
 The state represents current weather on the pass:
@@ -263,21 +264,21 @@ When `caradhrasPassState` is `1-5`, the active graph includes every generated di
 
 The physical border ink between Rivendell and Caradhras remains visual map data. Weather never deletes or redraws static border ink.
 
-New authoritative games initialize `caradhrasPassState` randomly from `1-10`. The value is fixed through draft, troop allocation, and each player's whole turn. It changes exactly once when a turn actually advances to the next player. Pausing, refreshing, reconnecting, opening handoff, resolving an in-progress battle, confirming elimination, or resuming the same current turn does not drift the pass by itself.
+New authoritative games keep `caradhrasPassState` as `null` through setup, draft, and troop allocation. The initial pass state is sampled randomly from `1-10` when the first regular turn loop is created after allocation. While the value is `null`, the active graph is just the generated base directed graph and the pass icon is not rendered. Once sampled, the value is fixed through each player's whole turn. It changes exactly once when a turn actually advances to the next player. Pausing, refreshing, reconnecting, opening handoff, resolving an in-progress battle, confirming elimination, or resuming the same current turn does not drift the pass by itself.
 
 At turn advance, sample this drift table from the current state:
 
 | Delta | Base weight |
 | --- | --- |
 | -2 | 15 |
-| -1 | 20 |
-| 0 | 30 |
-| +1 | 20 |
+| -1 | 25 |
+| 0 | 20 |
+| +1 | 25 |
 | +2 | 15 |
 
-Before sampling, discard deltas that would leave the `1-10` range, then normalize the remaining weights. For example, from state `10`, only deltas `-2`, `-1`, and `0` remain, so the next state is `8` with probability `15 / 65 = 23.1%`, `9` with probability `20 / 65 = 30.8%`, and `10` with probability `30 / 65 = 46.2%`.
+Before sampling, discard deltas that would leave the `1-10` range, then normalize the remaining weights. For example, from state `10`, only deltas `-2`, `-1`, and `0` remain, so the next state is `8` with probability `15 / 60 = 25.0%`, `9` with probability `25 / 60 = 41.7%`, and `10` with probability `20 / 60 = 33.3%`.
 
-The map renders the matching committed icon from `public/caradhras-pass/pass-01.svg` through `pass-10.svg` above the Rivendell-Caradhras connection. The icon is visual, pointer-inert, and synced/persisted only through the authoritative integer state.
+The map renders the matching committed icon from `public/caradhras-pass/pass-01.svg` through `pass-10.svg` above the Rivendell-Caradhras connection only after regular turns begin and `caradhrasPassState` is an integer. The icon is visual, pointer-inert, and synced/persisted only through the authoritative integer state.
 
 ## Information Visibility
 
@@ -1412,7 +1413,7 @@ type GameState = {
   currentPlayerId: string;
   phase: TurnPhase;
   turnNumber: number;
-  caradhrasPassState: number;
+  caradhrasPassState: number | null;
   map: MapState;
   territories: Record<TerritoryId, TerritoryState>;
   regions: Record<RegionId, RegionState>;

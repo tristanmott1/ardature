@@ -69,7 +69,7 @@ export function createInitialGameState(): GameState {
     phase: "home",
     mode: "local",
     players: [],
-    caradhrasPassState: createCaradhrasPassState(),
+    caradhrasPassState: null,
     config: { ...DEFAULT_CONFIG },
     draft: null,
     allocation: null,
@@ -237,7 +237,7 @@ export function restartPausedGameToSetup(state: GameState, isSyncHost: boolean):
     ? removeNonConnectedSyncLobbyPlayers({
         ...state,
         phase: "setup",
-        caradhrasPassState: createCaradhrasPassState(),
+        caradhrasPassState: null,
         draft: null,
         allocation: null,
         turn: null,
@@ -1317,7 +1317,7 @@ export function restartVictoryGameToSetup(state: GameState): GameState {
   return {
     ...state,
     phase: "setup",
-    caradhrasPassState: createCaradhrasPassState(),
+    caradhrasPassState: null,
     players: state.players.filter((player) => playerIds.has(player.id) && player.connectionStatus === "connected"),
     draft: null,
     allocation: null,
@@ -2048,6 +2048,7 @@ function startTurnLoop(state: GameState, useHandoff: boolean): GameState {
 
   return applyRegionControlChanges({
     ...state,
+    caradhrasPassState: state.caradhrasPassState ?? createCaradhrasPassState(),
     phase: useHandoff && state.mode === "local" ? "turnHandoff" : "turn",
     turn: createTurnState(state.players, state.draft?.originalTurnOrder ?? [], currentPlayerId),
   }, "turnStart");
@@ -2117,11 +2118,11 @@ function nextTurnPlayerId(players: GamePlayer[], originalTurnOrder: string[], cu
   return order[(currentIndex + 1) % order.length] ?? order[0];
 }
 
-function sameOwnerConnectedTerritoryIds(ownership: TerritoryOwnerMap, territoryId: string, ownerId: string, caradhrasPassState: number) {
+function sameOwnerConnectedTerritoryIds(ownership: TerritoryOwnerMap, territoryId: string, ownerId: string, caradhrasPassState: number | null) {
   return outgoingTerritoryIds(territoryId, caradhrasPassState).filter((connectedId) => ownership[connectedId] === ownerId);
 }
 
-function nearestOwnedDistance(ownership: TerritoryOwnerMap | null, playerId: string, targetTerritoryId: string, caradhrasPassState: number) {
+function nearestOwnedDistance(ownership: TerritoryOwnerMap | null, playerId: string, targetTerritoryId: string, caradhrasPassState: number | null) {
   if (!ownership || ownership[targetTerritoryId] === playerId) {
     return null;
   }
@@ -2521,7 +2522,7 @@ function simulateRandomDraft(players: GamePlayer[], config: GameConfig, draft: D
     phase: "draft",
     mode: "local",
     players,
-    caradhrasPassState: createCaradhrasPassState(),
+    caradhrasPassState: null,
     config,
     draft,
     allocation: null,
@@ -2776,7 +2777,7 @@ function nextLocalAllocationIndex(allocation: AllocationState, players: GamePlay
   return null;
 }
 
-function randomCompleteAllAllocations(allocation: AllocationState, ownership: TerritoryOwnerMap, players: GamePlayer[], caradhrasPassState: number): AllocationState {
+function randomCompleteAllAllocations(allocation: AllocationState, ownership: TerritoryOwnerMap, players: GamePlayer[], caradhrasPassState: number | null): AllocationState {
   let nextAllocation = allocation;
 
   // Each player receives a random legal army and immediate placements.
@@ -2787,7 +2788,7 @@ function randomCompleteAllAllocations(allocation: AllocationState, ownership: Te
   return nextAllocation;
 }
 
-function randomCompleteStartingAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, player: GamePlayer, caradhrasPassState: number): AllocationState {
+function randomCompleteStartingAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, player: GamePlayer, caradhrasPassState: number | null): AllocationState {
   const playerAllocation = allocation.playerAllocations[player.id];
   if (!playerAllocation) {
     return allocation;
@@ -2822,7 +2823,7 @@ function randomCompleteStartingAllocation(allocation: AllocationState, ownership
   };
 }
 
-function randomPlaceStartingAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, playerId: string, caradhrasPassState: number): AllocationState {
+function randomPlaceStartingAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, playerId: string, caradhrasPassState: number | null): AllocationState {
   const playerAllocation = allocation.playerAllocations[playerId];
   if (!playerAllocation) {
     return allocation;
@@ -2868,7 +2869,7 @@ function randomPlaceStartingAllocation(allocation: AllocationState, ownership: T
   };
 }
 
-function bordersOpponentTerritory(ownership: TerritoryOwnerMap, playerId: string, territoryId: string, caradhrasPassState: number) {
+function bordersOpponentTerritory(ownership: TerritoryOwnerMap, playerId: string, territoryId: string, caradhrasPassState: number | null) {
   return outgoingTerritoryIds(territoryId, caradhrasPassState).some((connectedId) => ownership[connectedId] && ownership[connectedId] !== playerId);
 }
 
@@ -3187,7 +3188,7 @@ function normalizeHostTransfer(value: unknown): HostTransferState | null {
 function normalizeCaradhrasPassState(value: unknown) {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.max(1, Math.min(10, Math.round(value)))
-    : createCaradhrasPassState();
+    : null;
 }
 
 function normalizeConfig(value: unknown): GameConfig {
