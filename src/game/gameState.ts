@@ -18,9 +18,11 @@ import type {
   GameConfig,
   GamePlayer,
   GameState,
+  HostTransferState,
   PickTimeLimit,
   PlayerAllocation,
   PlayerColor,
+  PendingResolution,
   ReinforcementState,
   TerritoryOwnerMap,
   TroopAllocationTimeLimit,
@@ -72,6 +74,8 @@ export function createInitialGameState(): GameState {
     allocation: null,
     turn: null,
     notifications: {},
+    pendingResolution: null,
+    hostTransfer: null,
     regionControl: createRegionControl(),
   };
 }
@@ -236,6 +240,8 @@ export function restartPausedGameToSetup(state: GameState, isSyncHost: boolean):
         allocation: null,
         turn: null,
         notifications: {},
+        pendingResolution: null,
+        hostTransfer: null,
         regionControl: createRegionControl(),
       })
     : state;
@@ -1030,12 +1036,13 @@ export function canAttackTargetTerritory(state: GameState, playerId: string, sou
   );
 }
 
-export function canCommitAttack(state: GameState, playerId: string, sourceTerritoryId: string, targetTerritoryId: string, attackingTroops: TroopCounts) {
-  if (!validTroopCounts(attackingTroops) || !canAttackTargetTerritory(state, playerId, sourceTerritoryId, targetTerritoryId)) {
-    return false;
-  }
+export function canSelectAttackTargetTerritory(state: GameState, playerId: string, sourceTerritoryId: string, targetTerritoryId: string) {
+  return canAttackTargetTerritory(state, playerId, sourceTerritoryId, targetTerritoryId) &&
+    !state.turn?.completedAttacks.includes(attackPairKey(sourceTerritoryId, targetTerritoryId));
+}
 
-  if (state.turn?.completedAttacks.includes(attackPairKey(sourceTerritoryId, targetTerritoryId))) {
+export function canCommitAttack(state: GameState, playerId: string, sourceTerritoryId: string, targetTerritoryId: string, attackingTroops: TroopCounts) {
+  if (!validTroopCounts(attackingTroops) || !canSelectAttackTargetTerritory(state, playerId, sourceTerritoryId, targetTerritoryId)) {
     return false;
   }
 
@@ -1231,14 +1238,18 @@ export function dismissBattle(state: GameState, playerId: string, battleId: stri
     return state;
   }
 
-  return {
+  const dismissedState = {
     ...state,
     turn: {
       ...turn,
-      stage: "actions",
+      stage: "actions" as TurnStage,
       battle: null,
     },
   };
+
+  return battle.result.type === "attackerWon"
+    ? beginPostBattleResolution(dismissedState, battle.defenderPlayerId)
+    : dismissedState;
 }
 
 export function sampleBattleChallengeScore(state: GameState, playerId: string, battleId: string) {
@@ -1256,6 +1267,84 @@ export function sampleBattleChallengeScore(state: GameState, playerId: string, b
   }
 
   return null;
+}
+
+export function confirmPendingElimination(state: GameState, confirmingPlayerId: string, hostPlayerId: string | null = null): GameState {
+  const pending = state.pendingResolution;
+  if (!pending || pending.type !== "elimination" || !state.turn || !state.draft || !state.allocation) {
+    return state;
+  }
+
+  if (state.mode === "sync" && confirmingPlayerId !== hostPlayerId) {
+    return state;
+  }
+
+  if (ownedTerritoryIds(state.draft.ownership, pending.eliminatedPlayerId).length > 0) {
+    return {
+      ...state,
+      pendingResolution: null,
+    };
+  }
+
+  if (hostPlayerId === pending.eliminatedPlayerId && state.mode === "sync") {
+    return {
+      ...state,
+      phase: "paused",
+      hostTransfer: {
+        oldHostPlayerId: pending.eliminatedPlayerId,
+      },
+      pendingResolution: null,
+      turn: killPlayerSpy(state.turn, pending.eliminatedPlayerId),
+    };
+  }
+
+  return removeEliminatedPlayer({
+    ...state,
+    pendingResolution: null,
+    turn: killPlayerSpy(state.turn, pending.eliminatedPlayerId),
+  }, pending.eliminatedPlayerId);
+}
+
+export function restartVictoryGameToSetup(state: GameState): GameState {
+  const pending = state.pendingResolution;
+  if (pending?.type !== "victory") {
+    return state;
+  }
+
+  const playerIds = new Set([pending.winnerPlayerId, pending.eliminatedPlayerId]);
+  return {
+    ...state,
+    phase: "setup",
+    players: state.players.filter((player) => playerIds.has(player.id) && player.connectionStatus === "connected"),
+    draft: null,
+    allocation: null,
+    turn: null,
+    notifications: {},
+    pendingResolution: null,
+    hostTransfer: null,
+    regionControl: createRegionControl(),
+  };
+}
+
+export function transferHostAuthority(state: GameState, oldHostPlayerId: string | null, newHostPlayerId: string): GameState {
+  if (state.mode !== "sync" || state.phase !== "paused" || !state.hostTransfer || state.hostTransfer.oldHostPlayerId !== oldHostPlayerId) {
+    return state;
+  }
+
+  const newHost = state.players.find((player) => player.id === newHostPlayerId);
+  if (!newHost || newHost.connectionStatus !== "connected" || newHost.id === oldHostPlayerId) {
+    return state;
+  }
+
+  return removeEliminatedPlayer({
+    ...state,
+    players: state.players.map((player) => player.id === newHostPlayerId
+      ? { ...player, connectionStatus: "connected" }
+      : player.id === state.hostTransfer?.oldHostPlayerId
+        ? player
+        : { ...player, connectionStatus: "disconnected" }),
+    hostTransfer: null,
+  }, state.hostTransfer.oldHostPlayerId);
 }
 
 export function commitReinforcements(state: GameState, playerId: string, reinforcement: ReinforcementState): GameState {
@@ -1564,13 +1653,11 @@ export function pauseSyncGame(state: GameState): GameState {
 
 export function pauseGame(state: GameState, now: number): GameState {
   if (state.phase === "draft" && state.draft) {
-    return state.mode === "sync"
-      ? pauseSyncGame(state)
-      : {
-          ...state,
-          phase: "paused",
-          draft: pauseDraftTimer(state.draft, now),
-        };
+    return {
+      ...state,
+      phase: "paused",
+      draft: clearDraftTimer(state.draft, state.config),
+    };
   }
 
   if (state.phase === "allocation" && state.allocation) {
@@ -1614,6 +1701,10 @@ export function pauseGame(state: GameState, now: number): GameState {
 
 export function resumePausedGame(state: GameState, returnPhase: AppPhase | null, isSyncHost: boolean, now: number): GameState {
   if (state.phase !== "paused") {
+    return state;
+  }
+
+  if (state.hostTransfer) {
     return state;
   }
 
@@ -1704,18 +1795,6 @@ export function beginDraftTimer(draft: DraftState, config: GameConfig, now: numb
     ...draft,
     timerRemainingMs: duration,
     timerEndsAt: now + duration,
-  };
-}
-
-export function pauseDraftTimer(draft: DraftState, now: number) {
-  if (!draft.timerEndsAt) {
-    return draft;
-  }
-
-  return {
-    ...draft,
-    timerRemainingMs: Math.max(0, draft.timerEndsAt - now),
-    timerEndsAt: null,
   };
 }
 
@@ -2440,6 +2519,8 @@ function simulateRandomDraft(players: GamePlayer[], config: GameConfig, draft: D
     allocation: null,
     turn: null,
     notifications: {},
+    pendingResolution: null,
+    hostTransfer: null,
     regionControl: createRegionControl(),
   };
 
@@ -2887,7 +2968,7 @@ function finishBattleConquest(state: GameState, battle: BattleState): GameState 
   const defendingTerritories = { ...defenderAllocation.territories };
   delete defendingTerritories[battle.targetTerritoryId];
 
-  const conqueredState = restoreCapturedSpies(markDeadSpiesForEliminatedPlayers({
+  const conqueredState = restoreCapturedSpies({
     ...state,
     draft: {
       ...state.draft,
@@ -2919,43 +3000,66 @@ function finishBattleConquest(state: GameState, battle: BattleState): GameState 
           }
         : null,
     },
-  }));
+  });
 
   return applyRegionControlChanges(conqueredState, state.mode === "sync" ? "immediate" : "turnStart", state.turn.turnNumber + 1);
 }
 
-function markDeadSpiesForEliminatedPlayers(state: GameState): GameState {
-  const turn = state.turn;
+function beginPostBattleResolution(state: GameState, eliminatedPlayerId: string): GameState {
   const ownership = state.draft?.ownership;
-  if (!turn || !ownership) {
+  if (!ownership || ownedTerritoryIds(ownership, eliminatedPlayerId).length > 0) {
     return state;
   }
 
-  let spies = turn.spies;
-  for (const player of state.players) {
-    if (ownedTerritoryIds(ownership, player.id).length > 0 || spies[player.id]?.status === "dead") {
-      continue;
-    }
-
-    spies = {
-      ...spies,
-      [player.id]: {
-        status: "dead",
-        territoryId: null,
-        custodianPlayerId: null,
+  const remainingPlayers = state.players.filter((player) => player.id !== eliminatedPlayerId);
+  if (remainingPlayers.length === 1) {
+    return {
+      ...state,
+      pendingResolution: {
+        eliminatedPlayerId,
+        type: "victory",
+        winnerPlayerId: remainingPlayers[0].id,
       },
     };
   }
 
-  return spies === turn.spies
-    ? state
-    : {
-        ...state,
-        turn: {
-          ...turn,
-          spies,
-        },
-      };
+  return {
+    ...state,
+    pendingResolution: {
+      eliminatedPlayerId,
+      type: "elimination",
+    },
+  };
+}
+
+function killPlayerSpy(turn: TurnState, playerId: string): TurnState {
+  return {
+    ...turn,
+    spies: {
+      ...turn.spies,
+      [playerId]: {
+        status: "dead",
+        territoryId: null,
+        custodianPlayerId: null,
+      },
+    },
+  };
+}
+
+function removeEliminatedPlayer(state: GameState, playerId: string): GameState {
+  const players = state.players.filter((player) => player.id !== playerId);
+  if (!state.turn || players.length < 2) {
+    return createInitialGameState();
+  }
+
+  return {
+    ...state,
+    players,
+    turn: {
+      ...state.turn,
+      originalTurnOrder: state.turn.originalTurnOrder.filter((id) => id !== playerId),
+    },
+  };
 }
 
 function adjustCommittedTerritoryTroop(allocation: AllocationState, playerId: string, territoryId: string, troopType: TroopType, delta: 1 | -1): AllocationState {
@@ -3032,7 +3136,42 @@ function normalizeGameState(value: unknown): GameState | null {
     allocation: normalizeAllocation(state.allocation),
     turn: normalizeTurn(state.turn),
     notifications: normalizeNotifications(state.notifications),
+    pendingResolution: normalizePendingResolution(state.pendingResolution),
+    hostTransfer: normalizeHostTransfer(state.hostTransfer),
     regionControl: normalizeRegionControl(state.regionControl),
+  };
+}
+
+function normalizePendingResolution(value: unknown): PendingResolution | null {
+  const resolution = value as Partial<PendingResolution>;
+  if (!resolution || typeof resolution !== "object" || typeof resolution.eliminatedPlayerId !== "string") {
+    return null;
+  }
+
+  if (resolution.type === "elimination") {
+    return {
+      eliminatedPlayerId: resolution.eliminatedPlayerId,
+      type: "elimination",
+    };
+  }
+
+  return resolution.type === "victory" && typeof resolution.winnerPlayerId === "string"
+    ? {
+        eliminatedPlayerId: resolution.eliminatedPlayerId,
+        type: "victory",
+        winnerPlayerId: resolution.winnerPlayerId,
+      }
+    : null;
+}
+
+function normalizeHostTransfer(value: unknown): HostTransferState | null {
+  const transfer = value as Partial<HostTransferState>;
+  if (!transfer || typeof transfer !== "object" || typeof transfer.oldHostPlayerId !== "string") {
+    return null;
+  }
+
+  return {
+    oldHostPlayerId: transfer.oldHostPlayerId,
   };
 }
 

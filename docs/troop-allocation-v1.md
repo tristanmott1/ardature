@@ -180,6 +180,7 @@ Sync mode is simultaneous and host-authoritative.
 Sync allocation uses the same pause/reconnect model as sync draft:
 
 - Any ungraceful disconnect during sync allocation forces pause.
+- Manual or forced pause during allocation preserves the shared allocation timer's remaining time. Unlike draft pause, allocation pause does not restart the timer.
 - The host first marks that player `reconnecting` for 10 seconds. If automatic reconnect fails from the host's perspective, the host marks them `disconnected`.
 - The joiner independently enters local `reconnecting` when heartbeat with the host fails. If automatic reconnect fails from the joiner's perspective, the joiner returns home.
 - The disconnected player remains in the host game and can return only through the sync pause recovery QR.
@@ -194,6 +195,7 @@ Local allocation pause and recovery:
 
 - Manual local pause freezes the allocation timer and preserves army build, territory selection, pending counts, and placed troops.
 - Local refresh or close during allocation restores into local pause with the allocation timer stopped and remaining time preserved.
+- This is intentionally different from draft pause, which resets the current pick timer on resume.
 - Local mode has no reconnecting, disconnected, recovery QR, or connection status concepts.
 
 If a player is removed during allocation:

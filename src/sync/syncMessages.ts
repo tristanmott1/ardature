@@ -31,6 +31,11 @@ export type ArdatureSyncMessage =
     }
   | {
       type: "removed";
+    }
+  | {
+      type: "hostTransfer";
+      revision: number;
+      game: GameState;
     };
 
 const PLAYER_COLORS = ["green", "blue", "yellow", "red", "purple", "black"];
@@ -61,6 +66,10 @@ export function isArdatureSyncMessage(value: unknown): value is ArdatureSyncMess
 
   if (message.type === "turnCommand") {
     return isTurnCommand(message.command);
+  }
+
+  if (message.type === "hostTransfer") {
+    return Number.isInteger(message.revision) && isGameState(message.game);
   }
 
   return message.type === "quit" || message.type === "hostEnded" || message.type === "removed";

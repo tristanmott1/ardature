@@ -359,10 +359,16 @@ async function runSourceChecks() {
   assert(gameTypesSource.includes('export type AttackStyle = "challenge" | "regular"') && gameTypesSource.includes("attackStyle: AttackStyle"), "Game config has explicit attack style.");
   assert(gameStateSource.includes("export const ATTACK_STYLES") && setupPanelsSource.includes("Attack Style") && setupPanelsSource.includes("Challenge") && setupPanelsSource.includes("Regular"), "Setup UI exposes the attack style config section.");
   assert(gameStateSource.includes("function commitAttack") && gameStateSource.includes("function rollBattle") && gameStateSource.includes("function retreatBattle") && gameStateSource.includes("completedAttacks"), "Attack state transitions live in game-state helpers.");
+  assert(gameStateSource.includes("function canSelectAttackTargetTerritory") && appSource.includes("canSelectAttackTargetTerritory(game") && !appSource.includes("completedAttacks.includes(`${attackSetup.sourceTerritoryId}->${territoryId}`)"), "Attack target selection and hints use one completed-pair helper.");
   assert(gameTypesSource.includes("BattleState") && gameTypesSource.includes('type: "commitAttack"') && gameTypesSource.includes('type: "submitBattleScore"') && gameTypesSource.includes('type: "rollBattle"'), "Turn commands include locked battle actions.");
   assert(gameTypesSource.includes("committedAttackingTroops: TroopCounts") && gameTypesSource.includes("initialDefendingTroops: TroopCounts") && gameTypesSource.includes("attackingTroops: TroopCounts") && gameTypesSource.includes("defendingTroops: TroopCounts"), "Battle state preserves locked original troop counts and current survivor counts.");
   assert(syncMessagesSource.includes('command.type === "commitAttack"') && syncMessagesSource.includes('command.type === "rollBattle"') && syncMessagesSource.includes('command.type === "retreatBattle"'), "Sync message validation covers battle commands.");
   assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)") && battleModalSource.includes("/ 10") && battleModalSource.includes("defeated") && battleModalSource.includes("battle-pip"), "Battle modal renders pip dice, retreat, result text, and one-decimal scores out of ten.");
+  assert(battleModalSource.includes("function BattleDiceRows") && battleModalSource.includes("latestDice ? [...latestDice].sort") && battleModalSource.includes('battle.result.type === "attackerWon"') && battleModalSource.includes('battle.result.type === "defenderWon"'), "Battle modal displays sorted latest-roll dice and keeps final dice in victory layouts.");
+  assert(gameTypesSource.includes("export type PendingResolution") && gameTypesSource.includes("export type HostTransferState") && gameStateSource.includes("function confirmPendingElimination") && gameStateSource.includes("function restartVictoryGameToSetup") && gameStateSource.includes("function transferHostAuthority"), "Game state has explicit pending elimination, victory restart, and forced host-transfer helpers.");
+  assert(gameViewSource.includes('type: "elimination"') && gameViewSource.includes('type: "victory"') && overlaysSource.includes("function EliminationDialog") && overlaysSource.includes("function VictoryDialog"), "Elimination and victory render through explicit overlay types.");
+  assert(!gameStateSource.includes("markDeadSpiesForEliminatedPlayers") && gameStateSource.includes("beginPostBattleResolution") && gameStateSource.includes("killPlayerSpy"), "Conquest does not silently kill eliminated spies before the elimination confirmation.");
+  assert(syncMessagesSource.includes('type: "hostTransfer"') && appSource.includes("acceptHostTransfer") && appSource.includes('type: "hostTransfer"') && appSource.includes('setSyncRole("host")'), "Sync host transfer uses an explicit terminal transfer message and the selected joiner becomes host authority.");
   assert(combatSource.includes("COMBAT_SCORE_VALUES") && combatSource.includes("challengeScoreForTroops") && combatSource.includes("rollCombatDice") && combatSource.includes("sampleCasualty"), "Combat math stores centralized score, challenge, dice, and casualty helpers.");
   assert(gameStateSource.includes("function randomCompleteAllAllocations") && gameStateSource.includes("function randomArmyMarker") && gameStateSource.includes("function bordersOpponentTerritory"), "Random allocation has dedicated army and border placement helpers.");
   assert(gameStateSource.includes("outgoingTerritoryIds(territoryId).some") && gameStateSource.includes("ownership[connectedId] !== playerId"), "Random allocation uses outgoing directed connections to find opponent borders.");
@@ -1027,13 +1033,28 @@ async function assertBattleTroopRows(page, message) {
   }
 }
 
-async function assertBattleResultLayout(page, { iconCount, message, spyCount = 0 }) {
+async function assertBattleResultLayout(page, { dicePosition, iconCount, message, spyCount = 0 }) {
   await page.getByRole("dialog", { name: "Battle result" }).waitFor();
   assert((await page.locator(".battle-result-message").getByText(message).count()) === 1, "Battle result layout shows the winner and loser.");
   assert((await page.locator(".battle-result-modal .battle-troops").count()) === 1, "Battle result layout shows one winning troop row.");
   assert((await page.locator(".battle-result-modal .troop-icon-count").count()) === iconCount, "Battle result layout shows only surviving winning troop icons.");
   assert((await page.locator(".battle-result-modal .captured-spy-icon").count()) === spyCount, "Battle result layout shows the expected spy icons.");
-  assert((await page.locator(".battle-result-modal .battle-dice-row").count()) === 0, "Battle result layout does not show dice.");
+  assert((await page.locator(".battle-result-modal .battle-dice-row").count()) === 2, "Battle result layout keeps final dice.");
+  const positions = await page.locator(".battle-result-modal").evaluate((modal) => {
+    const diceRows = Array.from(modal.querySelectorAll(".battle-dice-row"));
+    const troopRow = modal.querySelector(".battle-troops");
+    const firstDice = diceRows[0]?.getBoundingClientRect();
+    const lastDice = diceRows[diceRows.length - 1]?.getBoundingClientRect();
+    const troops = troopRow?.getBoundingClientRect();
+
+    return firstDice && lastDice && troops
+      ? {
+          diceAboveTroops: lastDice.bottom < troops.top,
+          diceBelowTroops: firstDice.top > troops.bottom,
+        }
+      : null;
+  });
+  assert(positions && (dicePosition === "above" ? positions.diceAboveTroops : positions.diceBelowTroops), `Battle result final dice appear ${dicePosition} the winning army.`);
   assert((await page.locator(".battle-result-modal .battle-score").count()) === 0, "Battle result layout does not show scores.");
   assert((await page.locator(".battle-result-modal .battle-player-name").count()) === 0, "Battle result layout does not show regular player rows.");
 }
@@ -2296,15 +2317,19 @@ async function runTurnAttackChecks(browser) {
     defendingTroops: { heavy: 3, cavalry: 0, elite: 0, leader: 0 },
     hasRolled: true,
     latestRoll: {
-      attackerDice: [6, 5, 4],
+      attackerDice: [4, 6, 5],
       attackerLosses: ["cavalry"],
-      defenderDice: [3, 2],
+      defenderDice: [2, 3],
       defenderLosses: [],
     },
     result: null,
   });
   assert((await challenge.locator(".battle-dice-row").nth(1).locator(".battle-die").count()) === 3, "Latest attacker roll keeps every die that was rolled even after casualties.");
   assert((await challenge.locator(".battle-dice-row").nth(0).locator(".battle-die").count()) === 2, "Latest defender roll keeps every die that was rolled.");
+  const displayedRoll = await challenge.locator(".battle-dice-row").evaluateAll((rows) => rows.map((row) =>
+    Array.from(row.querySelectorAll(".battle-die")).map((die) => die.querySelectorAll(".battle-pip.visible").length),
+  ));
+  assert(JSON.stringify(displayedRoll[0]) === JSON.stringify([3, 2]) && JSON.stringify(displayedRoll[1]) === JSON.stringify([6, 5, 4]), "Latest roll dice display sorted largest to smallest.");
 
   await loadBattleStateFixture(challenge, {
     attackerScore: 7.3,
@@ -2322,11 +2347,17 @@ async function runTurnAttackChecks(browser) {
     attackingTroops: { heavy: 1, cavalry: 1, elite: 0, leader: 0 },
     defenderScore: 6.2,
     defendingTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
+    latestRoll: {
+      attackerDice: [6, 5],
+      attackerLosses: [],
+      defenderDice: [4],
+      defenderLosses: ["heavy"],
+    },
     releasedAttackerSpy: true,
     result: { type: "attackerWon" },
   });
   await capture(challenge, "18h-attacker-battle-result-mobile.png");
-  await assertBattleResultLayout(challenge, { iconCount: 2, message: "Frodo defeated Sauron", spyCount: 2 });
+  await assertBattleResultLayout(challenge, { dicePosition: "above", iconCount: 2, message: "Frodo defeated Sauron", spyCount: 2 });
   const attackerResultSpySources = await challenge.locator(".battle-result-modal .captured-spy-icon img").evaluateAll((images) =>
     images.map((image) => image.getAttribute("src") ?? ""),
   );
@@ -2339,22 +2370,54 @@ async function runTurnAttackChecks(browser) {
     attackingTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
     defenderScore: 6.2,
     defendingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+    latestRoll: {
+      attackerDice: [2],
+      attackerLosses: ["heavy"],
+      defenderDice: [4],
+      defenderLosses: [],
+    },
     result: { type: "defenderWon" },
   });
   await capture(challenge, "18i-defender-battle-result-mobile.png");
-  await assertBattleResultLayout(challenge, { iconCount: 1, message: "Sauron defeated Frodo", spyCount: 1 });
+  await assertBattleResultLayout(challenge, { dicePosition: "below", iconCount: 1, message: "Sauron defeated Frodo", spyCount: 1 });
 
   await loadBattleStateFixture(challenge, {
     attackerScore: 7.3,
     attackingTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
     defenderScore: 6.2,
     defendingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+    latestRoll: {
+      attackerDice: [2],
+      attackerLosses: ["heavy"],
+      defenderDice: [4],
+      defenderLosses: [],
+    },
     result: { type: "defenderWon" },
   }, { capturedSpyCount: 5 });
   await capture(challenge, "18j-battle-result-wrapped-spies-mobile.png");
-  await assertBattleResultLayout(challenge, { iconCount: 1, message: "Sauron defeated Frodo", spyCount: 5 });
+  await assertBattleResultLayout(challenge, { dicePosition: "below", iconCount: 1, message: "Sauron defeated Frodo", spyCount: 5 });
   const wrappedResultBox = await challenge.locator(".battle-result-modal .troop-count-row").boundingBox();
   assert(wrappedResultBox && wrappedResultBox.height > 46, "Battle result unit row wraps when spies push it beyond five icons.");
+
+  await loadResolutionFixture(challenge, "elimination");
+  await capture(challenge, "18k-elimination-modal-mobile.png");
+  assert((await challenge.getByRole("alertdialog", { name: "Player eliminated" }).getByText("Sauron has been eliminated").count()) === 1, "Pending elimination shows the eliminated player message.");
+  await challenge.getByRole("button", { name: "Confirm elimination" }).click();
+  const eliminatedState = await readGameState(challenge);
+  assert(!eliminatedState.players.some((player) => player.id === "opponent"), "Confirming elimination removes the eliminated player.");
+  assert(eliminatedState.turn.spies.opponent.status === "dead", "Confirming elimination kills the eliminated player's spy.");
+
+  await loadResolutionFixture(challenge, "victory");
+  await capture(challenge, "18l-victory-modal-mobile.png");
+  assert((await challenge.getByRole("alertdialog", { name: "Game over" }).getByText("Frodo wins").count()) === 1, "Pending victory shows the winner message.");
+  assert((await challenge.getByRole("alertdialog", { name: "Game over" }).getByRole("button", { name: "Exit" }).count()) === 1, "Victory modal shows an explicit Exit button.");
+  assert((await challenge.getByRole("alertdialog", { name: "Game over" }).getByRole("button", { name: "Restart" }).count()) === 1, "Victory modal shows an explicit Restart button.");
+  assert((await challenge.getByRole("alertdialog", { name: "Game over" }).getByRole("button", { name: "Continue" }).count()) === 0, "Victory modal does not show a Continue button.");
+  await challenge.getByRole("button", { name: "Restart" }).click();
+  await challenge.waitForSelector('.app-shell[data-app-phase="setup"]');
+  const restartedState = await readGameState(challenge);
+  assert(restartedState.players.length === 2 && restartedState.players.some((player) => player.id === "viewer") && restartedState.players.some((player) => player.id === "opponent"), "Victory restart returns only the final two players to setup.");
+  assert(!restartedState.players.some((player) => player.id === "previously-eliminated"), "Victory restart forgets earlier eliminated players.");
 
   await regular.close();
   await challenge.close();
@@ -2784,6 +2847,75 @@ async function loadBattleStateFixture(page, battleOverrides, options = {}) {
   }, state);
   await page.goto(baseUrl);
   await page.waitForSelector(".battle-modal");
+}
+
+async function loadResolutionFixture(page, type) {
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
+  const state = turnSpyGameState(territoryIds);
+
+  state.players.push({
+    id: "previously-eliminated",
+    name: "Boromir",
+    color: "blue",
+    nameLocked: false,
+    colorLocked: false,
+    connectionStatus: "connected",
+  });
+  for (const territoryId of Object.keys(state.draft.ownership)) {
+    if (state.draft.ownership[territoryId] === "opponent") {
+      state.draft.ownership[territoryId] = "viewer";
+    }
+  }
+  state.turn.spies.opponent = { status: "captured", territoryId: "shire", custodianPlayerId: "viewer" };
+  state.pendingResolution = type === "victory"
+    ? { eliminatedPlayerId: "opponent", type: "victory", winnerPlayerId: "viewer" }
+    : { eliminatedPlayerId: "opponent", type: "elimination" };
+
+  await page.addInitScript((savedState) => {
+    localStorage.clear();
+    localStorage.setItem("ardature.localGame.v1", JSON.stringify(savedState));
+  }, state);
+  await page.goto(baseUrl);
+  await page.waitForSelector(type === "victory" ? '[aria-label="Game over"]' : '[aria-label="Player eliminated"]');
+}
+
+async function loadForcedHostTransferFixture(page) {
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
+  const state = turnSpyGameState(territoryIds);
+
+  state.mode = "sync";
+  state.phase = "turn";
+  state.players.push({
+    id: "successor",
+    name: "Aragorn",
+    color: "green",
+    nameLocked: true,
+    colorLocked: true,
+    connectionStatus: "connected",
+  });
+  state.hostTransfer = { oldHostPlayerId: "viewer" };
+  state.draft.originalTurnOrder = ["viewer", "opponent", "successor"];
+  state.allocation.order = ["viewer", "opponent", "successor"];
+  state.turn.originalTurnOrder = ["viewer", "opponent", "successor"];
+
+  await page.goto(baseUrl);
+  await page.evaluate((savedState) => {
+    localStorage.clear();
+    localStorage.setItem("ardature.syncHostGame.v1", JSON.stringify({
+      game: savedState,
+      localPlayerId: "viewer",
+      revision: 42,
+    }));
+  }, state);
+  await page.reload();
+  await page.waitForSelector('.app-shell[data-app-phase="paused"]');
+  await page.waitForSelector(".host-transfer-panel");
+}
+
+async function readGameState(page) {
+  return page.evaluate(() => JSON.parse(localStorage.getItem("ardature.localGame.v1")));
 }
 
 async function commitFixtureAttack(page) {
@@ -3277,10 +3409,12 @@ async function runSyncTerminalEventChecks(browser) {
   const endedJoiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
   const removeHost = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
   const removedJoiner = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+  const forcedTransferHost = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
   endedHost.setDefaultTimeout(20000);
   endedJoiner.setDefaultTimeout(20000);
   removeHost.setDefaultTimeout(20000);
   removedJoiner.setDefaultTimeout(20000);
+  forcedTransferHost.setDefaultTimeout(20000);
 
   await connectSyncPair(endedHost, endedJoiner, {
     hostName: "Theoden",
@@ -3311,10 +3445,16 @@ async function runSyncTerminalEventChecks(browser) {
   );
   assert((await removeHost.getByRole("button", { name: "Remove Denethor" }).count()) === 0, "Host setup removes the player after sending removed.");
 
+  await loadForcedHostTransferFixture(forcedTransferHost);
+  await capture(forcedTransferHost, "28b-sync-forced-host-transfer-mobile.png");
+  assert((await forcedTransferHost.getByRole("dialog", { name: "Paused" }).getByText("Transfer host before resuming.").count()) === 1, "Forced host transfer pause tells the host to transfer before resuming.");
+  assert(await forcedTransferHost.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Resume" }).isDisabled(), "Forced host transfer pause disables resume.");
+
   await endedHost.close();
   await endedJoiner.close();
   await removeHost.close();
   await removedJoiner.close();
+  await forcedTransferHost.close();
 }
 
 async function connectSyncPair(host, joiner, { hostColor, hostName, joinerColor, joinerName }) {

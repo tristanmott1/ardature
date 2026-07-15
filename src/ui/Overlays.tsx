@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowRight, Check, X } from "lucide-react";
+import { ArrowRight, Check, RotateCcw, X } from "lucide-react";
 
 export function HandoffPanel({ ariaLabel, buttonLabel, onContinue }: { ariaLabel: string; buttonLabel: string; onContinue: () => void }) {
   return (
@@ -63,6 +63,41 @@ export function NotificationDialog({ message, onClose }: { message: string; onCl
   );
 }
 
+export function EliminationDialog({ canConfirm, message, onConfirm }: { canConfirm: boolean; message: string; onConfirm: () => void }) {
+  return (
+    <div className="modal-scrim notification-backdrop">
+      <section className="modal-panel notification-modal" role="alertdialog" aria-label="Player eliminated">
+        <h2>{message}</h2>
+        <ModalActions>
+          <ModalIconButton disabled={!canConfirm} label="Confirm elimination" onClick={onConfirm} tone="primary">
+            <Check size={24} />
+          </ModalIconButton>
+        </ModalActions>
+      </section>
+    </div>
+  );
+}
+
+export function VictoryDialog({ message, onExit, onRestart }: { message: string; onExit: () => void; onRestart: () => void }) {
+  return (
+    <div className="modal-scrim notification-backdrop">
+      <section className="modal-panel notification-modal" role="alertdialog" aria-label="Game over">
+        <h2>{message}</h2>
+        <ModalActions>
+          <button className="secondary danger icon-text-button wide-button" type="button" onClick={onExit}>
+            <X size={20} />
+            Exit
+          </button>
+          <button className="primary icon-text-button wide-button" type="button" onClick={onRestart}>
+            <RotateCcw size={20} />
+            Restart
+          </button>
+        </ModalActions>
+      </section>
+    </div>
+  );
+}
+
 export function DecisionDialog({
   confirmLabel = "End game",
   message,
@@ -97,11 +132,13 @@ export function ModalActions({ children }: { children: ReactNode }) {
 
 export function ModalIconButton({
   children,
+  disabled = false,
   label,
   onClick,
   tone = "plain",
 }: {
   children: ReactNode;
+  disabled?: boolean;
   label: string;
   onClick: () => void;
   tone?: "danger" | "plain" | "primary";
@@ -109,7 +146,7 @@ export function ModalIconButton({
   const toneClass = tone === "plain" ? "" : ` ${tone}`;
 
   return (
-    <button className={`icon-button${toneClass} large`} type="button" onClick={onClick} aria-label={label}>
+    <button className={`icon-button${toneClass} large`} type="button" onClick={onClick} disabled={disabled} aria-label={label}>
       {children}
     </button>
   );

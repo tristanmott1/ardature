@@ -130,6 +130,21 @@ export type BattleState = {
   result: BattleResult | null;
 };
 
+export type PendingResolution =
+  | {
+      eliminatedPlayerId: string;
+      type: "elimination";
+    }
+  | {
+      eliminatedPlayerId: string;
+      type: "victory";
+      winnerPlayerId: string;
+    };
+
+export type HostTransferState = {
+  oldHostPlayerId: string;
+};
+
 export type FortifySourceMove = {
   spyOwnerIds: string[];
   troops: TroopCounts;
@@ -230,5 +245,7 @@ export type GameState = {
   allocation: AllocationState | null;
   turn: TurnState | null;
   notifications: Record<string, GameNotification[]>;
+  pendingResolution: PendingResolution | null;
+  hostTransfer: HostTransferState | null;
   regionControl: Record<string, string | null>;
 };

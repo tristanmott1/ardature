@@ -26,6 +26,8 @@ export type ActiveOverlay =
   | { type: "handoff"; handoff: "allocation" | "turn" }
   | { type: "armyBuild"; build: "allocation" | "reinforcement" }
   | { type: "battle" }
+  | { type: "elimination" }
+  | { type: "victory" }
   | { type: "notification" }
   | { type: "confirm"; confirm: "draft" | "spy" };
 
@@ -88,6 +90,8 @@ export type PausePanelPolicy = {
   canResume: boolean;
   canRestart: boolean;
   canScanRecoveryAnswer: boolean;
+  canTransferHost: boolean;
+  hostTransferRequired: boolean;
 };
 
 export type GameViewContext = {
@@ -262,6 +266,8 @@ export function activeOverlayForState({
     needsAllocationArmyBuild ? { type: "armyBuild", build: "allocation" } : null,
     needsReinforcementArmyBuild ? { type: "armyBuild", build: "reinforcement" } : null,
     hasVisibleBattle ? { type: "battle" } : null,
+    game.pendingResolution?.type === "victory" ? { type: "victory" } : null,
+    game.pendingResolution?.type === "elimination" ? { type: "elimination" } : null,
     hasCurrentNotification ? { type: "notification" } : null,
     hasSpyConfirm ? { type: "confirm", confirm: "spy" } : null,
     canShowDraftConfirm ? { type: "confirm", confirm: "draft" } : null,
@@ -810,12 +816,16 @@ export function canAdvanceAllocationWaiting(game: GameState, isSyncHost: boolean
 
 export function pausePanelPolicyForGame(game: GameState, isSyncHost: boolean): PausePanelPolicy {
   const canControlPausedGame = game.mode === "local" || isSyncHost;
+  const hostTransferRequired = Boolean(game.hostTransfer);
 
   return {
-    canRemove: canControlPausedGame,
-    canResume: game.mode === "local" || (isSyncHost && game.players.every((player) => player.connectionStatus === "connected")),
+    canRemove: canControlPausedGame && !hostTransferRequired,
+    canResume: !hostTransferRequired &&
+      (game.mode === "local" || (isSyncHost && game.players.every((player) => player.connectionStatus === "connected"))),
     canRestart: canControlPausedGame,
     canScanRecoveryAnswer: isSyncHost,
+    canTransferHost: isSyncHost && hostTransferRequired,
+    hostTransferRequired,
   };
 }
 

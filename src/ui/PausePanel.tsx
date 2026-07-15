@@ -12,6 +12,7 @@ export function PausePanel({
   onRestart,
   onResume,
   onScanRecoveryAnswer,
+  onTransferHost,
   players,
   syncMessage,
   syncQrText,
@@ -24,11 +25,15 @@ export function PausePanel({
   onRestart?: () => void;
   onResume: () => void;
   onScanRecoveryAnswer?: () => void;
+  onTransferHost?: (playerId: string) => void;
   players: GamePlayer[];
   syncMessage?: string;
   syncQrText?: string;
 }) {
   const showRecoveryTools = mode === "sync" && Boolean(onScanRecoveryAnswer);
+  const transferPlayers = onTransferHost
+    ? players.filter((player) => player.id !== localPlayerId && player.connectionStatus === "connected")
+    : [];
 
   return (
     <div className="modal-scrim">
@@ -58,6 +63,16 @@ export function PausePanel({
             </article>
           ))}
         </div>
+        {onTransferHost ? (
+          <div className="host-transfer-panel">
+            <p className="sync-status">Transfer host before resuming.</p>
+            {transferPlayers.map((player) => (
+              <button className="secondary icon-text-button wide-button" type="button" key={player.id} onClick={() => onTransferHost(player.id)}>
+                Transfer to {player.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {showRecoveryTools ? (
           <div className="pause-recovery-tools">
             {syncQrText ? <QrPanel text={syncQrText} /> : null}

@@ -460,6 +460,7 @@ To declare an attack:
 - The committed attacking troops may be any mixture of heavy, cavalry, elite, and leader troops present in the source territory.
 - Captured spies do not count as troops and cannot attack.
 - The same source-target pair cannot be attacked more than once in the same turn.
+- A source-target pair already attacked this turn is not selectable during target selection and is not shown as a valid target hint.
 
 The source-target pair restriction applies even if the attacker retreats, loses, or fails to conquer the territory.
 
@@ -554,7 +555,7 @@ While the battle is active, the modal layout is a fixed vertical stack: reserved
 
 Battle unit rows follow the shared known-content icon contract. They show troop types with counts greater than zero plus captured spies present with that battle force. Visible icons keep the normal compact icon size and recenter. If a side has no troops after the battle ends, that row renders no troop icons but still reserves the same vertical row space.
 
-Both sides' current battle troop breakdowns are visible in the battle modal. Everyone who sees the modal sees the same battle contents, captured spies present with the battle forces, and which troop types die. Captured spies are not casualties and do not affect dice. The modal shows the latest roll only, not a full roll history. The latest roll always shows exactly the dice that were rolled; casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
+Both sides' current battle troop breakdowns are visible in the battle modal. Everyone who sees the modal sees the same battle contents, captured spies present with the battle forces, and which troop types die. Captured spies are not casualties and do not affect dice. The modal shows the latest roll only, not a full roll history. The latest roll always shows exactly the dice that were rolled, sorted highest to lowest from left to right for both attacker and defender. Casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
 
 In sync mode, only the attacker and defender see the battle modal. Only the attacker can roll, retreat, or dismiss the final result. Other connected players do not see the battle modal, but they do see committed map facts such as live territory troop totals and ownership changes. Non-participants stay in normal explore mode, but the battle source and target territories flash between selected and unselected visual states while the battle is active. The source/attacking territory flashes at a higher frequency, while the target/defending territory uses a slower pulse. Non-participants may still select any territory, including the source or target. If the selected territory is one of the flashing battle territories, the battle flash overrides the normal selected-fill color.
 
@@ -562,7 +563,7 @@ In local mode, only the active attacker sees the battle modal. The defender does
 
 The attacker must roll at least once before retreating. Before the first roll, the retreat button is disabled. After at least one roll, the attacker may press retreat. Retreat asks for confirmation. If retreat is confirmed, the attack ends immediately.
 
-When battle ends by conquest or attacker elimination, the normal battle layout is replaced by a simple result layout. It shows `{winner} defeated {loser}`, the winning side's resulting unit row centered below it, and the final check button. The result layout does not show scores, dice, the loser row, or the regular mirrored stack. If the defender wins, the result row shows surviving defending troops plus any captured spies already on the defended territory. If the attacker wins, the result row shows surviving attacking troops plus captured third-party spies from the conquered territory. A captured spy owned by the attacker is released immediately by the conquest and appears in this victory result row as the attacker's normal unbarred spy icon; after the result is dismissed, that released spy is no longer displayed in the territory because an available spy is not tied to one territory. Nothing else may happen until the attacker dismisses that final result. When the attacker confirms a retreat, the battle ends immediately and the battle modal closes without showing a final retreat message.
+When battle ends by conquest or attacker elimination, the normal battle layout is replaced by a simple result layout. It shows `{winner} defeated {loser}`, the winning side's resulting unit row, the final roll dice, and the final check button. The result layout does not show scores, the loser row, or the regular mirrored stack. If the defender wins, the result row shows surviving defending troops plus any captured spies already on the defended territory, and the final roll dice appear below the victorious army. If the attacker wins, the final roll dice appear above the victorious army, and the result row shows surviving attacking troops plus captured third-party spies from the conquered territory. A captured spy owned by the attacker is released immediately by the conquest and appears in this victory result row as the attacker's normal unbarred spy icon; after the result is dismissed, that released spy is no longer displayed in the territory because an available spy is not tied to one territory. Nothing else may happen until the attacker dismisses that final result. When the attacker confirms a retreat, the battle ends immediately and the battle modal closes without showing a final retreat message.
 
 ### Combat Score
 
@@ -724,7 +725,7 @@ If the attacker retreats:
 
 Pause must preserve locked attacks.
 
-Snapshots must preserve source, target, committed attacking troops, surviving attacking troops, surviving defending troops, submitted/computed scores, latest roll, whether at least one roll has happened, terminal result, and used source-target pairs.
+Snapshots must preserve source, target, committed attacking troops, surviving attacking troops, surviving defending troops, submitted/computed scores, latest roll, whether at least one roll has happened, terminal result, used source-target pairs, pending elimination/victory state, and forced host-transfer state.
 
 Completed scores persist through pause, refresh, and reconnect. If the game pauses while a player is still inside an unfinished challenge, that unfinished challenge restarts on resume. The score is not sampled until the challenge button is pressed and submitted.
 
@@ -828,14 +829,24 @@ If a territory containing captured spies is assigned during redistribution, cust
 
 ## Elimination and Win Condition
 
-A player is eliminated immediately when they own zero territories.
+A player becomes pending-eliminated when they own zero territories, but the removal is not applied silently.
 
-When eliminated:
+Elimination is resolved after the battle result is dismissed:
 
-- The player is fully out.
-- Their future turns are skipped.
-- Their spy dies whether it was available or captured.
-- They cannot receive reinforcements or take actions.
+- The battle result modal is shown first.
+- After the battle result is dismissed, every connected device shows an elimination modal: `{player} has been eliminated`.
+- In sync mode, everyone sees the modal, but only the host can confirm it. Non-host devices are blocked until the host confirms.
+- Confirming elimination removes that player from the game, disconnects that peer immediately if sync transport exists, kills that player's spy whether it was available or captured, and continues the current player's turn.
+- Elimination does not redistribute anything because the eliminated player owns no territories.
+- Eliminated players are forgotten by the active game. They cannot reconnect, receive reinforcements, take turns, or appear in future restart lobbies.
+- If the eliminated player is the current sync host and at least two players remain, confirmation moves the game into a forced paused host-transfer state before the player is removed. The game cannot resume until the host transfers authority to a different connected player. After transfer succeeds, the old host is immediately removed/disconnected and the new host may resume.
+
+If elimination leaves exactly one remaining player, the game is over instead of showing the normal elimination confirmation:
+
+- The modal says `{remaining player} wins`.
+- The options are `Exit` and `Restart`, not a single confirm button.
+- `Exit` ends the game for everyone.
+- `Restart` returns to the setup lobby as if rewinding to before this game started, with only the final two connected players: the winner and the final eliminated opponent. Previously eliminated players are already disconnected and forgotten.
 
 The game ends when one player owns every territory or all other players are eliminated.
 
@@ -1001,8 +1012,8 @@ Timer behavior:
 - If a timed pick expires with a confirmation sheet open, the pending territory is confirmed.
 - If a timed pick expires with no confirmation sheet open, a random remaining territory is chosen for the active player.
 - If pick time is unlimited, there is no timer and no automatic draft selection.
-- If local mode pauses during an active pick or confirmation sheet, the active timer and pending choice are preserved.
-- If sync mode pauses during an active pick or confirmation sheet, any local pending pick is discarded and that player's turn starts over on resume.
+- If either local or sync mode pauses during draft, the active pick is reset. Any pending confirmation is discarded, and that same player starts the pick again with a fresh full pick timer on resume.
+- Draft pause never preserves partial pick time. Allocation pause does preserve partial allocation time.
 
 After all territories are drafted, the app resolves initial troop allocation according to setup configuration. It does not remain on an ownership-only post-draft review screen.
 
@@ -1099,25 +1110,25 @@ The active player's provisional reinforcement edits are local to that player unt
 
 Local and sync modes use the same pause button placement and icon. In local mode, the pause button is visible during draft. In sync mode, only the host sees the pause button.
 
-Local pause is a true pause of the single-device draft:
+Local pause is a true pause of the single-device game, with draft and allocation timers treated differently:
 
-- If the pick timer is running, it freezes with the remaining time preserved.
-- If a confirmation sheet is open, the pending selected territory stays pending.
-- On resume, the same player continues from the same state.
-- Local pause has a restart button, confirmed like quitting, that returns to local setup/config with the same players and settings.
+- During draft, the current pick resets. The pending selected territory or confirmation sheet is discarded, and the same player receives a fresh full pick timer on resume.
+- During allocation, the timer freezes with remaining time preserved. Army build, territory selection, pending counts, and placed troops remain intact.
+- During turn play, the current committed state is preserved according to the turn/action rules.
+- Local pause has a restart button, confirmed like quitting, that returns to setup/config with the same players, colors, order, and game config from before the game started.
 - Local pause has no end-game or close button.
 - Local pause has no disconnected status, reconnect status, or QR reconnect controls.
 - Local players can be removed while paused.
-- Local refresh or close during an active game phase restores into local pause with timers stopped and remaining time preserved.
+- Local refresh or close during an active game phase restores into local pause. Draft resumes with a fresh pick timer; allocation resumes from preserved remaining time.
 - Local mode never requires reconnection when reopened because all players share one device.
 
-Sync host pause is a synchronization reset:
+Sync host pause follows the same timer contract:
 
-- The active pick timer is not preserved.
-- Any pending selected territory or confirmation sheet is discarded.
-- On unpause, the current player's turn starts over with a fresh timer.
+- During draft, the active pick timer is not preserved. Any pending selected territory or confirmation sheet is discarded, and the current picker starts over with a fresh full pick timer on resume.
+- During allocation, the host preserves remaining allocation time. Ready players stay ready, unready players continue with the same remaining shared timer after resume.
 - The host can restart from pause after confirmation, returning connected players to setup while keeping current sync connections open.
-- Restart removes reconnecting and disconnected players because the setup lobby accepts connected players only.
+- Restart is a clean return to the pre-game lobby: keep only currently connected players, their names/colors/locks/order as of restart, and the current game config; clear every active-game fact from the previous game, including draft ownership, allocation, turn state, notifications, spies, region control, recovery QR text, recovery slots, reconnecting/disconnected status, and host recovery offers.
+- Reconnecting and disconnected players are removed because setup lobby accepts connected players only and has no recovery slots.
 - Sync pause includes connected, disconnected, and reconnecting player status.
 - Sync host pause includes a recovery QR and scan button for disconnected-player recovery as soon as a recovery offer exists. It must never show a blank QR placeholder while that offer is being created.
 - Sync non-host pause does not include a blank QR placeholder or recovery tools.
@@ -1225,7 +1236,7 @@ The host is authoritative for shared game state:
 
 Joined devices send action requests to the host.
 
-The completed sync contract through troop allocation separates authoritative game facts from connection/session state:
+The completed sync contract separates authoritative game facts from connection/session state:
 
 - `GameState` stores game facts only.
 - `App` owns sync session state such as connecting, connected, reconnecting, disconnected, and host-ended.
@@ -1233,13 +1244,25 @@ The completed sync contract through troop allocation separates authoritative gam
 - Host-to-joiner updates are revisioned snapshots: `{ type: "snapshot", revision, game }`.
 - Joiners ignore stale snapshots.
 - Joiner-to-host commands are limited to `profileUpdate`, `draftConfirm`, `allocationUpdate`, `turnCommand`, and `quit`.
-- Turn commands carry committed turn facts only: spy confirmation/dismissal, notification dismissal, committed reinforcements, locked attacks, challenge score submissions, battle rolls, retreat, final battle dismissal, and fortify/end-turn.
+- Turn commands carry committed turn facts only: spy confirmation/dismissal, notification dismissal, committed reinforcements, locked attacks, challenge score submissions, battle rolls, retreat, final battle dismissal, elimination/victory confirmation, and fortify/end-turn.
 - The host validates every command against the current game state before applying it.
 - Host intentional end uses `hostEnded`.
 - Host player removal uses `removed` when the peer is still reachable.
 - Old unversioned `gameState`, `hostQuit`, and pending-pick messages are not part of the current sync contract.
 
 The host applies valid actions, persists active sync-host state separately from local pass-and-play saves, and broadcasts the resulting revisioned snapshot.
+
+Host transfer is a paused sync-only authority change:
+
+- Transfer can be started only by the current connected host while the game is paused.
+- The destination must be a currently connected non-host player.
+- The old host remains the source of truth until the chosen player acknowledges the transfer and receives the latest authoritative snapshot.
+- During transfer, resume is disabled for everyone.
+- Existing WebRTC data channels are host-centered and cannot be reassigned. The old host's still-live channels are used only as a temporary signaling bridge so remaining connected peers can establish channels to the new host.
+- No gameplay may resume until the new host has the authoritative snapshot and every remaining player is either connected to the new host or explicitly disconnected for the new host's recovery flow.
+- After successful transfer, the chosen player becomes the new host and broadcaster/recovery authority. The old host is then removed from the game, disconnected, and returned home through the same local outcome as a removed player.
+- If the old host was eliminated and at least two players remain, the game enters a forced pause that cannot resume until host transfer succeeds.
+- If the host is gone before transfer completes, there is no source of truth to transfer from. Recovery must use the old host's persisted paused model after that host device returns.
 
 Sync frequency should follow a resume-safety rule:
 
@@ -1556,8 +1579,8 @@ Before considering the first playable version complete:
 - Verify local setup supports 2 to 6 players, names, unique colors, turn order, territory draft settings, and troop allocation settings.
 - Verify sync setup supports Qwixx-style QR handshake, host lobby, joiner lobby, name/color edits, host locks, duplicate-color blocking, and host-authoritative setup state.
 - Verify local and sync drafts support snake, round-robin, random simulation, timed picks, confirmation timeout, random timeout fallback, and transition into troop allocation.
-- Verify local pause preserves active timers, pending confirmation, army/allocation progress, and player removal without reconnect state.
-- Verify local refresh during active play restores into pause with timers stopped and remaining time preserved.
+- Verify local pause resets draft picks, preserves allocation timers/progress, preserves committed turn state, and supports player removal without reconnect state.
+- Verify local refresh during active play restores into pause with draft resuming from a fresh pick and allocation resuming from preserved remaining time.
 - Verify sync heartbeat defines connected state, missed heartbeat immediately enters reconnecting, and host/joiner independently transition after the 10-second grace period.
 - Verify joiner reconnecting UI shows only local identity/inert background plus wait/X controls, never stale host roster, timer, ready, or connection-status facts.
 - Verify sync pause/reconnect supports manual pause, disconnect-forced pause, graceful quit, player removal, host persistence, QR disconnected-player recovery, stale recovery-answer failure, and unpause validation.

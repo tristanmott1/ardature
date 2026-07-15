@@ -350,6 +350,7 @@ Rules:
 - Any subset and mixture of heavy, cavalry, elite, and leader troops may be committed.
 - Captured spies on a territory do not count as troops and cannot attack.
 - The same source-target pair may not be attacked more than once in the same turn.
+- A source-target pair already attacked this turn is not selectable during target selection and is not shown as a valid target hint.
 
 The source-target restriction is not meaningfully directional in normal play because the active player cannot attack their own territories and cannot lose territories during their own turn. Once a source-target pair is committed, that pair is blocked for the rest of the turn even if the attacker retreats, loses, or captures the target.
 
@@ -412,7 +413,7 @@ While the battle is active, the modal layout is a fixed vertical stack: reserved
 
 Battle unit rows follow the shared known-content icon contract. They show troop types with counts greater than zero plus captured spies present with that battle force. The visible icons keep the normal compact icon size and recenter. If a side has no troops after the battle ends, that row renders no troop icons but still reserves the same vertical row space.
 
-Both sides' current battle troop breakdowns are visible during the battle. Everyone who can see the battle modal sees the same battle contents, captured spies present with the battle forces, and which troop types die. Captured spies are not casualties and do not affect dice. The modal shows the latest roll only, not a full roll history. The latest roll always shows exactly the dice that were rolled; casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
+Both sides' current battle troop breakdowns are visible during the battle. Everyone who can see the battle modal sees the same battle contents, captured spies present with the battle forces, and which troop types die. Captured spies are not casualties and do not affect dice. The modal shows the latest roll only, not a full roll history. The latest roll always shows exactly the dice that were rolled, sorted highest to lowest from left to right for both attacker and defender. Casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
 
 In sync mode:
 
@@ -431,7 +432,7 @@ In local mode, only the active attacker sees the battle modal. The defender does
 
 The attacker must roll at least once. Before the first roll, the retreat button is disabled. After at least one roll, the attacker may retreat. Pressing retreat opens a confirmation decision. If retreat is confirmed, the attack ends immediately.
 
-If the battle ends by conquest or attacker elimination, the normal battle layout is replaced by a simple result layout. It shows `{winner} defeated {loser}`, the winning side's resulting unit row centered below it, and the final check button. The result layout does not show scores, dice, the loser row, or the regular mirrored stack. If the defender wins, the result row shows surviving defending troops plus any captured spies that were already on the defended territory. If the attacker wins, the result row shows surviving attacking troops plus captured third-party spies from the conquered territory. A captured spy owned by the attacker is released immediately by the conquest and appears in this victory result row as the attacker's normal unbarred spy icon; after the result is dismissed, that released spy is no longer displayed in the territory because an available spy is not tied to one territory. Nothing else may happen until the attacker presses that final check button. If the attacker confirms a retreat, the battle ends immediately and the battle modal closes; no final retreat message is shown.
+If the battle ends by conquest or attacker elimination, the normal battle layout is replaced by a simple result layout. It shows `{winner} defeated {loser}`, the winning side's resulting unit row, the final roll dice, and the final check button. The result layout does not show scores, the loser row, or the regular mirrored stack. If the defender wins, the result row shows surviving defending troops plus any captured spies that were already on the defended territory, and the final roll dice appear below the victorious army. If the attacker wins, the final roll dice appear above the victorious army, and the result row shows surviving attacking troops plus captured third-party spies from the conquered territory. A captured spy owned by the attacker is released immediately by the conquest and appears in this victory result row as the attacker's normal unbarred spy icon; after the result is dismissed, that released spy is no longer displayed in the territory because an available spy is not tied to one territory. Nothing else may happen until the attacker presses that final check button. If the attacker confirms a retreat, the battle ends immediately and the battle modal closes; no final retreat message is shown.
 
 After battle dismissal, the active player returns to the normal post-reinforcement action choice with `Attack` and `Fortify` available, unless the game has ended. The active player may attack again if a legal source-target pair remains and the pair has not already been used this turn.
 
@@ -858,7 +859,37 @@ Action cancellation rules:
 
 If a territory containing captured spies is assigned during redistribution, custody of those spies transfers to the new territory owner. Any captured spy owned by the new territory owner is released immediately.
 
-When a player is eliminated and owns no territories, that player's spy dies whether it was available or captured.
+## Elimination And Victory
+
+Elimination by conquest is different from pause-menu player removal.
+
+A player becomes pending-eliminated when they own zero territories after a conquest. The app resolves this only after the battle result modal is dismissed:
+
+- The battle result is shown first.
+- Then every connected device shows `{player} has been eliminated`.
+- In local mode, the current device can confirm.
+- In sync mode, everyone sees the modal, but only the host can confirm/dismiss it.
+- Confirming kills that player's spy whether it was available or captured.
+- Confirming removes the eliminated player from turn order and disconnects that peer immediately if they are connected in sync mode.
+- No territories or troops are redistributed because the eliminated player owns no territories.
+- The current player's turn continues after the elimination is confirmed.
+
+If elimination leaves exactly one remaining player, the normal elimination modal is replaced by a victory modal:
+
+- The message is `{remaining player} wins`.
+- The options are `Exit` and `Restart`.
+- `Exit` ends the game for everyone.
+- `Restart` returns to setup as if rewinding to before the game began, with only the final two connected players: the winner and the final eliminated opponent.
+- Previously eliminated players are already disconnected and forgotten, so they do not appear in the restart lobby.
+
+If the eliminated player is the sync host and at least two players remain, confirming the elimination cannot immediately remove that host:
+
+- The game enters a forced paused host-transfer state.
+- Resume is disabled.
+- The old host remains source of truth only long enough to transfer authority.
+- The host must transfer authority to a currently connected non-host player.
+- Once transfer succeeds, the old host is removed/disconnected and returned home.
+- The new host can then resume the game.
 
 ## Sync And Persistence Notes
 

@@ -75,7 +75,13 @@ export function BattleModal({
       <div className="modal-scrim battle-scrim">
         <section className="modal-panel battle-modal battle-result-modal" role="dialog" aria-label="Battle result">
           <p className="battle-result-message">{winner.name} defeated {loser.name}</p>
+          {battle.result.type === "attackerWon" ? (
+            <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
+          ) : null}
           <BattleTroops player={winner} players={players} spies={resultSpies} troops={winningTroops} />
+          {battle.result.type === "defenderWon" ? (
+            <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
+          ) : null}
           <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl} aria-label="Dismiss battle">
             <Check size={20} />
           </button>
@@ -93,8 +99,7 @@ export function BattleModal({
         <BattleScore score={battle.defenderScore} />
         <div className="battle-dice-area">
           <button className="battle-dice-button" type="button" onClick={onRoll} disabled={!canRoll} aria-label="Roll dice">
-            <DiceRow dice={defenderDice} label="Defender dice" tone="defender" />
-            <DiceRow dice={attackerDice} label="Attacker dice" tone="attacker" />
+            <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
           </button>
         </div>
         <BattleScore score={battle.attackerScore} />
@@ -130,7 +135,16 @@ function BattleScore({ score }: { score: number | null }) {
 }
 
 function displayedDice(latestDice: number[] | undefined, currentDiceCount: number) {
-  return latestDice ?? emptyDice(currentDiceCount);
+  return latestDice ? [...latestDice].sort((left, right) => right - left) : emptyDice(currentDiceCount);
+}
+
+function BattleDiceRows({ attackerDice, defenderDice }: { attackerDice: Array<number | null>; defenderDice: Array<number | null> }) {
+  return (
+    <>
+      <DiceRow dice={defenderDice} label="Defender dice" tone="defender" />
+      <DiceRow dice={attackerDice} label="Attacker dice" tone="attacker" />
+    </>
+  );
 }
 
 function DiceRow({ dice, label, tone }: { dice: Array<number | null>; label: string; tone: "attacker" | "defender" }) {

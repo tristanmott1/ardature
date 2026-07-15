@@ -18,7 +18,7 @@ import {
   canAddTroop,
   canAddReinforcementTroop,
   canAttackFromTerritory,
-  canAttackTargetTerritory,
+  canSelectAttackTargetTerritory,
   canCommitAttack,
   canCommitFortify,
   canUseSpy,
@@ -31,6 +31,7 @@ import {
   completeTimedOutAllocation,
   completeTimedOutDraftPick,
   confirmSpyAttempt,
+  confirmPendingElimination,
   confirmTerritoryPick,
   createInitialGameState,
   createOwnershipMap,
@@ -59,6 +60,7 @@ import {
   removeSetupPlayer,
   reorderSetupPlayers,
   restartPausedGameToSetup,
+  restartVictoryGameToSetup,
   resumePausedGame,
   sampleBattleChallengeScore,
   saveLocalGame,
@@ -77,6 +79,7 @@ import {
   startSpySelection,
   submitArmyBuild,
   submitReinforcementBuild,
+  transferHostAuthority,
   updateArmyMarker,
   updateReinforcementMarker,
   updateSetupConfig,
@@ -147,7 +150,7 @@ import { QrScanner } from "./sync/QrCodeUi";
 import { ArmyBuildModal } from "./ui/ArmyBuildModal";
 import { BattleModal } from "./ui/BattleModal";
 import { AllocationWaitingPanel, TroopSection, TurnActionPanel } from "./ui/GameSections";
-import { ConfirmSheet, DecisionDialog, HandoffPanel, NotificationDialog } from "./ui/Overlays";
+import { ConfirmSheet, DecisionDialog, EliminationDialog, HandoffPanel, NotificationDialog, VictoryDialog } from "./ui/Overlays";
 import { PausePanel } from "./ui/PausePanel";
 import { PlayerBar } from "./ui/PlayerChrome";
 import { HomePanel, SetupPanel, SyncEntryPanel } from "./ui/SetupPanels";
@@ -487,8 +490,7 @@ function suggestedTerritoryIdsForMap({
 
   if (turnPlayerId && attackSetup?.sourceTerritoryId && !attackSetup.targetTerritoryId) {
     return outgoingTerritoryIds(attackSetup.sourceTerritoryId).filter((territoryId) =>
-      canAttackTargetTerritory(game, turnPlayerId, attackSetup.sourceTerritoryId!, territoryId) &&
-        !game.turn?.completedAttacks.includes(`${attackSetup.sourceTerritoryId}->${territoryId}`),
+      canSelectAttackTargetTerritory(game, turnPlayerId, attackSetup.sourceTerritoryId!, territoryId),
     );
   }
 
@@ -804,7 +806,7 @@ function App() {
     if (
       attackSetup.sourceTerritoryId &&
       attackSetup.targetTerritoryId &&
-      !canAttackTargetTerritory(game, turnPlayerId, attackSetup.sourceTerritoryId, attackSetup.targetTerritoryId)
+      !canSelectAttackTargetTerritory(game, turnPlayerId, attackSetup.sourceTerritoryId, attackSetup.targetTerritoryId)
     ) {
       setAttackSetup((current) => current
         ? {
@@ -1348,6 +1350,38 @@ function App() {
     });
   }
 
+  function acceptHostTransfer(nextGame: GameState, revision: number) {
+    const hostPlayer = localPlayerId
+      ? nextGame.players.find((player) => player.id === localPlayerId)
+      : null;
+    if (!hostPlayer?.color) {
+      resetAppToHome();
+      return;
+    }
+
+    joinTransportRef.current?.close();
+    joinTransportRef.current = null;
+    hostTransportRef.current = new SyncHostTransport({
+      callbacks: {
+        onMessage: handleHostMessage,
+        onPeerClosed: handleHostPeerClosed,
+        onPeerStatus: handleHostPeerStatus,
+      },
+      hostColor: hostPlayer.color,
+      hostName: hostPlayer.name,
+      hostPlayerId: hostPlayer.id,
+      roomId: crypto.randomUUID(),
+    });
+    syncRevisionRef.current = revision;
+    lastSentAllocationRef.current = "";
+    setSyncRole("host");
+    setSyncSession("connected");
+    setSyncMessage("Host transferred");
+    setSyncRecoveryOfferText("");
+    setSyncRecoverySlots([]);
+    setGame(nextGame);
+  }
+
   function startJoinerAnswerSession(joinTransport: SyncJoinTransport, playerId: string, answerText: string, players: GamePlayer[]) {
     endSyncTransports();
     joinTransportRef.current = joinTransport;
@@ -1407,6 +1441,16 @@ function App() {
 
   const handleJoinerMessage = useCallback((_playerId: string, rawMessage: SyncWireMessage) => {
     if (!isArdatureSyncMessage(rawMessage)) {
+      return;
+    }
+
+    if (rawMessage.type === "hostTransfer") {
+      if (rawMessage.revision <= lastSnapshotRevisionRef.current) {
+        return;
+      }
+
+      lastSnapshotRevisionRef.current = rawMessage.revision;
+      acceptHostTransfer(rawMessage.game, rawMessage.revision);
       return;
     }
 
@@ -1632,7 +1676,7 @@ function App() {
       return;
     }
 
-    if (!attackSetup.targetTerritoryId && canAttackTargetTerritory(game, turnPlayerId, attackSetup.sourceTerritoryId, territoryId)) {
+    if (!attackSetup.targetTerritoryId && canSelectAttackTargetTerritory(game, turnPlayerId, attackSetup.sourceTerritoryId, territoryId)) {
       setAttackSetup({
         ...attackSetup,
         targetTerritoryId: territoryId,
@@ -2247,6 +2291,67 @@ function App() {
     setGame((current) => dismissNotification(current, currentNotificationPlayerId, currentNotification.id));
   }
 
+  function confirmCurrentElimination() {
+    const pending = game.pendingResolution;
+    if (!pending || pending.type !== "elimination") {
+      return;
+    }
+
+    const confirmingPlayerId = localPlayerId ?? turnPlayerId;
+    if (!confirmingPlayerId) {
+      return;
+    }
+
+    if (isSyncGame && !isSyncHost) {
+      return;
+    }
+
+    if (isSyncHost && pending.eliminatedPlayerId !== localPlayerId) {
+      hostTransportRef.current?.sendToPeer(pending.eliminatedPlayerId, { type: "removed" });
+      hostTransportRef.current?.removePeer(pending.eliminatedPlayerId);
+    }
+
+    setGame((current) => confirmPendingElimination(current, confirmingPlayerId, isSyncHost ? localPlayerId : null));
+  }
+
+  function exitCurrentVictory() {
+    if (isSyncHost) {
+      hostTransportRef.current?.broadcast({ type: "hostEnded" });
+    }
+
+    resetAppToHome();
+  }
+
+  function restartCurrentVictory() {
+    if (isSyncGame && !isSyncHost) {
+      return;
+    }
+
+    clearActiveGameUiState();
+    setGame(restartVictoryGameToSetup);
+  }
+
+  function transferHostToPlayer(playerId: string) {
+    if (!isSyncHost || !localPlayerId || !game.hostTransfer) {
+      return;
+    }
+
+    const nextGame = transferHostAuthority(game, localPlayerId, playerId);
+    const revision = syncRevisionRef.current + 1;
+    syncRevisionRef.current = revision;
+    hostTransportRef.current?.sendToPeer(playerId, {
+      type: "hostTransfer",
+      revision,
+      game: nextGame,
+    });
+    for (const player of game.players) {
+      if (player.id !== localPlayerId && player.id !== playerId && player.connectionStatus === "connected") {
+        hostTransportRef.current?.sendToPeer(player.id, { type: "hostEnded" });
+      }
+    }
+    resetAppToHome();
+  }
+
   function pauseCurrentGame() {
     if (isSyncGame && !isSyncHost) {
       return;
@@ -2296,7 +2401,18 @@ function App() {
     }
 
     setDecisionPrompt(null);
+    clearActiveGameUiState();
     setGame((current) => restartPausedGameToSetup(current, isSyncHost));
+  }
+
+  function clearActiveGameUiState() {
+    setAttackSetup(null);
+    setFortifySetup(null);
+    setMapSelections(EMPTY_MAP_SELECTIONS);
+    setSyncRecoveryOfferText("");
+    setSyncRecoverySlots([]);
+    setSyncScannerMode(null);
+    setSyncMessage("");
   }
 
   function resetAppToHome() {
@@ -2463,6 +2579,34 @@ function App() {
           )
           : null;
       }
+      case "elimination": {
+        const pending = game.pendingResolution?.type === "elimination" ? game.pendingResolution : null;
+        const player = pending ? game.players.find((candidate) => candidate.id === pending.eliminatedPlayerId) : null;
+
+        return player
+          ? (
+            <EliminationDialog
+              canConfirm={game.mode === "local" || isSyncHost}
+              message={`${player.name} has been eliminated`}
+              onConfirm={confirmCurrentElimination}
+            />
+          )
+          : null;
+      }
+      case "victory": {
+        const pending = game.pendingResolution?.type === "victory" ? game.pendingResolution : null;
+        const winner = pending ? game.players.find((candidate) => candidate.id === pending.winnerPlayerId) : null;
+
+        return winner
+          ? (
+            <VictoryDialog
+              message={`${winner.name} wins`}
+              onExit={exitCurrentVictory}
+              onRestart={restartCurrentVictory}
+            />
+          )
+          : null;
+      }
       case "handoff":
         if (activeOverlay.handoff === "allocation" && allocationPlayer) {
           return <HandoffPanel ariaLabel="Allocation handoff" buttonLabel="Begin allocation" onContinue={startLocalAllocationTurn} />;
@@ -2486,6 +2630,7 @@ function App() {
             onRestart={pausePanelPolicy.canRestart ? () => setDecisionPrompt("restart") : undefined}
             onResume={resumeCurrentGame}
             onScanRecoveryAnswer={pausePanelPolicy.canScanRecoveryAnswer ? () => setSyncScannerMode("joinAnswer") : undefined}
+            onTransferHost={pausePanelPolicy.canTransferHost ? transferHostToPlayer : undefined}
             players={game.players}
             syncMessage={syncMessage}
             syncQrText={pausePanelPolicy.canScanRecoveryAnswer ? syncQrText : ""}

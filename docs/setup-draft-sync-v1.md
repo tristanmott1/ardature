@@ -140,8 +140,8 @@ Manual draft interaction:
 - If a timed pick expires with a confirmation sheet open, the selected territory is treated as confirmed.
 - If a timed pick expires with no confirmation sheet open, the host/local device randomly chooses one remaining territory for the active player.
 - If pick time is unlimited, there is no timer and no automatic draft selection.
-- If local mode pauses during an active pick or confirmation sheet, the timer and pending choice are preserved locally.
-- If sync mode pauses during an active pick or confirmation sheet, any local pending choice is discarded and that player's turn starts over when the game resumes.
+- If either local or sync mode pauses during draft, the active pick is reset. Any pending confirmation sheet is discarded, and that same player starts the pick again with a fresh full pick timer when the game resumes.
+- Draft pause never preserves partial pick time. Allocation pause preserves partial allocation time.
 
 Draft ownership map:
 
@@ -157,26 +157,27 @@ Local and sync modes should use the same pause button placement and icon in the 
 - In sync mode, only the host sees the pause button.
 - In sync mode, pause is also forced by ungraceful disconnects.
 
-Local pause is a true pause of the single-device draft:
+Local pause is a true pause of the single-device game, with draft pick timing reset:
 
-- If the pick timer is running, it freezes with the remaining time preserved.
-- If a confirmation sheet is open, the pending selected territory stays pending.
-- On resume, the same player continues from the same state.
-- Local pause has a restart button, confirmed like quitting, that returns to local setup/config with the same players and settings.
+- If the pick timer is running, it is not preserved.
+- If a confirmation sheet is open, the pending selected territory is discarded.
+- On resume, the same player starts that pick again with a fresh full pick timer.
+- Local pause has a restart button, confirmed like quitting, that returns to local setup/config with the same players, colors, order, and game config from before the game started.
 - Local pause has no end-game or close button.
 - Local pause has no disconnected or reconnecting state.
 - Local pause has no QR/reconnect controls.
 - Local pause does not show territories remaining or other draft progress inside the pause modal. Draft progress belongs in the persistent player bar before pause, not in pause content.
 - Local players can be removed while paused.
-- Local refresh or close during draft restores into local pause, with the timer stopped and remaining time preserved.
+- Local refresh or close during draft restores into local pause. On resume, the active pick restarts with a fresh full timer.
 
-Sync host pause is a synchronization reset:
+Sync host pause uses the same draft reset contract:
 
 - The active pick timer is not preserved.
 - Any pending selected territory or confirmation sheet is discarded.
 - On unpause, the current player's turn starts over with a fresh timer.
 - The host can restart from pause after confirmation, returning connected players to setup while keeping current sync connections open.
-- Restart removes any reconnecting or disconnected players before the setup lobby is shown.
+- Restart rewinds to the pre-game lobby: keep only currently connected players with their names, colors, locks, order, and current game config; clear every active-game fact and recovery artifact from the previous game.
+- Restart removes any reconnecting or disconnected players before the setup lobby is shown because setup has no recovery slots.
 - Sync pause includes connected, disconnected, and reconnecting player status.
 - Sync host pause includes a recovery QR and scan button for disconnected-player recovery as soon as a recovery offer exists. It must never render a blank QR placeholder while that offer is being created.
 - Sync non-host pause never includes a QR placeholder or recovery tools. Recovery is coordinated through the host because the host is the source of truth.
@@ -211,7 +212,7 @@ The completed sync contract separates authoritative game facts from connection/s
 - Host-to-joiner updates are revisioned snapshots: `{ type: "snapshot", revision, game }`.
 - Joiners ignore stale snapshots.
 - Joiner-to-host commands are limited to `profileUpdate`, `draftConfirm`, `allocationUpdate`, `turnCommand`, and `quit`.
-- Turn commands cover committed turn facts only: spy confirmation/dismissal, notification dismissal, committed reinforcements, locked attacks, challenge score submissions, battle rolls, retreat, final battle dismissal, and fortify/end-turn.
+- Turn commands cover committed turn facts only: spy confirmation/dismissal, notification dismissal, committed reinforcements, locked attacks, challenge score submissions, battle rolls, retreat, final battle dismissal, elimination/victory confirmation, and fortify/end-turn.
 - Host intentional end sends `hostEnded`; joiners return home.
 - Host removal sends `removed`; that joiner returns home through the same path as host-ended.
 - Lost host connection blocks joiner gameplay during the 10-second reconnecting grace period. If automatic reconnect fails, the joiner returns home.
@@ -277,10 +278,20 @@ Connected pause UI is different:
 - Connected pause may show roster and connection statuses because the device is still receiving source-of-truth data from the host.
 - A disconnected/reconnecting joiner must never infer or display those statuses from stale local state.
 
+Host transfer is available only from connected sync pause:
+
+- Only the current connected host can start it.
+- The destination must be a currently connected non-host player.
+- Resume is disabled while transfer is pending.
+- The old host remains source of truth until the selected player receives the latest authoritative snapshot and acknowledges becoming host.
+- Existing channels are host-centered, so the old host acts only as a temporary signaling bridge while remaining peers connect to the new host.
+- After transfer succeeds, the old host is removed/disconnected and returns home.
+- If host transfer is required because the old host was eliminated, the game cannot resume until this transfer succeeds.
+
 Sync should share committed game facts promptly enough for the host to resume without outside help:
 
 - Confirmed draft picks are sent immediately.
-- Future setup/turn actions should follow the same rule: send meaningful committed facts, not local visual state.
+- Turn actions follow the same rule: send meaningful committed facts, including battle rolls, final battle dismissal, elimination/victory resolution, forced host-transfer state, and host transfer completion. Do not send local visual state.
 - Transient UI such as pending selection, camera position, focus animation, open modals, and selected inspection territory is never part of the sync contract.
 
 If a sync player is removed during pause:
