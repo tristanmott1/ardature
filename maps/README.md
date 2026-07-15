@@ -10,7 +10,7 @@ All source drawings currently use the same `1600x1131` coordinate space.
 - `source/territories-drawing.jpeg`: source-of-truth boundary drawing. Red lines define the six regions; blue lines define territories within those regions; page edges close shapes where needed.
 - `source/landmark-drawing.jpeg`: source-of-truth landmark ink drawing.
 - `source/landmark-outline-drawing.jpeg`: source-of-truth landmark mask and ship-route guide drawing. Blue outlines are used exactly to clip the landmark ink and hide covered border strokes. Red guide strokes are used to derive visual dotted ship routes.
-- `territory-key.md`: canonical territory names, region membership, and gameplay connections.
+- `territory-key.md`: canonical territory names, region membership, and directed gameplay connections.
 
 ## Generated Files
 
@@ -24,7 +24,7 @@ All source drawings currently use the same `1600x1131` coordinate space.
 - `previews/territories-purple.svg`: softened electric-purple territory preview generated from the extracted map model.
 - `previews/territories-background.svg`: flat background-color territory preview generated from the extracted map model.
 - `../src/map/generated/mapData.ts`: app-ready TypeScript map data generated from the same extracted map model, including territory visual centers and selected-camera focus bounds.
-- `../src/map/generated/mapConnections.ts`: app-ready gameplay connections generated from territory land and ship connections.
+- `../src/map/generated/mapConnections.ts`: app-ready directed gameplay connections generated from territory land, ship, and one-way connections.
 
 The territory previews use a flat `#EFE9D9` background, solid territory fills, physical border strokes hidden by the exact landmark mask, dotted visual ship routes, and the landmark overlay. Colored themes use deterministic territory shades based mostly on west-to-east position, with some north-to-south weight and small stable variation so neighboring territories remain visually distinct. The background theme remains one uniform tan. Borders inside one region use a 10-unit stroke. Borders between regions use a 20-unit stroke, with `background` treated as a region so coastlines receive the thicker stroke. App-facing previews add the same 1500 map-unit display margin used by the PWA so edge territories and manual camera movement have natural breathing room.
 
@@ -36,7 +36,7 @@ powershell -ExecutionPolicy Bypass -File scripts\extract-map.ps1
 
 The map extractor validates that the output has 6 playable regions plus 1 background region, 42 playable territories plus 3 background territories, one territory assignment for every source pixel, canonical border objects referenced by exactly two territories, non-empty landmark geometry, and exactly 4 visual ship-route guide strokes.
 
-The extractor also writes `src/map/generated/mapData.ts` and `src/map/generated/mapConnections.ts` for the PWA. `mapData.ts` translates territory fills, hit targets, visual centers, static ink, landmarks, and visual ship routes into a framed app coordinate system with a 1500 map-unit margin on every side. It also includes a generated `homeViewport` for the normal unbuffered map view. Territory focus bounds are generated from framed fill loops with 500 map units of padding on every side, then clamped inside the framed app map. `mapConnections.ts` contains each playable territory's land and ship gameplay connections for viewer-specific troop visibility. Both files are generated and should not be manually edited.
+The extractor also writes `src/map/generated/mapData.ts` and `src/map/generated/mapConnections.ts` for the PWA. `mapData.ts` translates territory fills, hit targets, visual centers, static ink, landmarks, and visual ship routes into a framed app coordinate system with a 1500 map-unit margin on every side. It also includes a generated `homeViewport` for the normal unbuffered map view. Territory focus bounds are generated from framed fill loops with 500 map units of padding on every side, then clamped inside the framed app map. `mapConnections.ts` exports `generatedDirectedMapConnections`, each playable territory's outgoing land and ship gameplay connections for attacks, spy distance, fortify, random allocation, and viewer-specific troop visibility. Both files are generated and should not be manually edited.
 
 Each playable territory must have exactly one generated visual center. The visual center is the center of the large green circle marked inside that territory in `source/territories-drawing.jpeg`. Troop-count circles and future territory-local markers must use these generated visual centers. The extractor should fail loudly if a playable territory does not have exactly one detectable green center circle; it should not silently fall back to territory seed points.
 

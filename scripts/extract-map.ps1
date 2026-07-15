@@ -129,6 +129,15 @@ public static class MapExtractor
         public string RegionName;
         public string[] LandBorders;
         public string[] ShipBorders;
+        public string[] LandConnections;
+        public string[] ShipConnections;
+    }
+
+    class DirectedKeyConnection
+    {
+        public string FromId;
+        public string ToId;
+        public string Type;
     }
 
     class TerritoryInfo
@@ -765,8 +774,8 @@ public static class MapExtractor
                 Name = entry.Name,
                 RegionId = entry.RegionId,
                 Playable = true,
-                LandConnections = entry.LandBorders,
-                ShipConnections = entry.ShipBorders
+                LandConnections = entry.LandConnections,
+                ShipConnections = entry.ShipConnections
             };
         }
 
@@ -1341,8 +1350,8 @@ public static class MapExtractor
             return false;
         }
 
-        return keyEntries[territoryA].LandBorders.Contains(territoryB) &&
-            keyEntries[territoryB].LandBorders.Contains(territoryA);
+        return keyEntries[territoryA].LandConnections.Contains(territoryB) ||
+            keyEntries[territoryB].LandConnections.Contains(territoryA);
     }
 
     static string[] OrderedTerritoryPair(string territoryA, string territoryB)
@@ -1885,14 +1894,55 @@ public static class MapExtractor
     static Dictionary<string, TerritoryKeyEntry> ReadTerritoryKey(string path)
     {
         Dictionary<string, TerritoryKeyEntry> entries = new Dictionary<string, TerritoryKeyEntry>();
+        List<DirectedKeyConnection> oneWayConnections = new List<DirectedKeyConnection>();
         bool inIndex = false;
+        bool inOneWay = false;
 
         foreach (string rawLine in File.ReadAllLines(path))
         {
             string line = rawLine.Trim();
+            if (line == "## One-way Connections")
+            {
+                inOneWay = true;
+                inIndex = false;
+                continue;
+            }
+
             if (line == "## Alphabetical Territory Index")
             {
+                inOneWay = false;
                 inIndex = true;
+                continue;
+            }
+
+            if (line.StartsWith("## ", StringComparison.Ordinal))
+            {
+                inOneWay = false;
+                if (inIndex)
+                {
+                    break;
+                }
+            }
+
+            if (inOneWay)
+            {
+                if (!line.StartsWith("|", StringComparison.Ordinal) || line.Contains("---") || line.Contains("From | To"))
+                {
+                    continue;
+                }
+
+                string[] oneWayParts = line.Trim('|').Split('|').Select(p => p.Trim()).ToArray();
+                if (oneWayParts.Length < 3)
+                {
+                    continue;
+                }
+
+                oneWayConnections.Add(new DirectedKeyConnection
+                {
+                    FromId = Slug(oneWayParts[0]),
+                    ToId = Slug(oneWayParts[1]),
+                    Type = Slug(oneWayParts[2])
+                });
                 continue;
             }
 
@@ -1927,6 +1977,47 @@ public static class MapExtractor
                 LandBorders = ParseBorderList(parts[2]),
                 ShipBorders = ParseBorderList(parts[3])
             };
+        }
+
+        foreach (TerritoryKeyEntry entry in entries.Values)
+        {
+            entry.LandConnections = entries.Values
+                .Where(other => other.Id != entry.Id && (entry.LandBorders.Contains(other.Id) || other.LandBorders.Contains(entry.Id)))
+                .Select(other => other.Id)
+                .Concat(oneWayConnections.Where(connection => connection.FromId == entry.Id && connection.Type == "land").Select(connection => connection.ToId))
+                .Distinct()
+                .OrderBy(id => TerritorySortKey(id))
+                .ToArray();
+            entry.ShipConnections = entries.Values
+                .Where(other => other.Id != entry.Id && (entry.ShipBorders.Contains(other.Id) || other.ShipBorders.Contains(entry.Id)))
+                .Select(other => other.Id)
+                .Concat(oneWayConnections.Where(connection => connection.FromId == entry.Id && connection.Type == "ship").Select(connection => connection.ToId))
+                .Distinct()
+                .OrderBy(id => TerritorySortKey(id))
+                .ToArray();
+        }
+
+        foreach (DirectedKeyConnection connection in oneWayConnections)
+        {
+            TerritoryKeyEntry fromEntry;
+            TerritoryKeyEntry toEntry;
+            if (!entries.TryGetValue(connection.FromId, out fromEntry) || !entries.TryGetValue(connection.ToId, out toEntry))
+            {
+                throw new InvalidOperationException("One-way connection references an unknown territory: " + connection.FromId + " -> " + connection.ToId + ".");
+            }
+
+            if (connection.Type != "land" && connection.Type != "ship")
+            {
+                throw new InvalidOperationException("One-way connection has unknown type: " + connection.Type + ".");
+            }
+
+            bool listedAsBidirectional = connection.Type == "land"
+                ? fromEntry.LandBorders.Contains(connection.ToId) || toEntry.LandBorders.Contains(connection.FromId)
+                : fromEntry.ShipBorders.Contains(connection.ToId) || toEntry.ShipBorders.Contains(connection.FromId);
+            if (listedAsBidirectional)
+            {
+                throw new InvalidOperationException("One-way connection is also listed as bidirectional: " + connection.FromId + " -> " + connection.ToId + ".");
+            }
         }
 
         return entries;
@@ -2004,29 +2095,25 @@ public static class MapExtractor
 
             foreach (string neighbor in entry.LandBorders)
             {
-                TerritoryKeyEntry neighborEntry;
-                if (!keyEntries.TryGetValue(neighbor, out neighborEntry))
+                if (!keyEntries.ContainsKey(neighbor))
                 {
                     throw new InvalidOperationException(entry.Id + " has unknown land border " + neighbor + ".");
-                }
-
-                if (!neighborEntry.LandBorders.Contains(entry.Id))
-                {
-                    throw new InvalidOperationException(entry.Id + " land border is not reciprocal with " + neighbor + ".");
                 }
             }
 
             foreach (string neighbor in entry.ShipBorders)
             {
-                TerritoryKeyEntry neighborEntry;
-                if (!keyEntries.TryGetValue(neighbor, out neighborEntry))
+                if (!keyEntries.ContainsKey(neighbor))
                 {
                     throw new InvalidOperationException(entry.Id + " has unknown ship border " + neighbor + ".");
                 }
+            }
 
-                if (!neighborEntry.ShipBorders.Contains(entry.Id))
+            foreach (string neighbor in entry.LandConnections.Concat(entry.ShipConnections))
+            {
+                if (!keyEntries.ContainsKey(neighbor))
                 {
-                    throw new InvalidOperationException(entry.Id + " ship border is not reciprocal with " + neighbor + ".");
+                    throw new InvalidOperationException(entry.Id + " has unknown directed connection " + neighbor + ".");
                 }
             }
         }
@@ -2139,7 +2226,7 @@ public static class MapExtractor
         List<string> physicalShipBorders = new List<string>();
         foreach (TerritoryKeyEntry entry in keyEntries.Values)
         {
-            foreach (string neighbor in entry.LandBorders)
+            foreach (string neighbor in entry.LandConnections)
             {
                 string borderId = BorderId(entry.Id, neighbor);
                 if (!borderIds.Contains(borderId))
@@ -2148,7 +2235,7 @@ public static class MapExtractor
                 }
             }
 
-            foreach (string neighbor in entry.ShipBorders)
+            foreach (string neighbor in entry.ShipConnections)
             {
                 string borderId = BorderId(entry.Id, neighbor);
                 if (borderIds.Contains(borderId))
@@ -2860,7 +2947,7 @@ public static class MapExtractor
             .ToList();
         StringBuilder builder = new StringBuilder();
 
-        builder.AppendLine("export const generatedMapConnections = {");
+        builder.AppendLine("export const generatedDirectedMapConnections = {");
         for (int i = 0; i < playableTerritories.Count; i++)
         {
             TerritoryInfo territory = playableTerritories[i];

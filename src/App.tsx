@@ -140,6 +140,7 @@ import { generatedMapData } from "./map/generated/mapData";
 import { MapView, type MapCameraIntent, type MapVisibleInsets } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import { territoryForId } from "./map/territoryLookup";
+import { directedOwnedSourcesReachingTarget, hasDirectedConnection } from "./game/mapGraph";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
 import { formatQrHandshakeError } from "./sync/syncErrors";
 import { QrScanner } from "./sync/QrCodeUi";
@@ -160,7 +161,6 @@ import {
   type SyncRecoveryPlayerSlot,
   type SyncWireMessage,
 } from "./sync/syncTransport";
-import { generatedMapConnections } from "./map/generated/mapConnections";
 
 type SyncScannerMode = "hostOffer" | "joinAnswer" | null;
 
@@ -384,28 +384,11 @@ function fortifyEligibleSourceIds(ownership: Record<string, string | null>, targ
     return sourceIds;
   }
 
-  const queue = [targetTerritoryId];
-  for (let index = 0; index < queue.length; index += 1) {
-    const territoryId = queue[index];
-    const connections = generatedMapConnections[territoryId as keyof typeof generatedMapConnections] ?? [];
-
-    for (const connectedId of connections) {
-      if (sourceIds.has(connectedId) || ownership[connectedId] !== playerId) {
-        continue;
-      }
-
-      sourceIds.add(connectedId);
-      queue.push(connectedId);
-    }
-  }
-
-  sourceIds.delete(targetTerritoryId);
-  return sourceIds;
+  return directedOwnedSourcesReachingTarget(ownership, targetTerritoryId, playerId);
 }
 
 function fortifySourceIsImmediate(sourceTerritoryId: string | null, targetTerritoryId: string | null) {
-  const connections: readonly string[] = sourceTerritoryId ? generatedMapConnections[sourceTerritoryId as keyof typeof generatedMapConnections] ?? [] : [];
-  return Boolean(targetTerritoryId && connections.includes(targetTerritoryId));
+  return Boolean(sourceTerritoryId && targetTerritoryId && hasDirectedConnection(sourceTerritoryId, targetTerritoryId));
 }
 
 function fortifyMoveUsesRegularLane(move: FortifyMovesBySource[string]) {

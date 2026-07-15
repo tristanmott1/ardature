@@ -1,4 +1,4 @@
-import { generatedMapConnections } from "../map/generated/mapConnections";
+import { outgoingTerritoryIds } from "./mapGraph";
 import type { GeneratedTerritoryData } from "../map/mapTypes";
 import { territoryForId } from "../map/territoryLookup";
 import {
@@ -951,11 +951,10 @@ function territoryTroopTotalWithTurnPreview(game: GameState, territoryId: string
 }
 
 function visibleTroopTotalTerritoryIds(ownership: Record<string, string | null>, viewerId: string) {
-  const visibleIds = new Set(ownedTerritoryIds(ownership, viewerId));
+  const visibleIds = new Set<string>(ownedTerritoryIds(ownership, viewerId));
 
   for (const territoryId of [...visibleIds]) {
-    const connections = generatedMapConnections[territoryId as keyof typeof generatedMapConnections] ?? [];
-    for (const connectedId of connections) {
+    for (const connectedId of outgoingTerritoryIds(territoryId)) {
       if (ownership[connectedId] && ownership[connectedId] !== viewerId) {
         visibleIds.add(connectedId);
       }

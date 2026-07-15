@@ -35,14 +35,14 @@
           "playable": true,
           "borderIds": ["background-ocean__harlindon", "grey-havens__harlindon", "harlindon__shire"],
           "landConnections": ["grey-havens"],
-          "shipConnections": ["forlond", "andrast"]
+          "shipConnections": ["forlond"]
         },
         {
           "id": "grey-havens",
           "name": "Grey Havens",
           "playable": true,
           "borderIds": ["background-north-bay__grey-havens", "background-ocean__grey-havens", "forlond__grey-havens", "grey-havens__harlindon", "grey-havens__north-downs", "grey-havens__shire"],
-          "landConnections": ["forlond", "harlindon", "north-downs", "shire"],
+          "landConnections": ["forlond", "harlindon", "shire", "north-downs"],
           "shipConnections": []
         },
         {
@@ -50,7 +50,7 @@
           "name": "Shire",
           "playable": true,
           "borderIds": ["background-ocean__shire", "bree__shire", "grey-havens__shire", "harlindon__shire", "minhiriath__shire", "north-downs__shire"],
-          "landConnections": ["grey-havens", "north-downs", "bree", "minhiriath"],
+          "landConnections": ["grey-havens", "bree", "north-downs", "minhiriath"],
           "shipConnections": []
         },
         {
@@ -66,7 +66,7 @@
           "name": "Ettenmoors",
           "playable": true,
           "borderIds": ["background-north-east__ettenmoors", "bree__ettenmoors", "ettenmoors__greylin", "ettenmoors__north-downs", "ettenmoors__rivendell"],
-          "landConnections": ["north-downs", "rivendell", "bree"],
+          "landConnections": ["bree", "north-downs", "rivendell"],
           "shipConnections": []
         },
         {
@@ -74,7 +74,7 @@
           "name": "Bree",
           "playable": true,
           "borderIds": ["bree__ettenmoors", "bree__minhiriath", "bree__north-downs", "bree__rivendell", "bree__shire", "bree__swanfleet"],
-          "landConnections": ["shire", "north-downs", "ettenmoors", "rivendell", "swanfleet", "minhiriath"],
+          "landConnections": ["shire", "north-downs", "ettenmoors", "rivendell", "minhiriath", "swanfleet"],
           "shipConnections": []
         },
         {
@@ -82,7 +82,7 @@
           "name": "Rivendell",
           "playable": true,
           "borderIds": ["bree__rivendell", "caradhras__rivendell", "ettenmoors__rivendell", "greylin__rivendell", "rivendell__swanfleet"],
-          "landConnections": ["ettenmoors", "bree", "swanfleet", "caradhras"],
+          "landConnections": ["bree", "ettenmoors", "swanfleet", "caradhras"],
           "shipConnections": []
         },
         {
@@ -91,14 +91,14 @@
           "playable": true,
           "borderIds": ["background-ocean__minhiriath", "bree__minhiriath", "enedwaith__minhiriath", "minhiriath__shire", "minhiriath__swanfleet"],
           "landConnections": ["shire", "bree", "swanfleet", "enedwaith"],
-          "shipConnections": ["andrast"]
+          "shipConnections": []
         },
         {
           "id": "swanfleet",
           "name": "Swanfleet",
           "playable": true,
           "borderIds": ["bree__swanfleet", "caradhras__swanfleet", "enedwaith__swanfleet", "isengard__swanfleet", "lorien__swanfleet", "minhiriath__swanfleet", "moria__swanfleet", "rivendell__swanfleet"],
-          "landConnections": ["bree", "rivendell", "moria", "isengard", "minhiriath", "enedwaith"],
+          "landConnections": ["bree", "rivendell", "minhiriath", "enedwaith", "isengard", "moria"],
           "shipConnections": []
         },
         {
@@ -107,14 +107,14 @@
           "playable": true,
           "borderIds": ["background-ocean__enedwaith", "druwaith-iaur__enedwaith", "enedwaith__isengard", "enedwaith__minhiriath", "enedwaith__swanfleet"],
           "landConnections": ["minhiriath", "swanfleet", "isengard", "druwaith-iaur"],
-          "shipConnections": ["andrast"]
+          "shipConnections": []
         },
         {
           "id": "isengard",
           "name": "Isengard",
           "playable": true,
           "borderIds": ["druwaith-iaur__isengard", "edoras__isengard", "enedwaith__isengard", "isengard__lorien", "isengard__swanfleet", "isengard__westfold"],
-          "landConnections": ["enedwaith", "swanfleet", "westfold", "druwaith-iaur"],
+          "landConnections": ["swanfleet", "enedwaith", "westfold", "druwaith-iaur"],
           "shipConnections": []
         }
       ]
@@ -153,7 +153,7 @@
           "name": "Lórien",
           "playable": true,
           "borderIds": ["caradhras__lorien", "dol-guldur__lorien", "emnet__lorien", "emyn-muil__lorien", "gladden-fields__lorien", "isengard__lorien", "lorien__moria", "lorien__swanfleet", "lorien__westfold"],
-          "landConnections": ["caradhras", "gladden-fields", "dol-guldur", "moria", "emyn-muil"],
+          "landConnections": ["caradhras", "gladden-fields", "dol-guldur", "emyn-muil", "moria"],
           "shipConnections": []
         },
         {
@@ -161,7 +161,7 @@
           "name": "Gladden Fields",
           "playable": true,
           "borderIds": ["brown-lands__gladden-fields", "caradhras__gladden-fields", "dol-guldur__gladden-fields", "gladden-fields__lorien", "gladden-fields__woodland-realm"],
-          "landConnections": ["woodland-realm", "caradhras", "lorien", "dol-guldur"],
+          "landConnections": ["caradhras", "woodland-realm", "lorien", "dol-guldur"],
           "shipConnections": []
         },
         {
@@ -169,7 +169,7 @@
           "name": "Dol Guldur",
           "playable": true,
           "borderIds": ["brown-lands__dol-guldur", "dol-guldur__emyn-muil", "dol-guldur__gladden-fields", "dol-guldur__lorien"],
-          "landConnections": ["lorien", "gladden-fields", "emyn-muil"],
+          "landConnections": ["gladden-fields", "lorien", "emyn-muil"],
           "shipConnections": []
         },
         {
@@ -185,7 +185,7 @@
           "name": "Emyn Muil",
           "playable": true,
           "borderIds": ["brown-lands__emyn-muil", "dagorlad__emyn-muil", "dead-marshes__emyn-muil", "dol-guldur__emyn-muil", "emnet__emyn-muil", "emyn-muil__lorien"],
-          "landConnections": ["lorien", "dol-guldur", "emnet", "dead-marshes", "brown-lands", "dagorlad"],
+          "landConnections": ["lorien", "dol-guldur", "dead-marshes", "brown-lands", "dagorlad", "emnet"],
           "shipConnections": []
         },
         {
@@ -193,7 +193,7 @@
           "name": "Dead Marshes",
           "playable": true,
           "borderIds": ["dagorlad__dead-marshes", "dead-marshes__eastfold", "dead-marshes__emnet", "dead-marshes__emyn-muil", "dead-marshes__minas-tirith", "dead-marshes__udun"],
-          "landConnections": ["emnet", "emyn-muil", "dagorlad", "udun", "minas-tirith", "eastfold"],
+          "landConnections": ["emyn-muil", "dagorlad", "emnet", "eastfold", "minas-tirith"],
           "shipConnections": []
         }
       ]
@@ -216,7 +216,7 @@
           "name": "Iron Hills",
           "playable": true,
           "borderIds": ["background-north-east__iron-hills", "brown-lands__iron-hills", "dorwinion__iron-hills", "erebor__iron-hills", "iron-hills__sea-of-rhun"],
-          "landConnections": ["erebor", "brown-lands", "dorwinion", "sea-of-rhun"],
+          "landConnections": ["erebor", "sea-of-rhun", "dorwinion", "brown-lands"],
           "shipConnections": []
         },
         {
@@ -232,7 +232,7 @@
           "name": "Dorwinion",
           "playable": true,
           "borderIds": ["brown-lands__dorwinion", "dagorlad__dorwinion", "dorwinion__iron-hills", "dorwinion__sea-of-rhun"],
-          "landConnections": ["iron-hills", "sea-of-rhun", "dagorlad", "brown-lands"],
+          "landConnections": ["iron-hills", "sea-of-rhun", "brown-lands", "dagorlad"],
           "shipConnections": []
         },
         {
@@ -240,7 +240,7 @@
           "name": "Brown Lands",
           "playable": true,
           "borderIds": ["brown-lands__dagorlad", "brown-lands__dol-guldur", "brown-lands__dorwinion", "brown-lands__emyn-muil", "brown-lands__erebor", "brown-lands__gladden-fields", "brown-lands__iron-hills", "brown-lands__woodland-realm"],
-          "landConnections": ["erebor", "iron-hills", "dorwinion", "dagorlad", "emyn-muil", "woodland-realm"],
+          "landConnections": ["woodland-realm", "emyn-muil", "erebor", "iron-hills", "dorwinion", "dagorlad"],
           "shipConnections": []
         },
         {
@@ -248,7 +248,7 @@
           "name": "Dagorlad",
           "playable": true,
           "borderIds": ["brown-lands__dagorlad", "dagorlad__dead-marshes", "dagorlad__dorwinion", "dagorlad__emyn-muil", "dagorlad__lithlad", "dagorlad__sea-of-rhun", "dagorlad__udun"],
-          "landConnections": ["brown-lands", "dorwinion", "sea-of-rhun", "dead-marshes", "emyn-muil"],
+          "landConnections": ["emyn-muil", "dead-marshes", "sea-of-rhun", "dorwinion", "brown-lands"],
           "shipConnections": []
         }
       ]
@@ -263,7 +263,7 @@
           "name": "Westfold",
           "playable": true,
           "borderIds": ["edoras__westfold", "emnet__westfold", "isengard__westfold", "lorien__westfold"],
-          "landConnections": ["isengard", "edoras", "emnet"],
+          "landConnections": ["isengard", "emnet", "edoras"],
           "shipConnections": []
         },
         {
@@ -271,7 +271,7 @@
           "name": "Edoras",
           "playable": true,
           "borderIds": ["anfalas__edoras", "druwaith-iaur__edoras", "eastfold__edoras", "edoras__emnet", "edoras__isengard", "edoras__lamedon", "edoras__westfold"],
-          "landConnections": ["westfold", "emnet", "eastfold"],
+          "landConnections": ["westfold", "emnet", "eastfold", "lamedon"],
           "shipConnections": []
         },
         {
@@ -279,7 +279,7 @@
           "name": "Emnet",
           "playable": true,
           "borderIds": ["dead-marshes__emnet", "eastfold__emnet", "edoras__emnet", "emnet__emyn-muil", "emnet__lorien", "emnet__westfold"],
-          "landConnections": ["westfold", "edoras", "eastfold", "emyn-muil", "dead-marshes"],
+          "landConnections": ["emyn-muil", "dead-marshes", "westfold", "edoras", "eastfold"],
           "shipConnections": []
         },
         {
@@ -287,7 +287,7 @@
           "name": "Eastfold",
           "playable": true,
           "borderIds": ["belfalas__eastfold", "dead-marshes__eastfold", "eastfold__edoras", "eastfold__emnet", "eastfold__lamedon", "eastfold__minas-tirith"],
-          "landConnections": ["edoras", "emnet", "dead-marshes", "minas-tirith"],
+          "landConnections": ["dead-marshes", "emnet", "edoras", "minas-tirith"],
           "shipConnections": []
         }
       ]
@@ -318,7 +318,7 @@
           "name": "Minas Morgul",
           "playable": true,
           "borderIds": ["lithlad__minas-morgul", "minas-morgul__minas-tirith", "minas-morgul__nurn", "minas-morgul__south-gondor", "minas-morgul__udun"],
-          "landConnections": ["minas-tirith", "udun", "lithlad", "nurn"],
+          "landConnections": ["udun", "lithlad", "nurn", "minas-tirith"],
           "shipConnections": []
         },
         {
@@ -326,7 +326,7 @@
           "name": "Nurn",
           "playable": true,
           "borderIds": ["background-ocean__nurn", "lithlad__nurn", "minas-morgul__nurn", "nurn__south-gondor"],
-          "landConnections": ["minas-morgul", "lithlad"],
+          "landConnections": ["lithlad", "minas-morgul"],
           "shipConnections": []
         }
       ]
@@ -357,7 +357,7 @@
           "name": "Anfalas",
           "playable": true,
           "borderIds": ["andrast__anfalas", "anfalas__druwaith-iaur", "anfalas__edoras", "anfalas__lamedon", "background-ocean__anfalas"],
-          "landConnections": ["andrast", "druwaith-iaur", "lamedon"],
+          "landConnections": ["druwaith-iaur", "andrast", "lamedon"],
           "shipConnections": []
         },
         {
@@ -389,7 +389,7 @@
           "name": "Minas Tirith",
           "playable": true,
           "borderIds": ["belfalas__minas-tirith", "dead-marshes__minas-tirith", "eastfold__minas-tirith", "minas-morgul__minas-tirith", "minas-tirith__south-gondor", "minas-tirith__udun"],
-          "landConnections": ["belfalas", "south-gondor", "minas-morgul", "dead-marshes", "eastfold"],
+          "landConnections": ["dead-marshes", "eastfold", "minas-morgul", "belfalas", "south-gondor"],
           "shipConnections": []
         }
       ]
@@ -1062,7 +1062,7 @@
     {
       "id": "edoras__lamedon",
       "territoryIds": ["edoras", "lamedon"],
-      "isPlayableConnection": false,
+      "isPlayableConnection": true,
       "paths": [
         [[7290,7800], [7310,7815], [7350,7845], [7420,7860], [7520,7860], [7587.5,7852.5], [7622.5,7837.5], [7655,7830], [7685,7830], [7705,7825], [7715,7815], [7767.5,7810], [7862.5,7810], [7920,7817.5], [7940,7832.5], [7967.5,7845], [8002.5,7855], [8040,7880], [8080,7920], [8112.5,7945], [8137.5,7955], [8155,7967.5], [8165,7982.5], [8187.5,7995], [8222.5,8005], [8245,8017.5], [8255,8032.5], [8272.5,8042.5], [8297.5,8047.5], [8317.5,8060], [8332.5,8080], [8347.5,8090], [8362.5,8090], [8377.5,8097.5], [8392.5,8112.5], [8422.5,8120], [8467.5,8120], [8497.5,8122.5], [8512.5,8127.5], [8527.5,8140], [8542.5,8160], [8557.5,8170], [8572.5,8170], [8580,8170]]
       ]

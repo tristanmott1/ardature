@@ -88,12 +88,12 @@ In allocation-style troop rows, the `+` and `-` icons are buttons. Pressing one 
 
 ## Gameplay Connections
 
-All gameplay uses gameplay connections from `maps/territory-key.md`.
+All gameplay uses outgoing directed gameplay connections from `maps/territory-key.md`.
 
-There is no gameplay distinction between land and ship connections. Both count for:
+There is no gameplay distinction between directed land and directed ship connections. Both count for:
 
 - spy distance
-- same-opponent adjacent troop totals revealed by spy
+- same-opponent outgoing-adjacent troop totals revealed by spy
 - read-only troop total visibility
 - attacks and fortification where applicable
 
@@ -143,7 +143,7 @@ Captured spies use committed circular captured-spy PNG icons with black vertical
 When the spy button is active:
 
 - only opponent territories are selectable
-- any opponent territory may be selected because the gameplay graph is connected
+- any opponent territory may be selected because the directed gameplay graph remains reachable
 - selecting a territory opens the shared compact bottom `ConfirmSheet`
 - the sheet shows the territory name and the capture probability
 - X cancels
@@ -151,7 +151,7 @@ When the spy button is active:
 - while the confirmation sheet is open, the map is frozen, manual pan/zoom controls are hidden, and troop/action sections are hidden
 - spy targeting is canceled through the confirmation sheet X, not by tapping the already-selected target
 
-The capture probability is based on the shortest gameplay-connection distance from the target territory to the nearest territory owned by the current player:
+The capture probability is based on the shortest outgoing directed gameplay path from any current-player territory to the selected target territory:
 
 | Distance | Capture probability |
 | --- | --- |
@@ -186,8 +186,8 @@ If the spy is not captured:
 
 - reveal the exact known contents of the selected opponent territory
 - reveal any captured spies imprisoned on the selected opponent territory as part of that known-content row
-- reveal total troop counts, but not breakdowns, for territories adjacent to the selected territory that are owned by that same opponent
-- show those adjacent totals through the normal white map troop counters
+- reveal total troop counts, but not breakdowns, for territories reachable by one outgoing directed edge from the selected territory that are owned by that same opponent
+- show those outgoing-adjacent totals through the normal white map troop counters
 - show the selected opponent territory through the troop section in `info` mode, using the same exact-count UI that own territories use
 - replace the bottom action buttons with a dismiss button
 
@@ -293,7 +293,7 @@ If a player removal cancels the current reinforcement action, the entire reinfor
 
 After reinforcements are complete, the active player may make any number of attacks before fortifying. The active player may also skip attacking and go directly to fortify.
 
-An attack is a locked commitment from one owned source territory into one connected opponent-owned target territory.
+An attack is a locked commitment from one owned source territory into one opponent-owned target territory reachable by an outgoing directed edge.
 
 ### Attack Style
 
@@ -340,8 +340,8 @@ Rules:
 
 - The source territory must be owned by the active player.
 - The target territory must be owned by an opponent.
-- The source and target must be connected by gameplay connection.
-- All gameplay connections from `maps/territory-key.md` count, including ship connections.
+- The source must have an outgoing directed gameplay edge to the target.
+- Outgoing directed gameplay connections from `maps/territory-key.md` count, including ship connections.
 - Physical generated borders do not define attack legality.
 - The source territory must contain at least two troops.
 - The attack must commit at least one troop.
@@ -674,14 +674,14 @@ A source territory is eligible if:
 
 - it is owned by the active player
 - it is not the target
-- it is connected to the target through a chain of territories all owned by the active player
+- it can reach the target through a chain of outgoing directed gameplay edges through territories all owned by the active player
 
-This chain uses gameplay connections from `maps/territory-key.md`, including ship connections. Physical map borders are irrelevant.
+This chain uses outgoing directed gameplay connections from `maps/territory-key.md`, including ship connections. Physical map borders are irrelevant.
 
 Immediate connection matters for which units can move:
 
-- An immediately connected source is directly connected to the target by one gameplay edge.
-- A remote source is connected to the target through owned territory chains but is not directly connected to the target.
+- An immediately connected source has an outgoing directed gameplay edge to the target.
+- A remote source can reach the target through owned territory chains but does not have a direct outgoing edge to the target.
 
 ### Fortify Movement Rules
 

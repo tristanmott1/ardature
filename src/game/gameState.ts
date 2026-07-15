@@ -1,9 +1,9 @@
 import { generatedMapData } from "../map/generated/mapData";
-import { generatedMapConnections } from "../map/generated/mapConnections";
 import type { MapSkin, TerritoryState } from "../map/mapTypes";
 import { territoriesInRegion } from "../map/territoryLookup";
 import { MIXTURE_TROOP_TYPES, armyCountsForMarker, reinforcementCountsForMarker } from "./armyBuild";
 import { challengeScoreForTroops, combatScoreForTroops, rollCombatDice, sampleCasualty } from "./combat";
+import { directedDistanceFromAny, directedOwnedSourcesReachingTarget, hasDirectedConnection, outgoingTerritoryIds } from "./mapGraph";
 import type {
   AllocationStyle,
   AllocationState,
@@ -1017,13 +1017,12 @@ export function canAttackFromTerritory(state: GameState, playerId: string, terri
 
 export function canAttackTargetTerritory(state: GameState, playerId: string, sourceTerritoryId: string, targetTerritoryId: string) {
   const ownership = state.draft?.ownership;
-  const connections: readonly string[] = generatedMapConnections[sourceTerritoryId as keyof typeof generatedMapConnections] ?? [];
 
   return Boolean(
     canAttackFromTerritory(state, playerId, sourceTerritoryId) &&
       ownership?.[targetTerritoryId] &&
       ownership[targetTerritoryId] !== playerId &&
-      connections.includes(targetTerritoryId),
+      hasDirectedConnection(sourceTerritoryId, targetTerritoryId),
   );
 }
 
@@ -2029,8 +2028,7 @@ function nextTurnPlayerId(players: GamePlayer[], originalTurnOrder: string[], cu
 }
 
 function sameOwnerConnectedTerritoryIds(ownership: TerritoryOwnerMap, territoryId: string, ownerId: string) {
-  const connections = generatedMapConnections[territoryId as keyof typeof generatedMapConnections] ?? [];
-  return connections.filter((connectedId) => ownership[connectedId] === ownerId);
+  return outgoingTerritoryIds(territoryId).filter((connectedId) => ownership[connectedId] === ownerId);
 }
 
 function nearestOwnedDistance(ownership: TerritoryOwnerMap | null, playerId: string, targetTerritoryId: string) {
@@ -2038,30 +2036,7 @@ function nearestOwnedDistance(ownership: TerritoryOwnerMap | null, playerId: str
     return null;
   }
 
-  const queue: Array<{ id: string; distance: number }> = [{ id: targetTerritoryId, distance: 0 }];
-  const visited = new Set([targetTerritoryId]);
-
-  // Walk outward until the nearest owned territory is found.
-  for (let index = 0; index < queue.length; index += 1) {
-    const current = queue[index];
-    const connections = generatedMapConnections[current.id as keyof typeof generatedMapConnections] ?? [];
-
-    for (const connectedId of connections) {
-      if (visited.has(connectedId)) {
-        continue;
-      }
-
-      const distance = current.distance + 1;
-      if (ownership[connectedId] === playerId) {
-        return distance;
-      }
-
-      visited.add(connectedId);
-      queue.push({ id: connectedId, distance });
-    }
-  }
-
-  return null;
+  return directedDistanceFromAny(ownedTerritoryIds(ownership, playerId), targetTerritoryId);
 }
 
 function applyRegionControlChanges(state: GameState, delivery: "turnStart" | "immediate", minTurnNumber = state.turn?.turnNumber ?? 0): GameState {
@@ -2254,7 +2229,7 @@ function validFortifyMove(state: GameState, playerId: string, targetTerritoryId:
     return null;
   }
 
-  const eligibleSources = ownedChainTerritoryIds(ownership, targetTerritoryId, playerId);
+  const eligibleSources = directedOwnedSourcesReachingTarget(ownership, targetTerritoryId, playerId);
   const movedSpyOwnerIds = new Set<string>();
   const normalizedMoves: FortifyMovesBySource = {};
   let regularSourceId: string | null = null;
@@ -2277,7 +2252,7 @@ function validFortifyMove(state: GameState, playerId: string, targetTerritoryId:
       return null;
     }
 
-    const immediate = areConnectedTerritories(sourceTerritoryId, targetTerritoryId);
+    const immediate = hasDirectedConnection(sourceTerritoryId, targetTerritoryId);
     if (!immediate && (movedTroops.heavy > 0 || movedTroops.elite > 0 || movedTroops.leader > 0)) {
       return null;
     }
@@ -2325,33 +2300,6 @@ function validFortifySpies(state: GameState, playerId: string, sourceTerritoryId
   }
 
   return true;
-}
-
-function ownedChainTerritoryIds(ownership: TerritoryOwnerMap, targetTerritoryId: string, playerId: string) {
-  const connectedIds = new Set<string>();
-  const queue = [targetTerritoryId];
-
-  for (let index = 0; index < queue.length; index += 1) {
-    const territoryId = queue[index];
-    const connections = generatedMapConnections[territoryId as keyof typeof generatedMapConnections] ?? [];
-
-    for (const connectedId of connections) {
-      if (connectedIds.has(connectedId) || ownership[connectedId] !== playerId) {
-        continue;
-      }
-
-      connectedIds.add(connectedId);
-      queue.push(connectedId);
-    }
-  }
-
-  connectedIds.delete(targetTerritoryId);
-  return connectedIds;
-}
-
-function areConnectedTerritories(leftTerritoryId: string, rightTerritoryId: string) {
-  const connections: readonly string[] = generatedMapConnections[leftTerritoryId as keyof typeof generatedMapConnections] ?? [];
-  return connections.includes(rightTerritoryId);
 }
 
 function validTroopCounts(counts: TroopCounts) {
@@ -2828,8 +2776,7 @@ function randomPlaceStartingAllocation(allocation: AllocationState, ownership: T
 }
 
 function bordersOpponentTerritory(ownership: TerritoryOwnerMap, playerId: string, territoryId: string) {
-  const connections = generatedMapConnections[territoryId as keyof typeof generatedMapConnections] ?? [];
-  return connections.some((connectedId) => ownership[connectedId] && ownership[connectedId] !== playerId);
+  return outgoingTerritoryIds(territoryId).some((connectedId) => ownership[connectedId] && ownership[connectedId] !== playerId);
 }
 
 function randomArmyMarker(): ArmyMarker {

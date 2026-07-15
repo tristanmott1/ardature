@@ -103,8 +103,10 @@ async function runSourceChecks() {
   const notificationTextSource = await readFile(new URL("../src/game/notificationText.ts", import.meta.url), "utf8");
   const playerColorsSource = await readFile(new URL("../src/game/playerColors.ts", import.meta.url), "utf8");
   const troopIconsSource = await readFile(new URL("../src/game/troopIcons.tsx", import.meta.url), "utf8");
+  const mapGeometrySource = await readFile(new URL("../maps/geometry/map.json", import.meta.url), "utf8");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const mapConnectionsSource = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
+  const mapGraphSource = await readFile(new URL("../src/game/mapGraph.ts", import.meta.url), "utf8");
   const hitTargetSource = await readFile(new URL("../src/map/components/HitTargetLayer.tsx", import.meta.url), "utf8");
   const mapViewSource = await readFile(new URL("../src/map/components/MapView.tsx", import.meta.url), "utf8");
   const staticMapInkSource = await readFile(new URL("../src/map/components/StaticMapInk.tsx", import.meta.url), "utf8");
@@ -144,6 +146,9 @@ async function runSourceChecks() {
   const sourceWidth = generatedNumber(mapDataSource, "sourceWidth");
   const sourceHeight = generatedNumber(mapDataSource, "sourceHeight");
   const homeViewport = generatedViewport(mapDataSource, "homeViewport");
+  const directedConnectionMap = JSON.parse(mapConnectionsSource
+    .replace(/^export const generatedDirectedMapConnections = /, "")
+    .replace(/\s+as const;\s*$/, ""));
 
   assert(mapDataSource.includes("satisfies GeneratedMapData"), "Generated map data is typed.");
   assert(mapDataSource.includes("territoryBorderPaths") && mapDataSource.includes("regionBorderPaths"), "Generated static ink separates territory and regional borders.");
@@ -161,8 +166,15 @@ async function runSourceChecks() {
   const backgroundPreviewFillColors = new Set([...territoryPreviewSource.matchAll(/fill="(#[0-9A-Fa-f]{6})" stroke="\1" stroke-width="12"/g)].map((match) => match[1]));
   assert(bluePreviewFillColors.size > 6, "Colored previews contain varied territory fill shades.");
   assert(backgroundPreviewFillColors.size === 1, "Background preview keeps one uniform tan fill.");
-  assert(mapConnectionsSource.includes("generatedMapConnections"), "Generated map connections exist.");
+  assert(mapConnectionsSource.includes("generatedDirectedMapConnections") && !mapConnectionsSource.includes("generatedMapConnections"), "Generated map connections are explicitly directed.");
   assert((mapConnectionsSource.match(/": \[/g) ?? []).length === 42, "Generated map connections include 42 playable territories.");
+  assert(directedConnectionMap.udun.includes("dead-marshes") && !directedConnectionMap["dead-marshes"].includes("udun"), "Generated directed graph keeps Udun to Dead Marshes one-way.");
+  assert(directedConnectionMap.andrast.includes("harlindon") && directedConnectionMap.andrast.includes("minhiriath") && directedConnectionMap.andrast.includes("enedwaith") && !directedConnectionMap.harlindon.includes("andrast") && !directedConnectionMap.minhiriath.includes("andrast") && !directedConnectionMap.enedwaith.includes("andrast"), "Generated directed graph keeps Andrast ship routes one-way.");
+  assert(directedConnectionMap.edoras.includes("lamedon") && !directedConnectionMap.lamedon.includes("edoras"), "Generated directed graph includes only Edoras to Lamedon.");
+  assert(directedConnectionMap.shire.includes("bree") && directedConnectionMap.bree.includes("shire"), "Generated directed graph keeps normal connections bidirectional.");
+  assert(/"id": "dead-marshes__udun"[\s\S]*?"isPlayableConnection": true/.test(mapGeometrySource) && /"id": "edoras__lamedon"[\s\S]*?"isPlayableConnection": true/.test(mapGeometrySource), "One-way land edges still mark physical borders as playable ink.");
+  assert(!appSource.includes("generatedMapConnections") && !gameStateSource.includes("generatedMapConnections") && !gameViewSource.includes("generatedMapConnections"), "Gameplay code does not import the old ambiguous generated connection map.");
+  assert(mapGraphSource.includes("outgoingTerritoryIds") && mapGraphSource.includes("hasDirectedConnection") && mapGraphSource.includes("directedDistanceFromAny") && mapGraphSource.includes("directedOwnedSourcesReachingTarget"), "Directed gameplay graph helpers are centralized.");
   assert(!mapConnectionsSource.includes("shipRoute") && !gameStateSource.includes("shipRoute") && !syncMessagesSource.includes("shipRoute"), "Visual ship routes are not consumed by gameplay or sync code.");
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
   assert(!mapDataSource.includes("Infinity"), "Generated map data has no Infinity values.");
@@ -273,7 +285,7 @@ async function runSourceChecks() {
   assert(gameTypesSource.includes('type: "commitFortify"') && gameTypesSource.includes('type: "skipFortify"') && !gameTypesSource.includes('type: "fortify"'), "Turn commands use final fortify commit/skip messages.");
   assert(syncMessagesSource.includes('command.type === "commitFortify"') && syncMessagesSource.includes('command.type === "skipFortify"') && syncMessagesSource.includes("isFortifyMovesBySource"), "Sync validation covers final fortify commands.");
   assert(appSource.includes("type FortifySetupState") && appSource.includes("const [fortifySetup, setFortifySetup]") && !gameTypesSource.includes("FortifySetupState"), "Provisional fortify setup is local App UI state, not shared GameState.");
-  assert(gameStateSource.includes("ownedChainTerritoryIds") && gameStateSource.includes("generatedMapConnections") && gameStateSource.includes("validFortifySpies"), "Fortify legality uses gameplay connections and validates captured-spy locations.");
+  assert(mapGraphSource.includes("function directedOwnedPathExists") && gameStateSource.includes("directedOwnedSourcesReachingTarget") && gameStateSource.includes("validFortifySpies"), "Fortify legality uses directed gameplay paths and validates captured-spy locations.");
   assert(!appSource.includes("spyCaptureNoticeFromTurnChange") && !appSource.includes("SpyCaptureNotice"), "Old effect-based spy capture notices are removed.");
   assert(appSource.includes("type MapSelectionState") && appSource.includes("const [mapSelections, setMapSelections]") && appSource.includes("pendingDraftTerritoryId") && appSource.includes("allocationSelectedTerritoryId") && appSource.includes("gameMapSelectedTerritoryId"), "App keeps local map selections in one explicit UI state model.");
   assert(!appSource.includes("setPendingDraftTerritoryId") && !appSource.includes("setAllocationSelectedTerritoryId") && !appSource.includes("setGameMapSelectedTerritoryId") && !appSource.includes("setTurnSelectedTerritoryId") && !appSource.includes("setPendingSpyTerritoryId"), "App does not preserve old per-selection setter wiring.");
@@ -352,7 +364,7 @@ async function runSourceChecks() {
   assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)") && battleModalSource.includes("/ 10") && battleModalSource.includes("defeated") && battleModalSource.includes("battle-pip"), "Battle modal renders pip dice, retreat, result text, and one-decimal scores out of ten.");
   assert(combatSource.includes("COMBAT_SCORE_VALUES") && combatSource.includes("challengeScoreForTroops") && combatSource.includes("rollCombatDice") && combatSource.includes("sampleCasualty"), "Combat math stores centralized score, challenge, dice, and casualty helpers.");
   assert(gameStateSource.includes("function randomCompleteAllAllocations") && gameStateSource.includes("function randomArmyMarker") && gameStateSource.includes("function bordersOpponentTerritory"), "Random allocation has dedicated army and border placement helpers.");
-  assert(gameStateSource.includes("generatedMapConnections[territoryId as keyof typeof generatedMapConnections]") && gameStateSource.includes("ownership[connectedId] !== playerId"), "Random allocation uses gameplay connections to find opponent borders.");
+  assert(gameStateSource.includes("outgoingTerritoryIds(territoryId).some") && gameStateSource.includes("ownership[connectedId] !== playerId"), "Random allocation uses outgoing directed connections to find opponent borders.");
   assert(setupPanelsSource.includes("Territory Draft") && setupPanelsSource.includes("Troop Allocation") && setupPanelsSource.includes("Allocation style"), "Setup UI has draft and troop allocation config sections.");
   assert(!appSource.includes("SegmentedControl") && !stylesSource.includes(".segmented-control"), "Old segmented draft config UI is removed.");
   assert(!gameTypesSource.includes("allocationWaiting"), "AppPhase does not include allocationWaiting.");
@@ -1168,7 +1180,7 @@ function totalTroops(counts) {
 
 async function findAttackPair(page) {
   return page.evaluate(async () => {
-    const { generatedMapConnections } = await import("/src/map/generated/mapConnections.ts");
+    const { generatedDirectedMapConnections } = await import("/src/map/generated/mapConnections.ts");
     const state = JSON.parse(localStorage.getItem("ardature.localGame.v1") ?? "null");
     const ownership = state?.draft?.ownership ?? {};
     const allocation = state?.allocation;
@@ -1195,7 +1207,7 @@ async function findAttackPair(page) {
         continue;
       }
 
-      for (const targetTerritoryId of generatedMapConnections[sourceTerritoryId] ?? []) {
+      for (const targetTerritoryId of generatedDirectedMapConnections[sourceTerritoryId] ?? []) {
         const targetOwnerId = ownership[targetTerritoryId];
         if (targetOwnerId && targetOwnerId !== attackerId) {
           pairs.push({
@@ -1243,7 +1255,7 @@ async function findAttackPairBySkins(page, sourceSkin, targetSkin) {
 async function generatedConnections() {
   const source = await readFile(new URL("../src/map/generated/mapConnections.ts", import.meta.url), "utf8");
   const json = source
-    .replace(/^export const generatedMapConnections = /, "")
+    .replace(/^export const generatedDirectedMapConnections = /, "")
     .replace(/\s+as const;\s*$/, "");
 
   return JSON.parse(json);
@@ -1251,7 +1263,7 @@ async function generatedConnections() {
 
 async function findOwnedBorderTerritory(page) {
   return page.evaluate(async () => {
-    const { generatedMapConnections } = await import("/src/map/generated/mapConnections.ts");
+    const { generatedDirectedMapConnections } = await import("/src/map/generated/mapConnections.ts");
     const state = JSON.parse(localStorage.getItem("ardature.localGame.v1") ?? "null");
     const ownership = state?.draft?.ownership ?? {};
     const playerId = state?.turn?.currentPlayerId;
@@ -1261,7 +1273,7 @@ async function findOwnedBorderTerritory(page) {
         continue;
       }
 
-      const bordersOpponent = (generatedMapConnections[territoryId] ?? []).some((connectedId) => {
+      const bordersOpponent = (generatedDirectedMapConnections[territoryId] ?? []).some((connectedId) => {
         const connectedOwnerId = ownership[connectedId];
         return connectedOwnerId && connectedOwnerId !== playerId;
       });

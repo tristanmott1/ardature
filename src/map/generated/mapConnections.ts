@@ -1,4 +1,4 @@
-export const generatedMapConnections = {
+export const generatedDirectedMapConnections = {
   "forlond": [
     "grey-havens",
     "harlindon"
@@ -11,8 +11,7 @@ export const generatedMapConnections = {
   ],
   "harlindon": [
     "forlond",
-    "grey-havens",
-    "andrast"
+    "grey-havens"
   ],
   "shire": [
     "grey-havens",
@@ -49,8 +48,7 @@ export const generatedMapConnections = {
     "shire",
     "bree",
     "swanfleet",
-    "enedwaith",
-    "andrast"
+    "enedwaith"
   ],
   "swanfleet": [
     "bree",
@@ -64,8 +62,7 @@ export const generatedMapConnections = {
     "minhiriath",
     "swanfleet",
     "isengard",
-    "druwaith-iaur",
-    "andrast"
+    "druwaith-iaur"
   ],
   "isengard": [
     "swanfleet",
@@ -122,7 +119,6 @@ export const generatedMapConnections = {
     "dagorlad",
     "emnet",
     "eastfold",
-    "udun",
     "minas-tirith"
   ],
   "moria": [
@@ -182,7 +178,8 @@ export const generatedMapConnections = {
   "edoras": [
     "westfold",
     "emnet",
-    "eastfold"
+    "eastfold",
+    "lamedon"
   ],
   "eastfold": [
     "dead-marshes",

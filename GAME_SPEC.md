@@ -55,7 +55,7 @@ The app should follow the sibling `../qwixx/` structure where practical:
 - Troop: a unit in a territory. Each player has three mixture troop classes plus one leader troop in their base army.
 - Spy: a non-troop, player-owned capability used in the spy phase.
 - Combat score: a score from 0 to 10 derived from the battle troop mixture, either deterministically in regular mode or by challenge sampling in challenge mode.
-- Attack: one locked commitment from one owned territory into one connected enemy territory.
+- Attack: one locked commitment from one owned territory into an enemy territory reached by an outgoing directed edge.
 - Encounter: one die-vs-die comparison inside a battle round.
 
 ## Players, Sides, and Colors
@@ -170,7 +170,7 @@ After all territories have owners, the app either enters manual initial troop al
 Rules:
 
 - Manual allocation has players build and place their army through the allocation UI.
-- Random allocation skips the allocation UI, randomly samples each player's army mixture, uses the same budget/cost rules as manual allocation, gives every owned territory one troop, then places extras only on owned territories bordering opponents by gameplay connections.
+- Random allocation skips the allocation UI, randomly samples each player's army mixture, uses the same budget/cost rules as manual allocation, gives every owned territory one troop, then places extras only on owned territories with an outgoing directed gameplay edge to an opponent territory.
 - In manual allocation, each player first chooses an army mixture using a reusable triangle component.
 - The triangle uses barycentric coordinates for army building.
 - Light-side colors (`green`, `blue`, `yellow`) use dwarf, rohirrim, and elf circular troop icons.
@@ -210,7 +210,7 @@ The map data should include:
 - Region id.
 - Region display name.
 - Map coordinates or shape data.
-- Adjacency list.
+- Directed outgoing adjacency list.
 - Optional visual label position.
 - Optional artwork or icon hooks.
 
@@ -244,12 +244,12 @@ For territories owned by the viewing player:
 - Total troop count is visible.
 - Captured spies imprisoned on that territory are visible with owner-colored spy icons and black prison bars.
 
-For non-owned territories not adjacent to any territory owned by the viewing player:
+For non-owned territories that cannot be reached by one outgoing directed gameplay edge from any territory owned by the viewing player:
 
 - Territory owner color is visible.
 - No troop information is visible.
 
-For non-owned territories adjacent to at least one territory owned by the viewing player:
+For non-owned territories that can be reached by one outgoing directed gameplay edge from at least one territory owned by the viewing player:
 
 - Territory owner color is visible.
 - Total troop count is visible.
@@ -263,7 +263,7 @@ On a successful spy attempt:
 
 - The selected enemy territory reveals exact troop counts by class.
 - The selected enemy territory reveals captured spies imprisoned there.
-- Enemy territories adjacent to the selected territory and owned by the same opponent reveal total troop counts.
+- Enemy territories reachable by one outgoing directed gameplay edge from the selected territory and owned by the same opponent reveal total troop counts.
 - This is an intel snapshot.
 - The intel disappears once the current player advances past the spy phase.
 - The intel does not become permanent memory in the UI unless a later notes/history feature is explicitly added.
@@ -298,7 +298,7 @@ If the active player's spy is captured, the spy button is unavailable until that
 
 ### Spy Targeting
 
-The selected spy target must be owned by an opponent. Any opponent territory may be selected because the gameplay graph is connected.
+The selected spy target must be owned by an opponent. Any opponent territory may be selected because the directed gameplay graph remains reachable.
 
 The action section instruction row describes the current local turn prompt. When no action is selected, it says `Choose an action`. When spy targeting is selected, it says `Select a territory to spy on`. While successful spy intel is visible, it says `View territory`. During reinforcement placement, it says `Select a territory` until an owned territory is selected, then `Add troops to {territory}`. During attack setup, it says `Select a territory to attack from`, then `Select a territory to attack`, then `Choose attacking troops`. During fortify setup, it says `Select a territory to fortify`, then `Select territories to fortify from`. When spy setup is active, the regular action buttons are replaced by one black, horizontally centered `Cancel Spy` button. When attack setup is active, they are replaced by one black, horizontally centered `Cancel Attack` button. When fortify setup is active, they are replaced by one black, horizontally centered `Cancel Fortify` button and a black `Skip` button. `Skip` ends the turn immediately without confirmation. The cancel action row keeps the normal action-bar height while centering the cancel/skip controls. Starting, canceling, or finishing a turn action clears the default map inspection selection so normal map exploration does not resume with an action territory preselected. Selecting an opponent territory while spying opens a compact confirmation sheet with X and check controls. While this confirmation sheet is active, the map is frozen, manual pan/zoom controls are hidden, troop/action sections are hidden, and the target is canceled with the sheet X rather than by tapping the selected target again.
 
@@ -312,7 +312,7 @@ When exact contents are known, show only troop icons with counts greater than ze
 
 Rows required by an action keep their reserved row height even when empty. During initial troop allocation, an empty selected territory row shows no icons and no `+`/`-` affordance but still occupies exactly the same space. Attack troop commitment intentionally does not show captured spies because captured spies cannot attack.
 
-The capture probability is based on the shortest gameplay-connection distance from the target territory to the active player's nearest owned territory:
+The capture probability is based on the shortest outgoing directed gameplay path from any active-player territory to the selected target territory:
 
 | Distance | Capture probability |
 | --- | --- |
@@ -322,7 +322,7 @@ The capture probability is based on the shortest gameplay-connection distance fr
 | 4 | 80% |
 | 5 or more | 90% |
 
-All gameplay connections from `maps/territory-key.md` count, including ship connections. Physical generated borders are not used for gameplay distance.
+All outgoing directed gameplay connections from `maps/territory-key.md` count, including ship connections. Physical generated borders are not used for gameplay distance.
 
 ### Spy Result
 
@@ -330,8 +330,8 @@ If the spy succeeds:
 
 - reveal the target territory's exact heavy/cavalry/elite/leader counts
 - reveal captured spies imprisoned on the target territory
-- reveal total troop counts in adjacent territories owned by the same opponent
-- show adjacent totals through normal white map troop counters
+- reveal total troop counts in territories reachable by one outgoing directed edge from the selected territory and owned by the same opponent
+- show outgoing-adjacent totals through normal white map troop counters
 - show the target territory through the troop section in information mode using the same exact-count UI used for own territories
 - replace the action section buttons with a dismiss button
 - preserve the spy for future use
@@ -444,7 +444,7 @@ During sync reinforcements, the active player sees local reinforcement edits imm
 
 The active player may make any number of attacks after reinforcements and before fortify. The active player may also skip attacking and choose fortify.
 
-Each attack is a locked commitment from one owned source territory into one connected opponent-owned target territory.
+Each attack is a locked commitment from one owned source territory into an opponent-owned target territory reached by an outgoing directed edge.
 
 ### Attack Restrictions
 
@@ -452,8 +452,8 @@ To declare an attack:
 
 - The target territory must be owned by an opponent.
 - The source territory must be owned by the active player.
-- The source territory must be connected to the target territory by gameplay connection.
-- Land and ship gameplay connections both count.
+- The source territory must have an outgoing directed gameplay edge to the target territory.
+- Outgoing directed land and ship gameplay connections both count.
 - The source territory must contain at least two total troops before committing.
 - The attack must commit at least one troop.
 - The committed attacking troops must leave at least one troop behind in the source territory.
@@ -763,9 +763,9 @@ In allocation-style troop rows, the `+` and `-` icons are buttons. Pressing one 
 
 ### Source Eligibility
 
-A source territory is eligible if it is owned by the active player, is not the target, and is connected to the target through a chain of territories all owned by the active player. This chain uses gameplay connections from `maps/territory-key.md`, including ship connections. Physical generated borders are irrelevant.
+A source territory is eligible if it is owned by the active player, is not the target, and can reach the target through a chain of outgoing directed gameplay edges through territories all owned by the active player. This chain uses outgoing directed gameplay connections from `maps/territory-key.md`, including ship connections. Physical generated borders are irrelevant.
 
-An immediately connected source is directly connected to the target by one gameplay edge. A remote source is connected through owned territory chains but is not directly connected to the target.
+An immediately connected source has an outgoing directed gameplay edge to the target. A remote source can reach the target through owned territory chains but does not have a direct outgoing edge to the target.
 
 Every source must leave at least one troop behind. Captured spies do not count as troops, so moving spies never satisfies or violates the one-troop-left requirement by itself.
 
@@ -1066,10 +1066,10 @@ Visibility rules:
 - Selecting an opponent territory shows its name and exactly four side-aware troop icons grayed out with `?` in the count bubbles.
 - Unknown opponent rows never show captured spy icons.
 - Opponent territory breakdowns are never shown during normal inspection, even if the viewer can see the total troop count on the map.
-- Opponent territories connected to any of the viewer's territories show total troop count only.
-- Opponent territories not connected to any of the viewer's territories show ownership only.
+- Opponent territories reachable by one outgoing directed edge from any viewer-owned territory show total troop count only.
+- Opponent territories not reachable by one outgoing directed edge from any viewer-owned territory show ownership only.
 - Captured spies are shown only when exact contents are visible.
-- Visibility connections use all gameplay connections from `maps/territory-key.md`, including both land and ship connections.
+- Visibility connections use outgoing directed gameplay connections from the viewer's own territories, including both land and ship connections.
 - Visibility connections are independent of physical shared borders in generated geometry.
 
 In local mode, pressing the player name in the player bar cycles the current viewer. Sync mode uses the device's local player as the viewer, including on the host device.
@@ -1569,10 +1569,10 @@ Before considering the first playable version complete:
 - Verify random allocation skips manual allocation UI and immediately creates valid authoritative troop placements.
 - Verify sync allocation uses simultaneous private allocation, host-authoritative timer, ready/waiting state visible to all players, and host advance only when all remaining players are ready.
 - Verify allocation player removal redistributes territories and troops exactly as specified, unreadying affected sync players and adding second allocation turns for affected local players.
-- Verify read-only game map visibility for own territories, connected opponent territories, and distant opponent territories, using all gameplay connections including ship connections.
+- Verify read-only game map visibility for own territories, outgoing-connected opponent territories, and distant opponent territories, using directed gameplay connections including ship connections.
 - Verify spy success, spy failure, spy loss, and spy intel clearing after the spy phase.
 - Verify reinforcements can be placed only on owned territories.
-- Verify attacks enforce gameplay connection, leave-one-behind, commit-at-least-one, and source-target once-per-turn rules.
+- Verify attacks enforce directed gameplay connection, leave-one-behind, commit-at-least-one, and source-target once-per-turn rules.
 - Verify regular attacks compute deterministic scores from committed attacker troops and locked defender troops.
 - Verify challenge attacks immediately submit sampled beta scores and restart unfinished challenges after pause.
 - Verify tilted dice respond to attacker/defender combat scores.
@@ -1580,7 +1580,7 @@ Before considering the first playable version complete:
 - Verify conquest moves all committed survivors into the target.
 - Verify giving up is unavailable before the first roll and returns committed survivors afterward.
 - Verify battle modal is visible only to attacker and defender in sync, while other players see live committed map totals.
-- Verify fortify allows one adjacent mixed-source move and additional cavalry movement through owned territory.
+- Verify fortify allows one outgoing-adjacent mixed-source move and additional cavalry movement through directed owned paths.
 - Verify eliminated players are skipped and cannot act.
 - Verify game over triggers when one player owns all territories.
 - Verify sync host-authoritative state updates include committed game facts promptly enough to resume, without syncing transient visual UI state.
