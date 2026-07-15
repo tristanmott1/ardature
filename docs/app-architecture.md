@@ -91,7 +91,7 @@ Troop and spy icon ownership should be communicated by a runtime outer ring colo
 
 Troop and spy icon paths are centralized in `src/game/troopIcons.tsx`. The app should preload the full troop/spy icon set once at startup so spy buttons, captured-spy rows, army build, allocation, reinforcement, and inspection screens do not show a first-use blank or decode delay.
 
-Caradhras pass icons are simple committed SVG assets. They are clipped circular weather badges without a separate outer outline stroke. They are not generated map geometry and should not be converted into gameplay data. The game syncs and persists `caradhrasPassState`, which is `null` before the first regular turn and an integer from `1-10` during regular turns. The map chooses the matching icon asset only once that integer exists.
+Caradhras pass icons are simple committed SVG assets. They are clipped circular weather badges without a separate outer outline stroke; sun and cloud shapes use only a thin black outline. They are not generated map geometry and should not be converted into gameplay data. The game syncs and persists `caradhrasPassState`, which is `null` before the first regular turn and an integer from `1-10` during regular turns. The map chooses the matching icon asset only once that integer exists.
 
 ## Map Data Flow
 

@@ -270,13 +270,13 @@ At turn advance, sample this drift table from the current state:
 
 | Delta | Base weight |
 | --- | --- |
-| -2 | 15 |
-| -1 | 25 |
+| -2 | 20 |
+| -1 | 20 |
 | 0 | 20 |
-| +1 | 25 |
-| +2 | 15 |
+| +1 | 20 |
+| +2 | 20 |
 
-Before sampling, discard deltas that would leave the `1-10` range, then normalize the remaining weights. For example, from state `10`, only deltas `-2`, `-1`, and `0` remain, so the next state is `8` with probability `15 / 60 = 25.0%`, `9` with probability `25 / 60 = 41.7%`, and `10` with probability `20 / 60 = 33.3%`.
+Before sampling, discard deltas that would leave the `1-10` range, then normalize the remaining weights. For example, from state `10`, only deltas `-2`, `-1`, and `0` remain, so the next state is `8`, `9`, or `10` with equal probability `20 / 60 = 33.3%` each.
 
 The map renders the matching committed icon from `public/caradhras-pass/pass-01.svg` through `pass-10.svg` above the Rivendell-Caradhras connection only after regular turns begin and `caradhrasPassState` is an integer. The icon is visual, pointer-inert, and synced/persisted only through the authoritative integer state.
 

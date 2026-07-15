@@ -1,4 +1,4 @@
-const CACHE_NAME = "ardature-v5";
+const CACHE_NAME = "ardature-v6";
 const CORE_ASSETS = [
   "./",
   "./index.html",

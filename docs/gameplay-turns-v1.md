@@ -109,11 +109,11 @@ At turn advance, discard out-of-range deltas from this table, normalize the rema
 
 | Delta | Base weight |
 | --- | --- |
-| -2 | 15 |
-| -1 | 25 |
+| -2 | 20 |
+| -1 | 20 |
 | 0 | 20 |
-| +1 | 25 |
-| +2 | 15 |
+| +1 | 20 |
+| +2 | 20 |
 
 The map shows the corresponding `public/caradhras-pass/pass-XX.svg` icon above the Rivendell-Caradhras connection only during regular-turn game stages. The icon is visual-only and pointer-inert; the synced/persisted game fact is only the integer state.
 

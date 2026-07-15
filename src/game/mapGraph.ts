@@ -9,11 +9,11 @@ const CARADHRAS_PASS_BLOCKED_AT = 6;
 const CARADHRAS_ID = "caradhras";
 const RIVENDELL_ID = "rivendell";
 const PASS_DRIFT_WEIGHTS = [
-  { delta: -2, weight: 15 },
-  { delta: -1, weight: 25 },
+  { delta: -2, weight: 20 },
+  { delta: -1, weight: 20 },
   { delta: 0, weight: 20 },
-  { delta: 1, weight: 25 },
-  { delta: 2, weight: 15 },
+  { delta: 1, weight: 20 },
+  { delta: 2, weight: 20 },
 ];
 
 export function createCaradhrasPassState(random = Math.random) {
