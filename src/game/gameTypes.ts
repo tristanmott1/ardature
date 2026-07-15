@@ -241,6 +241,7 @@ export type GameState = {
   mode: PlayMode;
   players: GamePlayer[];
   caradhrasPassState: number | null;
+  pathsOfTheDeadState: number | null;
   config: GameConfig;
   draft: DraftState | null;
   allocation: AllocationState | null;

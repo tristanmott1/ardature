@@ -144,7 +144,7 @@ import { generatedMapData } from "./map/generated/mapData";
 import { MapView, type MapCameraIntent, type MapVisibleInsets } from "./map/components/MapView";
 import { readMapPreferences, saveMapPreferences } from "./map/mapPreferences";
 import { territoryForId } from "./map/territoryLookup";
-import { directedOwnedSourcesReachingTarget, hasDirectedConnection, outgoingTerritoryIds } from "./game/mapGraph";
+import { directedOwnedSourcesReachingTarget, hasDirectedConnection, outgoingTerritoryIds, type DynamicEdgeState } from "./game/mapGraph";
 import { isArdatureSyncMessage, type ArdatureSyncMessage } from "./sync/syncMessages";
 import { formatQrHandshakeError } from "./sync/syncErrors";
 import { QrScanner } from "./sync/QrCodeUi";
@@ -202,6 +202,8 @@ const EMPTY_MAP_VISIBLE_INSETS: MapVisibleInsets = {
 const CARADHRAS_PASS_ICON_SIZE = 620;
 const CARADHRAS_PASS_ICON_X_OFFSET = -130;
 const CARADHRAS_PASS_ICON_Y_OFFSET = 300;
+const PATHS_OF_THE_DEAD_ICON_SIZE = 620;
+const PATHS_OF_THE_DEAD_MIN_VISIBLE_STATE = 2;
 
 type MapInsetRefs = {
   actionSectionRef: RefObject<HTMLDivElement | null>;
@@ -266,15 +268,28 @@ function useMapVisibleInsets({
   return visibleInsets;
 }
 
-function caradhrasPassWeatherMarkers(game: GameState) {
-  const passState = game.turn && regularTurnPhaseHasWeather(game.phase) ? game.caradhrasPassState : null;
-  if (passState === null) {
+function dynamicEdgeStateForGame(game: GameState): DynamicEdgeState {
+  return {
+    caradhrasPassState: game.caradhrasPassState,
+    pathsOfTheDeadState: game.pathsOfTheDeadState,
+  };
+}
+
+function dynamicMapWeatherMarkers(game: GameState) {
+  if (!game.turn || !regularTurnPhaseHasWeather(game.phase)) {
     return [];
   }
 
+  return [
+    ...caradhrasPassWeatherMarkers(game.caradhrasPassState),
+    ...pathsOfTheDeadWeatherMarkers(game.pathsOfTheDeadState),
+  ];
+}
+
+function caradhrasPassWeatherMarkers(passState: number | null) {
   const rivendell = territoryForId("rivendell");
   const caradhras = territoryForId("caradhras");
-  if (!rivendell || !caradhras) {
+  if (passState === null || !rivendell || !caradhras) {
     return [];
   }
 
@@ -291,6 +306,29 @@ function caradhrasPassWeatherMarkers(game: GameState) {
       id: "caradhras-pass",
       label: `Caradhras pass state ${displayState}`,
       size: CARADHRAS_PASS_ICON_SIZE,
+    },
+  ];
+}
+
+function pathsOfTheDeadWeatherMarkers(pathsState: number | null) {
+  const edoras = territoryForId("edoras");
+  const lamedon = territoryForId("lamedon");
+  if (pathsState === null || pathsState < PATHS_OF_THE_DEAD_MIN_VISIBLE_STATE || !edoras || !lamedon) {
+    return [];
+  }
+
+  const displayState = Math.max(1, Math.min(5, Math.round(pathsState)));
+  return [
+    {
+      center: {
+        x: (edoras.center.x + lamedon.center.x) / 2,
+        y: (edoras.center.y + lamedon.center.y) / 2,
+      },
+      href: publicAssetUrl("troops/icons/ghost.png"),
+      id: "paths-of-the-dead",
+      label: `Paths of the Dead state ${displayState}`,
+      opacity: (displayState - 1) / 4,
+      size: PATHS_OF_THE_DEAD_ICON_SIZE,
     },
   ];
 }
@@ -467,11 +505,11 @@ function fortifyEligibleSourceIds(game: GameState, ownership: Record<string, str
     return sourceIds;
   }
 
-  return directedOwnedSourcesReachingTarget(ownership, targetTerritoryId, playerId, game.caradhrasPassState);
+  return directedOwnedSourcesReachingTarget(ownership, targetTerritoryId, playerId, dynamicEdgeStateForGame(game));
 }
 
 function fortifySourceIsImmediate(game: GameState, sourceTerritoryId: string | null, targetTerritoryId: string | null) {
-  return Boolean(sourceTerritoryId && targetTerritoryId && hasDirectedConnection(sourceTerritoryId, targetTerritoryId, game.caradhrasPassState));
+  return Boolean(sourceTerritoryId && targetTerritoryId && hasDirectedConnection(sourceTerritoryId, targetTerritoryId, dynamicEdgeStateForGame(game)));
 }
 
 function fortifyMoveUsesRegularLane(move: FortifyMovesBySource[string]) {
@@ -569,7 +607,7 @@ function suggestedTerritoryIdsForMap({
   }
 
   if (turnPlayerId && attackSetup?.sourceTerritoryId && !attackSetup.targetTerritoryId) {
-    return outgoingTerritoryIds(attackSetup.sourceTerritoryId, game.caradhrasPassState).filter((territoryId) =>
+    return outgoingTerritoryIds(attackSetup.sourceTerritoryId, dynamicEdgeStateForGame(game)).filter((territoryId) =>
       canSelectAttackTargetTerritory(game, turnPlayerId, attackSetup.sourceTerritoryId!, territoryId),
     );
   }
@@ -579,7 +617,7 @@ function suggestedTerritoryIdsForMap({
   }
 
   if (mapPressMode === "inspect" && gameMapSelectedTerritoryId) {
-    return [...outgoingTerritoryIds(gameMapSelectedTerritoryId, game.caradhrasPassState)];
+    return [...outgoingTerritoryIds(gameMapSelectedTerritoryId, dynamicEdgeStateForGame(game))];
   }
 
   return [];
@@ -723,7 +761,7 @@ function App() {
     [allocationPlayerId, game, gameMapViewerId, troopMarkerPreview, turnViewerId],
   );
   const weatherMarkers = useMemo(
-    () => caradhrasPassWeatherMarkers(game),
+    () => dynamicMapWeatherMarkers(game),
     [game],
   );
   const turnReinforcement = game.turn?.reinforcement ?? null;
@@ -1703,6 +1741,7 @@ function App() {
       ...game,
       phase: "draft" as const,
       caradhrasPassState: null,
+      pathsOfTheDeadState: null,
       draft,
       allocation: null,
       turn: null,

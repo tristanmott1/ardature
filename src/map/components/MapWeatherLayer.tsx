@@ -4,6 +4,7 @@ export type MapWeatherMarker = {
   center: MapPoint;
   href: string;
   id: string;
+  opacity?: number;
   size: number;
 };
 
@@ -16,6 +17,7 @@ export function MapWeatherLayer({ markers = [] }: { markers?: readonly MapWeathe
           height={marker.size}
           href={marker.href}
           key={marker.id}
+          opacity={marker.opacity}
           width={marker.size}
           x={marker.center.x - marker.size / 2}
           y={marker.center.y - marker.size / 2}

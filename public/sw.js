@@ -1,4 +1,4 @@
-const CACHE_NAME = "ardature-v6";
+const CACHE_NAME = "ardature-v7";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -20,6 +20,7 @@ const CORE_ASSETS = [
   "./troops/icons/crow.png",
   "./troops/icons/dwarf.png",
   "./troops/icons/elf.png",
+  "./troops/icons/ghost.png",
   "./troops/icons/orc.png",
   "./troops/icons/rohirrim.png",
   "./troops/icons/smeagul-captured.png",

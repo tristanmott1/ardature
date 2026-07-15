@@ -185,11 +185,13 @@ async function runSourceChecks() {
   assert(!appSource.includes("generatedMapConnections") && !gameStateSource.includes("generatedMapConnections") && !gameViewSource.includes("generatedMapConnections"), "Gameplay code does not import the old ambiguous generated connection map.");
   assert(!appSource.includes("generatedDirectedMapConnections") && !gameStateSource.includes("generatedDirectedMapConnections") && !gameViewSource.includes("generatedDirectedMapConnections"), "Gameplay code does not import the raw generated directed graph.");
   assert(mapGraphSource.includes("createCaradhrasPassState") && mapGraphSource.includes("driftCaradhrasPassState") && mapGraphSource.includes("isCaradhrasPassOpen"), "Caradhras pass state helpers are centralized.");
-  assert(mapGraphSource.includes("baseOutgoingTerritoryIds") && mapGraphSource.includes("outgoingTerritoryIds(territoryId: string, caradhrasPassState: number | null)") && mapGraphSource.includes("isCaradhrasPassConnection"), "Active directed graph filtering lives in mapGraph.");
-  assert(mapGraphSource.includes("directedDistanceFromAny") && mapGraphSource.includes("directedOwnedSourcesReachingTarget") && mapGraphSource.includes("caradhrasPassState"), "Directed gameplay graph helpers consume active pass state.");
+  assert(mapGraphSource.includes("createPathsOfTheDeadState") && mapGraphSource.includes("driftPathsOfTheDeadState") && mapGraphSource.includes("isPathsOfTheDeadOpen"), "Paths of the Dead state helpers are centralized.");
+  assert(mapGraphSource.includes("export type DynamicEdgeState") && mapGraphSource.includes("outgoingTerritoryIds(territoryId: string, edgeState: DynamicEdgeState)") && mapGraphSource.includes("isCaradhrasPassConnection") && mapGraphSource.includes("isPathsOfTheDeadConnection"), "Active directed graph filtering lives in mapGraph.");
+  assert(mapGraphSource.includes("directedDistanceFromAny") && mapGraphSource.includes("directedOwnedSourcesReachingTarget") && mapGraphSource.includes("pathsOfTheDeadState"), "Directed gameplay graph helpers consume dynamic edge state.");
   assert(["-2", "-1", "0", "1", "2"].every((delta) => mapGraphSource.includes(`{ delta: ${delta}, weight: 20 }`)), "Caradhras pass drift uses the current uniform 20/20/20/20/20 distribution.");
-  assert(gameTypesSource.includes("caradhrasPassState: number | null") && gameStateSource.includes("caradhrasPassState: null") && gameStateSource.includes("caradhrasPassState: state.caradhrasPassState ?? createCaradhrasPassState()") && gameStateSource.includes("caradhrasPassState: driftCaradhrasPassState(state.caradhrasPassState)"), "GameState keeps Caradhras pass null before first turn, samples it at turn start, and drifts it on turn advance.");
-  assert(appSource.includes("regularTurnPhaseHasWeather") && appSource.includes('phase === "turn" || phase === "turnHandoff" || phase === "paused"'), "Caradhras pass icon renders only during regular-turn game stages.");
+  assert(["-1", "0", "1"].every((delta) => mapGraphSource.includes(`{ delta: ${delta}, weight: ${delta === "0" ? "20" : "40"} }`)), "Paths of the Dead drift uses the current 40/20/40 distribution.");
+  assert(gameTypesSource.includes("caradhrasPassState: number | null") && gameTypesSource.includes("pathsOfTheDeadState: number | null") && gameStateSource.includes("caradhrasPassState: null") && gameStateSource.includes("pathsOfTheDeadState: null") && gameStateSource.includes("caradhrasPassState: state.caradhrasPassState ?? createCaradhrasPassState()") && gameStateSource.includes("pathsOfTheDeadState: state.pathsOfTheDeadState ?? createPathsOfTheDeadState()") && gameStateSource.includes("pathsOfTheDeadState: driftPathsOfTheDeadState(state.pathsOfTheDeadState)"), "GameState keeps dynamic pass states null before first turn, samples them at turn start, and drifts them on turn advance.");
+  assert(appSource.includes("regularTurnPhaseHasWeather") && appSource.includes("dynamicMapWeatherMarkers") && appSource.includes("pathsOfTheDeadWeatherMarkers") && appSource.includes('id: "paths-of-the-dead"'), "Dynamic pass icons render only during regular-turn game stages.");
   assert(!mapConnectionsSource.includes("shipRoute") && !gameStateSource.includes("shipRoute") && !syncMessagesSource.includes("shipRoute"), "Visual ship routes are not consumed by gameplay or sync code.");
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
   assert(!mapDataSource.includes("Infinity"), "Generated map data has no Infinity values.");
@@ -220,12 +222,13 @@ async function runSourceChecks() {
       gameSpecDocs.includes("| Rhûn | 4 heavy |"),
     "User-facing names preserve required special characters.",
   );
-  assert(serviceWorkerSource.includes('const CACHE_NAME = "ardature-v6"'), "Service worker cache version is bumped for refreshed shell assets.");
+  assert(serviceWorkerSource.includes('const CACHE_NAME = "ardature-v7"'), "Service worker cache version is bumped for refreshed shell assets.");
   assert(caradhrasPassIconFiles.filter((fileName) => /^pass-\d\d\.svg$/.test(fileName)).length === 10, "Caradhras pass has ten committed SVG icons.");
   assert(caradhrasPassIconSources.every((source) => !source.includes('stroke="#ffffff"') && !source.includes('fill="none"')), "Caradhras pass icons do not render an outer circle outline.");
   assert(caradhrasPassIconSources.slice(0, 5).every((source) => /<circle[^>]+fill="#ffd45a"[^>]+stroke="#111111"[^>]+stroke-width="1"/.test(source)), "Caradhras pass suns use a thin black outline.");
   assert(caradhrasPassIconSources.slice(1).every((source) => !source.includes("<path") || source.includes('stroke="#111111" stroke-width="1"')), "Caradhras pass cloud paths use a thin black outline.");
   assert(Array.from({ length: 10 }, (_, index) => `./caradhras-pass/pass-${String(index + 1).padStart(2, "0")}.svg`).every((asset) => serviceWorkerSource.includes(asset)), "Service worker precaches every Caradhras pass icon.");
+  assert(serviceWorkerSource.includes("./troops/icons/ghost.png") && troopIconFiles.includes("ghost.png"), "Service worker precaches the Paths of the Dead ghost icon.");
   assert(territoryLookupSource.includes("territoryForId") && !appSource.includes("generatedMapData.territories.find") && !gameSectionsSource.includes("generatedMapData.territories.find") && !gameViewSource.includes("new Map<string, GeneratedTerritoryData>"), "Territory lookup uses one shared generated-data helper.");
   assert(mapWidth === sourceWidth * 10 + 3000 && mapHeight === sourceHeight * 10 + 3000, "Generated app data includes the 1500-unit display frame.");
   assert(
@@ -392,7 +395,7 @@ async function runSourceChecks() {
   assert(gameViewSource.includes("connectedSyncPlayers.length > 1") && gameViewSource.includes("hostTransferRequired || connectedSyncPlayers.length > 1") && !appSource.includes("!game.hostTransfer)"), "Host transfer is available on normal sync pause, not only forced host-transfer pause.");
   assert(combatSource.includes("COMBAT_SCORE_VALUES") && combatSource.includes("challengeScoreForTroops") && combatSource.includes("rollCombatDice") && combatSource.includes("sampleCasualty"), "Combat math stores centralized score, challenge, dice, and casualty helpers.");
   assert(gameStateSource.includes("function randomCompleteAllAllocations") && gameStateSource.includes("function randomArmyMarker") && gameStateSource.includes("function bordersOpponentTerritory"), "Random allocation has dedicated army and border placement helpers.");
-  assert(gameStateSource.includes("outgoingTerritoryIds(territoryId, caradhrasPassState).some") && gameStateSource.includes("ownership[connectedId] !== playerId"), "Random allocation uses active outgoing directed connections to find opponent borders.");
+  assert(gameStateSource.includes("outgoingTerritoryIds(territoryId, edgeState).some") && gameStateSource.includes("ownership[connectedId] !== playerId"), "Random allocation uses active outgoing directed connections to find opponent borders.");
   assert(setupPanelsSource.includes("Territory Draft") && setupPanelsSource.includes("Troop Allocation") && setupPanelsSource.includes("Allocation style"), "Setup UI has draft and troop allocation config sections.");
   assert(!appSource.includes("SegmentedControl") && !stylesSource.includes(".segmented-control"), "Old segmented draft config UI is removed.");
   assert(!gameTypesSource.includes("allocationWaiting"), "AppPhase does not include allocationWaiting.");
@@ -436,7 +439,7 @@ async function runSourceChecks() {
   assert(gameStateSource.includes("suggestedTerritoryId: string | string[] | null") && gameStateSource.includes('suggestedTerritoryIds.has(territoryId)') && appSource.includes("createTerritoryStates(game.players, ownership, mapSelectedTerritoryIds, mapSuggestedTerritoryIds, battleCue)"), "Territory state creation accepts selected and suggested ids.");
   assert(!territoryFillSource.includes('state.status === "selected" ? "#ffffff"'), "Selected territory fill is not hard-coded to white.");
   assert(troopMarkerSource.includes("data-troop-marker"), "Troop markers expose territory ids for visibility verification.");
-  assert(appSource.includes("caradhrasPassWeatherMarkers") && appSource.includes("weatherMarkers={weatherMarkers}") && mapViewSource.includes("MapWeatherLayer") && mapWeatherSource.includes("data-weather-marker"), "Map renders pointer-inert Caradhras pass weather markers.");
+  assert(appSource.includes("dynamicMapWeatherMarkers") && appSource.includes("pathsOfTheDeadWeatherMarkers") && appSource.includes("weatherMarkers={weatherMarkers}") && mapViewSource.includes("MapWeatherLayer") && mapWeatherSource.includes("data-weather-marker") && mapWeatherSource.includes("opacity={marker.opacity}"), "Map renders pointer-inert dynamic pass weather markers.");
   assert(pausePanelSource.includes("icon-button-spacer"), "Host self-removal leaves an aligned spacer instead of a trash button.");
   assert(pausePanelSource.includes('className="connection-label pause-row-status"') && pausePanelSource.includes("canRemove && player.id !== localPlayerId") && pausePanelSource.includes("pause-row-action"), "Pause rows keep local and sync action/status slots aligned.");
   assert(stylesSource.includes(".player-row.compact-row") && stylesSource.includes('grid-template-areas: "identity status action"') && stylesSource.includes("grid-template-columns: minmax(0, 1fr) 96px 38px") && stylesSource.includes(".player-row.compact-row > .pause-row-action"), "Pause rows use fixed name/status/action columns with the action slot on the far right.");
@@ -2208,44 +2211,71 @@ async function runReadOnlyVisibilityChecks(page) {
   await assertKnownTroopRow(page, "Cycling local viewer reveals that player's own nonzero distant breakdown.");
 }
 
-async function runCaradhrasPassChecks(page) {
-  console.log("Checking Caradhras pass dynamics");
+async function runDynamicPassChecks(page) {
+  console.log("Checking dynamic pass edges");
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
   const preTurnState = readOnlyVisibilityGameState(territoryIds);
   preTurnState.caradhrasPassState = 5;
+  preTurnState.pathsOfTheDeadState = 5;
   await loadLocalGameFixture(page, preTurnState, '.app-shell[data-app-phase="gameMap"]');
   assert((await page.locator('[data-weather-marker="caradhras-pass"]').count()) === 0, "Caradhras pass icon is hidden before regular turns even if old state exists.");
+  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').count()) === 0, "Paths of the Dead icon is hidden before regular turns even if old state exists.");
 
   const openState = turnSpyGameState(territoryIds);
   openState.caradhrasPassState = 5;
+  openState.pathsOfTheDeadState = 4;
   await loadLocalGameFixture(page, openState, '.app-shell[data-app-phase="turn"]');
   await page.locator('[data-weather-marker="caradhras-pass"]').waitFor({ timeout: 15000 });
+  await page.locator('[data-weather-marker="paths-of-the-dead"]').waitFor({ timeout: 15000 });
   await clickTerritory(page, "rivendell");
   assert((await page.locator('[data-weather-marker="caradhras-pass"]').getAttribute("href"))?.includes("pass-05.svg"), "Open Caradhras pass state renders the matching icon.");
   assert((await page.locator('[data-territory-fill="caradhras"][data-territory-fill-state="suggested"]').count()) === 1, "Open Caradhras pass keeps Rivendell to Caradhras as an active explore connection.");
+  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').getAttribute("href"))?.includes("ghost.png"), "Open Paths of the Dead state renders the ghost icon.");
+  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').getAttribute("opacity")) === "0.75", "Paths of the Dead state 4 renders at 75% opacity.");
+  await clickTerritory(page, "edoras");
+  assert((await page.locator('[data-territory-fill="lamedon"][data-territory-fill-state="suggested"]').count()) === 1, "Open Paths of the Dead keeps Edoras to Lamedon as an active explore connection.");
   await capture(page, "13ba-caradhras-pass-open-mobile.png");
 
   const graphProbe = await page.evaluate(async () => {
     const graph = await import("/src/game/mapGraph.ts");
+    const blockedCaradhras = { caradhrasPassState: 6, pathsOfTheDeadState: 4 };
+    const openCaradhras = { caradhrasPassState: 5, pathsOfTheDeadState: 4 };
+    const nullCaradhras = { caradhrasPassState: null, pathsOfTheDeadState: 4 };
+    const closedPaths = { caradhrasPassState: 5, pathsOfTheDeadState: 2 };
+    const openPaths = { caradhrasPassState: 5, pathsOfTheDeadState: 4 };
+    const nullPaths = { caradhrasPassState: 5, pathsOfTheDeadState: null };
 
     return {
-      blockedDistance: graph.directedDistanceFromAny(["rivendell"], "caradhras", 6),
-      blockedForward: graph.hasDirectedConnection("rivendell", "caradhras", 6),
-      blockedReverse: graph.hasDirectedConnection("caradhras", "rivendell", 6),
+      blockedDistance: graph.directedDistanceFromAny(["rivendell"], "caradhras", blockedCaradhras),
+      blockedForward: graph.hasDirectedConnection("rivendell", "caradhras", blockedCaradhras),
+      blockedReverse: graph.hasDirectedConnection("caradhras", "rivendell", blockedCaradhras),
       driftFromTenHigh: graph.driftCaradhrasPassState(10, () => 0.999),
       driftFromTenLow: graph.driftCaradhrasPassState(10, () => 0),
       driftFromTenThirty: graph.driftCaradhrasPassState(10, () => 0.3),
-      nullForward: graph.hasDirectedConnection("rivendell", "caradhras", null),
-      openDistance: graph.directedDistanceFromAny(["rivendell"], "caradhras", 5),
-      openForward: graph.hasDirectedConnection("rivendell", "caradhras", 5),
-      openReverse: graph.hasDirectedConnection("caradhras", "rivendell", 5),
+      nullForward: graph.hasDirectedConnection("rivendell", "caradhras", nullCaradhras),
+      openDistance: graph.directedDistanceFromAny(["rivendell"], "caradhras", openCaradhras),
+      openForward: graph.hasDirectedConnection("rivendell", "caradhras", openCaradhras),
+      openReverse: graph.hasDirectedConnection("caradhras", "rivendell", openCaradhras),
+      pathsClosedForward: graph.hasDirectedConnection("edoras", "lamedon", closedPaths),
+      pathsDriftFromFiveHigh: graph.driftPathsOfTheDeadState(5, () => 0.999),
+      pathsDriftFromFiveLow: graph.driftPathsOfTheDeadState(5, () => 0),
+      pathsInitialHigh: graph.createPathsOfTheDeadState(() => 0.999),
+      pathsInitialLow: graph.createPathsOfTheDeadState(() => 0),
+      pathsNullForward: graph.hasDirectedConnection("edoras", "lamedon", nullPaths),
+      pathsOpenDistance: graph.directedDistanceFromAny(["edoras"], "lamedon", openPaths),
+      pathsOpenForward: graph.hasDirectedConnection("edoras", "lamedon", openPaths),
+      pathsOpenReverse: graph.hasDirectedConnection("lamedon", "edoras", openPaths),
     };
   });
   assert(graphProbe.nullForward, "Null Caradhras pass state uses the base generated graph.");
   assert(graphProbe.openForward && graphProbe.openReverse && graphProbe.openDistance === 1, "Open Caradhras pass keeps both generated directed edges active.");
   assert(!graphProbe.blockedForward && !graphProbe.blockedReverse && graphProbe.blockedDistance !== 1, "Blocked Caradhras pass removes both direct edges from active graph traversal.");
   assert(graphProbe.driftFromTenLow === 8 && graphProbe.driftFromTenThirty === 8 && graphProbe.driftFromTenHigh === 10, "Caradhras pass drift discards and normalizes out-of-range moves before sampling.");
+  assert(graphProbe.pathsInitialLow === 1 && graphProbe.pathsInitialHigh === 5, "Paths of the Dead initial state samples uniformly across 1-5.");
+  assert(!graphProbe.pathsNullForward && !graphProbe.pathsClosedForward, "Null and low Paths of the Dead states keep Edoras to Lamedon closed.");
+  assert(graphProbe.pathsOpenForward && !graphProbe.pathsOpenReverse && graphProbe.pathsOpenDistance === 1, "Open Paths of the Dead activates only Edoras to Lamedon.");
+  assert(graphProbe.pathsDriftFromFiveLow === 4 && graphProbe.pathsDriftFromFiveHigh === 5, "Paths of the Dead drift discards and normalizes out-of-range moves before sampling.");
 
   await loadLocalGameFixture(page, { ...openState, caradhrasPassState: 6 }, '.app-shell[data-app-phase="turn"]');
   await page.locator('[data-weather-marker="caradhras-pass"]').waitFor({ timeout: 15000 });
@@ -2253,6 +2283,16 @@ async function runCaradhrasPassChecks(page) {
   assert((await page.locator('[data-weather-marker="caradhras-pass"]').getAttribute("href"))?.includes("pass-06.svg"), "Blocked Caradhras pass state renders the matching icon.");
   assert((await page.locator('[data-territory-fill="caradhras"][data-territory-fill-state="suggested"]').count()) === 0, "Blocked Caradhras pass removes Rivendell to Caradhras from explore connections.");
   await capture(page, "13bb-caradhras-pass-blocked-mobile.png");
+
+  await loadLocalGameFixture(page, { ...openState, pathsOfTheDeadState: 2 }, '.app-shell[data-app-phase="turn"]');
+  await page.locator('[data-weather-marker="paths-of-the-dead"]').waitFor({ timeout: 15000 });
+  await clickTerritory(page, "edoras");
+  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').getAttribute("opacity")) === "0.25", "Paths of the Dead state 2 renders at 25% opacity.");
+  assert((await page.locator('[data-territory-fill="lamedon"][data-territory-fill-state="suggested"]').count()) === 0, "Closed Paths of the Dead removes Edoras to Lamedon from explore connections.");
+  await capture(page, "13bc-paths-of-the-dead-closed-mobile.png");
+
+  await loadLocalGameFixture(page, { ...openState, pathsOfTheDeadState: 1 }, '.app-shell[data-app-phase="turn"]');
+  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').count()) === 0, "Paths of the Dead state 1 renders no icon.");
 }
 
 async function loadLocalGameFixture(page, state, selector) {
@@ -3127,6 +3167,7 @@ function readOnlyVisibilityGameState(territoryIds) {
     phase: "gameMap",
     mode: "local",
     caradhrasPassState: null,
+    pathsOfTheDeadState: null,
     players: [
       {
         id: "viewer",
@@ -3779,10 +3820,10 @@ async function main() {
     readOnlyMobile.setDefaultTimeout(10000);
     await runReadOnlyVisibilityChecks(readOnlyMobile);
     await readOnlyMobile.close();
-    const caradhrasMobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
-    caradhrasMobile.setDefaultTimeout(10000);
-    await runCaradhrasPassChecks(caradhrasMobile);
-    await caradhrasMobile.close();
+    const passMobile = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 390, height: 844 } });
+    passMobile.setDefaultTimeout(10000);
+    await runDynamicPassChecks(passMobile);
+    await passMobile.close();
     await runTurnSpyOutcomeChecks(browser);
     await runTurnAttackChecks(browser);
     await runTurnFortifyChecks(browser);

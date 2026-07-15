@@ -101,9 +101,11 @@ There is no gameplay distinction between directed land and directed ship connect
 
 Physical shared borders from generated geometry are visual map data only. Mountains, forests, coastlines, and dotted ship-route art do not define gameplay adjacency in the app.
 
-The Rivendell-Caradhras pass is weather-gated by `caradhrasPassState`, an authoritative value stored in `GameState`. It is `null` before the first regular turn. When regular turns begin, the first state is randomly sampled from `1-10`. States `1-5` leave the Rivendell-Caradhras directed edges active. States `6-10` remove every directed edge between Rivendell and Caradhras from the active graph. This affects every edge-based rule above, including passive explore highlights.
+The Rivendell-Caradhras pass is weather-gated by `caradhrasPassState`, an authoritative value stored in `GameState`. It is `null` before the first regular turn. When regular turns begin, the first state is uniformly sampled from `1-10`. States `1-5` leave the Rivendell-Caradhras directed edges active. States `6-10` remove every directed edge between Rivendell and Caradhras from the active graph. This affects every edge-based rule above, including passive explore highlights.
 
-The state is fixed through a whole player turn. It drifts exactly once when a turn advances to the next player. Pause, refresh, reconnect, battle resolution, elimination confirmation, and resume do not drift the pass unless they actually advance the turn.
+Paths of the Dead is gated by `pathsOfTheDeadState`, also stored in `GameState`. It is `null` before the first regular turn. When regular turns begin, the first state is uniformly sampled from `1-5`. The generated graph contains `Edoras -> Lamedon` and never contains `Lamedon -> Edoras`. States `1-3` remove `Edoras -> Lamedon` from the active graph. States `4-5` leave that one directed edge active.
+
+Each dynamic state is fixed through a whole player turn. It drifts exactly once when a turn advances to the next player. Pause, refresh, reconnect, battle resolution, elimination confirmation, and resume do not drift a pass unless they actually advance the turn.
 
 At turn advance, discard out-of-range deltas from this table, normalize the remaining weights, then sample the next pass state:
 
@@ -115,7 +117,15 @@ At turn advance, discard out-of-range deltas from this table, normalize the rema
 | +1 | 20 |
 | +2 | 20 |
 
-The map shows the corresponding `public/caradhras-pass/pass-XX.svg` icon above the Rivendell-Caradhras connection only during regular-turn game stages. The icon is visual-only and pointer-inert; the synced/persisted game fact is only the integer state.
+Paths of the Dead uses this drift table, with out-of-range deltas discarded and remaining weights normalized:
+
+| Delta | Base weight |
+| --- | --- |
+| -1 | 40 |
+| 0 | 20 |
+| +1 | 40 |
+
+The map shows the corresponding `public/caradhras-pass/pass-XX.svg` icon above the Rivendell-Caradhras connection only during regular-turn game stages. Paths of the Dead shows `public/troops/icons/ghost.png` at the Edoras-Lamedon midpoint during regular turns for states `2-5`; opacity is `25%`, `50%`, `75%`, and `100%`. The icons are visual-only and pointer-inert; the synced/persisted game facts are only the integer states.
 
 ## Unit Icon Display
 

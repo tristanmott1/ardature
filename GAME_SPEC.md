@@ -233,24 +233,30 @@ Owning every territory in a region grants that region's reinforcement bonus duri
 | Rhûn | 4 heavy |
 | Mordor | 3 heavy |
 
-## Gameplay Connections And Caradhras Pass
+## Gameplay Connections And Dynamic Passes
 
 All gameplay uses the active outgoing directed gameplay graph. The generated directed graph from `maps/territory-key.md` is the base graph. Game code must not import or use generated connections directly for rules; it should ask the shared graph helpers for active outgoing edges, active reachability, and active distance.
 
-The Rivendell-Caradhras connection has one authoritative pass state stored in `GameState` after regular turns begin:
+Dynamic pass states live in `GameState` after regular turns begin:
 
 ```text
 caradhrasPassState = null before the first regular turn
 caradhrasPassState = integer 1-10 during regular turns
+pathsOfTheDeadState = null before the first regular turn
+pathsOfTheDeadState = integer 1-5 during regular turns
 ```
 
-The state represents current weather on the pass:
+`caradhrasPassState` represents current weather on the Rivendell-Caradhras pass:
 
 - `1`: completely clear
 - `2-5`: passable, increasingly cloudy/snowy
 - `6-10`: impassable, increasingly severe
 
 When `caradhrasPassState` is `1-5`, the active graph includes every generated directed edge between Rivendell and Caradhras. When `caradhrasPassState` is `6-10`, every directed edge between Rivendell and Caradhras is treated as nonexistent. This affects every edge-based rule and view:
+
+`pathsOfTheDeadState` represents the ghostly opening of the Paths of the Dead from Edoras to Lamedon. The generated base graph contains `Edoras -> Lamedon` and never contains `Lamedon -> Edoras`. When `pathsOfTheDeadState` is `1-3`, `Edoras -> Lamedon` is treated as nonexistent. When it is `4-5`, that one directed edge is active. The reverse direction is never active.
+
+Dynamic pass filtering affects every edge-based rule and view:
 
 - spy shortest-path capture probability
 - successful-spy same-opponent adjacent total reveals
@@ -262,11 +268,11 @@ When `caradhrasPassState` is `1-5`, the active graph includes every generated di
 - random allocation opponent-border targeting
 - any future gameplay helper that asks for outgoing edges, reachability, or distance
 
-The physical border ink between Rivendell and Caradhras remains visual map data. Weather never deletes or redraws static border ink.
+Physical border ink remains visual map data. Dynamic pass state never deletes or redraws static border ink.
 
-New authoritative games keep `caradhrasPassState` as `null` through setup, draft, and troop allocation. The initial pass state is sampled randomly from `1-10` when the first regular turn loop is created after allocation. While the value is `null`, the active graph is just the generated base directed graph and the pass icon is not rendered. Once sampled, the value is fixed through each player's whole turn. It changes exactly once when a turn actually advances to the next player. Pausing, refreshing, reconnecting, opening handoff, resolving an in-progress battle, confirming elimination, or resuming the same current turn does not drift the pass by itself.
+New authoritative games keep both dynamic pass states as `null` through setup, draft, and troop allocation. When the first regular turn loop is created after allocation, Caradhras is sampled uniformly from `1-10` and Paths of the Dead is sampled uniformly from `1-5`. A null Paths state is closed. Once initialized, each value is fixed through each player's whole turn. Each changes exactly once when a turn actually advances to the next player. Pausing, refreshing, reconnecting, opening handoff, resolving an in-progress battle, confirming elimination, or resuming the same current turn does not drift a pass by itself.
 
-At turn advance, sample this drift table from the current state:
+At turn advance, sample this Caradhras drift table from the current state:
 
 | Delta | Base weight |
 | --- | --- |
@@ -278,7 +284,17 @@ At turn advance, sample this drift table from the current state:
 
 Before sampling, discard deltas that would leave the `1-10` range, then normalize the remaining weights. For example, from state `10`, only deltas `-2`, `-1`, and `0` remain, so the next state is `8`, `9`, or `10` with equal probability `20 / 60 = 33.3%` each.
 
-The map renders the matching committed icon from `public/caradhras-pass/pass-01.svg` through `pass-10.svg` above the Rivendell-Caradhras connection only after regular turns begin and `caradhrasPassState` is an integer. The icon is visual, pointer-inert, and synced/persisted only through the authoritative integer state.
+At turn advance, sample this Paths of the Dead drift table from the current state:
+
+| Delta | Base weight |
+| --- | --- |
+| -1 | 40 |
+| 0 | 20 |
+| +1 | 40 |
+
+Before sampling, discard deltas that would leave the `1-5` range, then normalize the remaining weights.
+
+The map renders the matching committed icon from `public/caradhras-pass/pass-01.svg` through `pass-10.svg` above the Rivendell-Caradhras connection only after regular turns begin and `caradhrasPassState` is an integer. Paths of the Dead renders `public/troops/icons/ghost.png` at the Edoras-Lamedon midpoint only during regular turns and only for states `2-5`. Its opacity is `25%`, `50%`, `75%`, and `100%` for states `2`, `3`, `4`, and `5`. These icons are visual, pointer-inert, and synced/persisted only through the authoritative integer states.
 
 ## Information Visibility
 
@@ -1414,6 +1430,7 @@ type GameState = {
   phase: TurnPhase;
   turnNumber: number;
   caradhrasPassState: number | null;
+  pathsOfTheDeadState: number | null;
   map: MapState;
   territories: Record<TerritoryId, TerritoryState>;
   regions: Record<RegionId, RegionState>;

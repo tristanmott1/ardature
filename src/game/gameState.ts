@@ -3,7 +3,7 @@ import type { MapSkin, TerritoryState } from "../map/mapTypes";
 import { territoriesInRegion } from "../map/territoryLookup";
 import { MIXTURE_TROOP_TYPES, armyCountsForMarker, reinforcementCountsForMarker } from "./armyBuild";
 import { challengeScoreForTroops, combatScoreForTroops, rollCombatDice, sampleCasualty } from "./combat";
-import { createCaradhrasPassState, directedDistanceFromAny, directedOwnedSourcesReachingTarget, driftCaradhrasPassState, hasDirectedConnection, outgoingTerritoryIds } from "./mapGraph";
+import { createCaradhrasPassState, createPathsOfTheDeadState, directedDistanceFromAny, directedOwnedSourcesReachingTarget, driftCaradhrasPassState, driftPathsOfTheDeadState, hasDirectedConnection, outgoingTerritoryIds, type DynamicEdgeState } from "./mapGraph";
 import type {
   AllocationStyle,
   AllocationState,
@@ -70,6 +70,7 @@ export function createInitialGameState(): GameState {
     mode: "local",
     players: [],
     caradhrasPassState: null,
+    pathsOfTheDeadState: null,
     config: { ...DEFAULT_CONFIG },
     draft: null,
     allocation: null,
@@ -119,6 +120,13 @@ function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
 export function firstAvailableColor(players: GamePlayer[]) {
   const usedColors = new Set(players.map((player) => player.color).filter(Boolean));
   return PLAYER_COLORS.find((color) => !usedColors.has(color)) ?? null;
+}
+
+function dynamicEdgeState(state: GameState): DynamicEdgeState {
+  return {
+    caradhrasPassState: state.caradhrasPassState,
+    pathsOfTheDeadState: state.pathsOfTheDeadState,
+  };
 }
 
 export function addSetupPlayer(state: GameState, name: string): GameState {
@@ -238,6 +246,7 @@ export function restartPausedGameToSetup(state: GameState, isSyncHost: boolean):
         ...state,
         phase: "setup",
         caradhrasPassState: null,
+        pathsOfTheDeadState: null,
         draft: null,
         allocation: null,
         turn: null,
@@ -492,7 +501,7 @@ export function advanceAfterDraft(state: GameState, now: number): GameState {
   if (state.config.allocationStyle === "random") {
     return startTurnLoop({
       ...state,
-      allocation: clearAllocationTimer(randomCompleteAllAllocations(allocation, state.draft.ownership, state.players, state.caradhrasPassState), state.config),
+      allocation: clearAllocationTimer(randomCompleteAllAllocations(allocation, state.draft.ownership, state.players, dynamicEdgeState(state)), state.config),
     }, state.mode === "local");
   }
 
@@ -746,7 +755,7 @@ export function cancelSpySelection(state: GameState): GameState {
 }
 
 export function spyCaptureProbability(state: GameState, playerId: string, territoryId: string) {
-  const distance = nearestOwnedDistance(state.draft?.ownership ?? null, playerId, territoryId, state.caradhrasPassState);
+  const distance = nearestOwnedDistance(state.draft?.ownership ?? null, playerId, territoryId, dynamicEdgeState(state));
   if (!distance) {
     return null;
   }
@@ -794,7 +803,7 @@ export function confirmSpyAttempt(state: GameState, playerId: string, territoryI
 
   const targetOwnerId = ownership[territoryId];
   const totalTerritoryIds = targetOwnerId
-    ? sameOwnerConnectedTerritoryIds(ownership, territoryId, targetOwnerId, state.caradhrasPassState)
+    ? sameOwnerConnectedTerritoryIds(ownership, territoryId, targetOwnerId, dynamicEdgeState(state))
     : [];
 
   return {
@@ -1034,7 +1043,7 @@ export function canAttackTargetTerritory(state: GameState, playerId: string, sou
     canAttackFromTerritory(state, playerId, sourceTerritoryId) &&
       ownership?.[targetTerritoryId] &&
       ownership[targetTerritoryId] !== playerId &&
-      hasDirectedConnection(sourceTerritoryId, targetTerritoryId, state.caradhrasPassState),
+      hasDirectedConnection(sourceTerritoryId, targetTerritoryId, dynamicEdgeState(state)),
   );
 }
 
@@ -1318,6 +1327,7 @@ export function restartVictoryGameToSetup(state: GameState): GameState {
     ...state,
     phase: "setup",
     caradhrasPassState: null,
+    pathsOfTheDeadState: null,
     players: state.players.filter((player) => playerIds.has(player.id) && player.connectionStatus === "connected"),
     draft: null,
     allocation: null,
@@ -2049,6 +2059,7 @@ function startTurnLoop(state: GameState, useHandoff: boolean): GameState {
   return applyRegionControlChanges({
     ...state,
     caradhrasPassState: state.caradhrasPassState ?? createCaradhrasPassState(),
+    pathsOfTheDeadState: state.pathsOfTheDeadState ?? createPathsOfTheDeadState(),
     phase: useHandoff && state.mode === "local" ? "turnHandoff" : "turn",
     turn: createTurnState(state.players, state.draft?.originalTurnOrder ?? [], currentPlayerId),
   }, "turnStart");
@@ -2095,6 +2106,7 @@ function advanceTurn(state: GameState): GameState {
   return applyRegionControlChanges({
     ...state,
     caradhrasPassState: driftCaradhrasPassState(state.caradhrasPassState),
+    pathsOfTheDeadState: driftPathsOfTheDeadState(state.pathsOfTheDeadState),
     phase: state.mode === "local" ? "turnHandoff" : "turn",
     turn: restoreCapturedSpies({
       ...state,
@@ -2118,16 +2130,16 @@ function nextTurnPlayerId(players: GamePlayer[], originalTurnOrder: string[], cu
   return order[(currentIndex + 1) % order.length] ?? order[0];
 }
 
-function sameOwnerConnectedTerritoryIds(ownership: TerritoryOwnerMap, territoryId: string, ownerId: string, caradhrasPassState: number | null) {
-  return outgoingTerritoryIds(territoryId, caradhrasPassState).filter((connectedId) => ownership[connectedId] === ownerId);
+function sameOwnerConnectedTerritoryIds(ownership: TerritoryOwnerMap, territoryId: string, ownerId: string, edgeState: DynamicEdgeState) {
+  return outgoingTerritoryIds(territoryId, edgeState).filter((connectedId) => ownership[connectedId] === ownerId);
 }
 
-function nearestOwnedDistance(ownership: TerritoryOwnerMap | null, playerId: string, targetTerritoryId: string, caradhrasPassState: number | null) {
+function nearestOwnedDistance(ownership: TerritoryOwnerMap | null, playerId: string, targetTerritoryId: string, edgeState: DynamicEdgeState) {
   if (!ownership || ownership[targetTerritoryId] === playerId) {
     return null;
   }
 
-  return directedDistanceFromAny(ownedTerritoryIds(ownership, playerId), targetTerritoryId, caradhrasPassState);
+  return directedDistanceFromAny(ownedTerritoryIds(ownership, playerId), targetTerritoryId, edgeState);
 }
 
 function applyRegionControlChanges(state: GameState, delivery: "turnStart" | "immediate", minTurnNumber = state.turn?.turnNumber ?? 0): GameState {
@@ -2320,7 +2332,7 @@ function validFortifyMove(state: GameState, playerId: string, targetTerritoryId:
     return null;
   }
 
-  const eligibleSources = directedOwnedSourcesReachingTarget(ownership, targetTerritoryId, playerId, state.caradhrasPassState);
+  const eligibleSources = directedOwnedSourcesReachingTarget(ownership, targetTerritoryId, playerId, dynamicEdgeState(state));
   const movedSpyOwnerIds = new Set<string>();
   const normalizedMoves: FortifyMovesBySource = {};
   let regularSourceId: string | null = null;
@@ -2343,7 +2355,7 @@ function validFortifyMove(state: GameState, playerId: string, targetTerritoryId:
       return null;
     }
 
-    const immediate = hasDirectedConnection(sourceTerritoryId, targetTerritoryId, state.caradhrasPassState);
+    const immediate = hasDirectedConnection(sourceTerritoryId, targetTerritoryId, dynamicEdgeState(state));
     if (!immediate && (movedTroops.heavy > 0 || movedTroops.elite > 0 || movedTroops.leader > 0)) {
       return null;
     }
@@ -2523,6 +2535,7 @@ function simulateRandomDraft(players: GamePlayer[], config: GameConfig, draft: D
     mode: "local",
     players,
     caradhrasPassState: null,
+    pathsOfTheDeadState: null,
     config,
     draft,
     allocation: null,
@@ -2777,18 +2790,18 @@ function nextLocalAllocationIndex(allocation: AllocationState, players: GamePlay
   return null;
 }
 
-function randomCompleteAllAllocations(allocation: AllocationState, ownership: TerritoryOwnerMap, players: GamePlayer[], caradhrasPassState: number | null): AllocationState {
+function randomCompleteAllAllocations(allocation: AllocationState, ownership: TerritoryOwnerMap, players: GamePlayer[], edgeState: DynamicEdgeState): AllocationState {
   let nextAllocation = allocation;
 
   // Each player receives a random legal army and immediate placements.
   for (const player of players) {
-    nextAllocation = randomCompleteStartingAllocation(nextAllocation, ownership, player, caradhrasPassState);
+    nextAllocation = randomCompleteStartingAllocation(nextAllocation, ownership, player, edgeState);
   }
 
   return nextAllocation;
 }
 
-function randomCompleteStartingAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, player: GamePlayer, caradhrasPassState: number | null): AllocationState {
+function randomCompleteStartingAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, player: GamePlayer, edgeState: DynamicEdgeState): AllocationState {
   const playerAllocation = allocation.playerAllocations[player.id];
   if (!playerAllocation) {
     return allocation;
@@ -2808,7 +2821,7 @@ function randomCompleteStartingAllocation(allocation: AllocationState, ownership
       },
     },
   };
-  const filledAllocation = randomPlaceStartingAllocation(builtAllocation, ownership, player.id, caradhrasPassState);
+  const filledAllocation = randomPlaceStartingAllocation(builtAllocation, ownership, player.id, edgeState);
 
   return {
     ...filledAllocation,
@@ -2823,7 +2836,7 @@ function randomCompleteStartingAllocation(allocation: AllocationState, ownership
   };
 }
 
-function randomPlaceStartingAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, playerId: string, caradhrasPassState: number | null): AllocationState {
+function randomPlaceStartingAllocation(allocation: AllocationState, ownership: TerritoryOwnerMap, playerId: string, edgeState: DynamicEdgeState): AllocationState {
   const playerAllocation = allocation.playerAllocations[playerId];
   if (!playerAllocation) {
     return allocation;
@@ -2845,7 +2858,7 @@ function randomPlaceStartingAllocation(allocation: AllocationState, ownership: T
     troopIndex += 1;
   }
 
-  const borderTargets = ownedIds.filter((territoryId) => bordersOpponentTerritory(ownership, playerId, territoryId, caradhrasPassState));
+  const borderTargets = ownedIds.filter((territoryId) => bordersOpponentTerritory(ownership, playerId, territoryId, edgeState));
   if (troopIndex < troops.length && borderTargets.length === 0) {
     throw new Error(`Random allocation found no border territories for ${playerId}.`);
   }
@@ -2869,8 +2882,8 @@ function randomPlaceStartingAllocation(allocation: AllocationState, ownership: T
   };
 }
 
-function bordersOpponentTerritory(ownership: TerritoryOwnerMap, playerId: string, territoryId: string, caradhrasPassState: number | null) {
-  return outgoingTerritoryIds(territoryId, caradhrasPassState).some((connectedId) => ownership[connectedId] && ownership[connectedId] !== playerId);
+function bordersOpponentTerritory(ownership: TerritoryOwnerMap, playerId: string, territoryId: string, edgeState: DynamicEdgeState) {
+  return outgoingTerritoryIds(territoryId, edgeState).some((connectedId) => ownership[connectedId] && ownership[connectedId] !== playerId);
 }
 
 function randomArmyMarker(): ArmyMarker {
@@ -3141,6 +3154,7 @@ function normalizeGameState(value: unknown): GameState | null {
     mode: state.mode === "sync" ? "sync" : "local",
     players: state.players.filter(isPlayer),
     caradhrasPassState: normalizeCaradhrasPassState(state.caradhrasPassState),
+    pathsOfTheDeadState: normalizePathsOfTheDeadState(state.pathsOfTheDeadState),
     config: normalizeConfig(state.config),
     draft: normalizeDraft(state.draft),
     allocation: normalizeAllocation(state.allocation),
@@ -3188,6 +3202,12 @@ function normalizeHostTransfer(value: unknown): HostTransferState | null {
 function normalizeCaradhrasPassState(value: unknown) {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.max(1, Math.min(10, Math.round(value)))
+    : null;
+}
+
+function normalizePathsOfTheDeadState(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(1, Math.min(5, Math.round(value)))
     : null;
 }
 
