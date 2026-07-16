@@ -5,15 +5,15 @@
       <path fill="#9da4ad" stroke="#202020" stroke-linejoin="round" stroke-width="3" d="M36 64h58c9 0 16-7 16-16s-7-16-16-16h-4c-5-12-16-19-29-19-16 0-28 12-29 27-8 1-15 8-15 16 0 5 8 8 19 8Z"/>
       <path fill="#717984" stroke="#202020" stroke-linejoin="round" stroke-width="3" d="M78 58h45c8 0 14-6 14-14s-6-14-14-14h-3c-4-10-13-16-24-16-13 0-24 10-25 23-7 1-12 7-12 14 0 4 7 7 19 7Z"/>
       <g fill="#ffffff" stroke="#202020" stroke-width="1.5">
-        <circle cx="12" cy="76" r="3"/>
-        <circle cx="38" cy="76" r="3"/>
-        <circle cx="64" cy="76" r="3"/>
-        <circle cx="90" cy="76" r="3"/>
-        <circle cx="116" cy="76" r="3"/>
-        <circle cx="25" cy="90" r="3"/>
-        <circle cx="51" cy="90" r="3"/>
-        <circle cx="77" cy="90" r="3"/>
-        <circle cx="103" cy="90" r="3"/>
+        <circle cx="4" cy="76" r="6"/>
+        <circle cx="34" cy="76" r="6"/>
+        <circle cx="64" cy="76" r="6"/>
+        <circle cx="94" cy="76" r="6"/>
+        <circle cx="124" cy="76" r="6"/>
+        <circle cx="19" cy="90" r="6"/>
+        <circle cx="49" cy="90" r="6"/>
+        <circle cx="79" cy="90" r="6"/>
+        <circle cx="109" cy="90" r="6"/>
       </g>
     </g>
   </g>

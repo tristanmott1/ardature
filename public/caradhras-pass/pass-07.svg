@@ -4,11 +4,11 @@
       <path fill="#aeb3ba" stroke="#202020" stroke-linejoin="round" stroke-width="3" d="M13 66h55c9 0 16-7 16-16s-7-16-16-16h-4c-5-11-15-18-28-18-15 0-27 12-28 26-8 1-14 8-14 16 0 5 8 8 19 8Z"/>
       <path fill="#c1c5ca" stroke="#202020" stroke-linejoin="round" stroke-width="3" d="M57 70h59c9 0 16-7 16-16s-7-16-16-16h-4c-5-12-16-20-30-20-16 0-29 13-30 28-8 1-15 8-15 16 0 5 9 8 20 8Z"/>
       <g fill="#ffffff" stroke="#202020" stroke-width="1.5">
-        <circle cx="20" cy="84" r="3"/>
-        <circle cx="64" cy="84" r="3"/>
-        <circle cx="108" cy="84" r="3"/>
-        <circle cx="42" cy="98" r="3"/>
-        <circle cx="86" cy="98" r="3"/>
+        <circle cx="16" cy="84" r="6"/>
+        <circle cx="64" cy="84" r="6"/>
+        <circle cx="112" cy="84" r="6"/>
+        <circle cx="40" cy="98" r="6"/>
+        <circle cx="88" cy="98" r="6"/>
       </g>
     </g>
   </g>
