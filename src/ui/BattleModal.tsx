@@ -171,7 +171,7 @@ function BattleModalFrame({ ariaLabel, balrogAnimating, balrogRollKey, children,
 function BalrogBackground({ rollKey }: { rollKey: string | null }) {
   return (
     <span className="battle-balrog-background" aria-hidden="true">
-      <img alt="" key={rollKey ?? "balrog"} src={balrogAssetUrl()} />
+      <img alt="" key={rollKey ?? "balrog"} src={balrogAssetUrl(rollKey)} />
     </span>
   );
 }
@@ -244,12 +244,15 @@ function dieValue(die: BattleBlankDie | BattleDie) {
   return "value" in die ? die.value : 0;
 }
 
-function balrogAssetUrl() {
+function balrogAssetUrl(rollKey: string | null) {
   if (typeof window === "undefined") {
     return BALROG_GIF_SRC;
   }
 
-  return new URL(BALROG_GIF_SRC, window.location.href).toString();
+  const url = new URL(BALROG_GIF_SRC, window.location.href);
+  url.searchParams.set("roll", rollKey ?? "balrog");
+
+  return url.toString();
 }
 
 function resultMessage(battle: BattleState, attacker: GamePlayer, defender: GamePlayer) {

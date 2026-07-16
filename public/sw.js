@@ -38,6 +38,15 @@ function isNavigationRequest(request) {
   return request.mode === "navigate" || request.headers.get("accept")?.includes("text/html");
 }
 
+function cachedRequestFor(request) {
+  const url = new URL(request.url);
+  if (url.pathname.endsWith("/balrog/balrog.gif")) {
+    return "./balrog/balrog.gif";
+  }
+
+  return request;
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
@@ -66,7 +75,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => {
+    caches.match(cachedRequestFor(request)).then((cached) => {
       if (cached) {
         return cached;
       }
