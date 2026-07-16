@@ -125,7 +125,7 @@ Paths of the Dead uses this drift table, with out-of-range deltas discarded and 
 | 0 | 20 |
 | +1 | 40 |
 
-The map shows the corresponding `public/caradhras-pass/pass-XX.svg` icon above the Rivendell-Caradhras connection only during regular-turn game stages. Paths of the Dead shows `public/troops/icons/ghost-head.png` near the southwest corner of Edoras during regular turns for states `4-6`; opacity is `33%`, `67%`, and `100%`. States `1-3` render no ghost marker. The icons are visual-only and pointer-inert; the synced/persisted game facts are only the integer states.
+The map shows no Caradhras marker for state `1`. For states `2-10`, it shows the corresponding simplified `public/caradhras-pass/pass-XX.svg` cloud icon above the Rivendell-Caradhras connection only during regular-turn game stages. Paths of the Dead shows `public/troops/icons/ghost-head.png` near the southwest corner of Edoras during regular turns for states `4-6`; opacity is `33%`, `67%`, and `100%`. States `1-3` render no ghost marker. The icons are visual-only and pointer-inert; the synced/persisted game facts are only the integer states.
 
 ## Unit Icon Display
 

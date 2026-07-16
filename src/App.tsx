@@ -200,13 +200,13 @@ const EMPTY_MAP_VISIBLE_INSETS: MapVisibleInsets = {
   right: 0,
   top: 0,
 };
-const CARADHRAS_PASS_ICON_SIZE = 620;
-const CARADHRAS_PASS_ICON_X_OFFSET = -130;
-const CARADHRAS_PASS_ICON_Y_OFFSET = 300;
-const PATHS_OF_THE_DEAD_ICON_SIZE = 620;
+const CARADHRAS_PASS_ICON_SIZE = 502;
+const CARADHRAS_PASS_ICON_X_OFFSET = -70;
+const CARADHRAS_PASS_ICON_Y_OFFSET = 180;
+const PATHS_OF_THE_DEAD_ICON_SIZE = 310;
 const PATHS_OF_THE_DEAD_MIN_VISIBLE_STATE = 4;
-const PATHS_OF_THE_DEAD_ICON_X_OFFSET = -900;
-const PATHS_OF_THE_DEAD_ICON_Y_OFFSET = 250;
+const PATHS_OF_THE_DEAD_ICON_X_OFFSET = -860;
+const PATHS_OF_THE_DEAD_ICON_Y_OFFSET = 210;
 
 type MapInsetRefs = {
   actionSectionRef: RefObject<HTMLDivElement | null>;
@@ -297,6 +297,10 @@ function caradhrasPassWeatherMarkers(passState: number | null) {
   }
 
   const displayState = Math.max(1, Math.min(10, Math.round(passState)));
+  if (displayState === 1) {
+    return [];
+  }
+
   const iconNumber = String(displayState).padStart(2, "0");
 
   return [

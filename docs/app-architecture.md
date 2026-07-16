@@ -66,7 +66,8 @@ The `public/` directory is organized by runtime asset purpose:
 - `troops/source/`: original uncropped character images. These should be preserved because later screens may need full-size character art.
 - `troops/source/crop-outlines/`: red-outline crop references. These are the persisted source of truth for manual circular crop placement.
 - `troops/icons/`: one-time, manually tuned circular PNG crops for troop UI.
-- `caradhras-pass/`: committed SVG weather icons for Caradhras pass states `1-10`.
+- `caradhras-pass/`: simplified SVG weather icons for Caradhras pass states `2-10`; state `1` intentionally renders no icon.
+- `caradhras-pass/deprecated/`: deprecated circular SVG weather icons for Caradhras pass states `1-10`.
 
 Troop portraits are raster art and should remain PNGs. Do not convert them to SVG; SVG would either embed the same raster data or create poor traced art. CSS should provide borders, sizing, and count bubbles around these PNGs at runtime.
 
@@ -342,7 +343,7 @@ The generated directed graph is the base graph. The active graph additionally ap
 
 ### MapWeatherLayer
 
-Dynamic, pointer-inert map-local weather markers live above static ink and below troop markers. Caradhras renders `public/caradhras-pass/pass-01.svg` through `pass-10.svg` from the authoritative `GameState.caradhrasPassState` only during regular-turn game stages. Paths of the Dead renders `public/troops/icons/ghost-head.png` near the southwest corner of Edoras only during regular-turn game stages and only for states `4-6`; opacity is `33%`, `67%`, and `100%` for states `4`, `5`, and `6`.
+Dynamic, pointer-inert map-local weather markers live above static ink and below troop markers. Caradhras renders no marker for state `1`; states `2-10` render simplified `public/caradhras-pass/pass-02.svg` through `pass-10.svg` from the authoritative `GameState.caradhrasPassState` only during regular-turn game stages. Paths of the Dead renders `public/troops/icons/ghost-head.png` near the southwest corner of Edoras only during regular-turn game stages and only for states `4-6`; opacity is `33%`, `67%`, and `100%` for states `4`, `5`, and `6`.
 
 The weather icon is presentation only. It does not own pass rules, edge filtering, or state drift. Those belong in the game graph/state layer so every consumer receives the same active-edge answer.
 

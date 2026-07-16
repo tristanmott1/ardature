@@ -1,6 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
-  <title id="title">Caradhras pass state 3, partly cloudy</title>
-  <circle cx="64" cy="64" r="58" fill="#afd4e6"/>
-  <circle cx="64" cy="64" r="24" fill="#ffd45a" stroke="#111111" stroke-width="1"/>
-  <path d="M47 75c0-8 7-15 15-15 6 0 11 3 14 8 3-2 6-3 10-3 9 0 16 7 16 15s-7 15-16 15H49c-8 0-14-6-14-13 0-6 5-12 12-13z" fill="#ffffff" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Two small white clouds">
+  <g transform="translate(16 16) scale(.75)">
+    <g transform="translate(0 6)">
+      <path fill="#ffffff" stroke="#202020" stroke-linejoin="round" stroke-width="3" d="M17 80h43c7 0 12-5 12-12s-5-12-12-12h-3c-4-9-12-14-21-14-12 0-21 9-22 20-6 1-11 6-11 12 0 4 6 6 14 6Z"/>
+      <path fill="#ffffff" stroke="#202020" stroke-linejoin="round" stroke-width="3" d="M68 74h41c7 0 12-5 12-12s-5-12-12-12h-3c-4-8-11-13-20-13-11 0-20 9-21 19-6 1-10 5-10 11 0 4 6 7 13 7Z"/>
+    </g>
+  </g>
 </svg>

@@ -1,29 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
-  <title id="title">Caradhras pass state 9, whiteout</title>
-  <defs>
-    <clipPath id="pass-circle">
-      <circle cx="64" cy="64" r="58"/>
-    </clipPath>
-  </defs>
-  <g clip-path="url(#pass-circle)">
-    <circle cx="64" cy="64" r="58" fill="#848e93"/>
-    <g transform="translate(0 -8)">
-      <path d="M20 52c0-8 6-14 14-14 5 0 10 3 12 7 3-3 7-5 12-5 8 0 15 7 15 15s-7 15-15 15H22c-7 0-12-5-12-11 0-5 4-10 10-11z" fill="#969696" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
-      <path d="M62 47c0-8 6-14 14-14 5 0 10 3 12 7 3-3 7-5 11-5 8 0 14 7 14 15s-6 15-14 15H64c-7 0-12-5-12-11 0-5 4-10 10-11z" fill="#969696" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
-      <path d="M23 62c0-8 6-14 14-14 5 0 10 3 12 7 3-3 7-5 12-5 8 0 15 7 15 15s-7 15-15 15H25c-7 0-12-5-12-11 0-5 4-10 10-11z" fill="#8e8e8e" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
-      <path d="M39 52c0-10 8-18 18-18 7 0 13 4 16 9 3-3 8-5 13-5 9 0 16 7 16 16s-7 16-16 16H41c-8 0-14-6-14-13 0-6 5-11 12-12z" fill="#7c7c7c" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
-      <path d="M62 65c0-8 6-14 14-14 5 0 10 3 12 7 3-3 7-5 11-5 8 0 14 7 14 15s-6 15-14 15H64c-7 0-12-5-12-11 0-5 4-10 10-11z" fill="#8e8e8e" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
-    </g>
-    <g fill="#ffffff">
-      <circle cx="30" cy="84" r="3"/>
-      <circle cx="42" cy="93" r="3"/>
-      <circle cx="54" cy="84" r="3"/>
-      <circle cx="66" cy="93" r="3"/>
-      <circle cx="78" cy="84" r="3"/>
-      <circle cx="90" cy="93" r="3"/>
-      <circle cx="102" cy="84" r="3"/>
-      <circle cx="54" cy="103" r="3"/>
-      <circle cx="78" cy="103" r="3"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Three darker gray clouds with heavy snow">
+  <g transform="translate(16 16) scale(.75)">
+    <g transform="translate(0 22)">
+      <path fill="#858c96" stroke="#202020" stroke-linejoin="round" stroke-width="3" d="M1 58h50c8 0 14-6 14-14s-6-14-14-14h-3c-5-10-14-16-25-16-14 0-25 11-26 24-7 1-13 7-13 14 0 4 7 6 17 6Z"/>
+      <path fill="#9da4ad" stroke="#202020" stroke-linejoin="round" stroke-width="3" d="M36 64h58c9 0 16-7 16-16s-7-16-16-16h-4c-5-12-16-19-29-19-16 0-28 12-29 27-8 1-15 8-15 16 0 5 8 8 19 8Z"/>
+      <path fill="#717984" stroke="#202020" stroke-linejoin="round" stroke-width="3" d="M78 58h45c8 0 14-6 14-14s-6-14-14-14h-3c-4-10-13-16-24-16-13 0-24 10-25 23-7 1-12 7-12 14 0 4 7 7 19 7Z"/>
+      <g fill="#ffffff" stroke="#202020" stroke-width="1.5">
+        <circle cx="12" cy="76" r="3"/>
+        <circle cx="38" cy="76" r="3"/>
+        <circle cx="64" cy="76" r="3"/>
+        <circle cx="90" cy="76" r="3"/>
+        <circle cx="116" cy="76" r="3"/>
+        <circle cx="25" cy="90" r="3"/>
+        <circle cx="51" cy="90" r="3"/>
+        <circle cx="77" cy="90" r="3"/>
+        <circle cx="103" cy="90" r="3"/>
+      </g>
     </g>
   </g>
 </svg>

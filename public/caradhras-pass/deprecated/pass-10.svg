@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Caradhras pass state 10, severe storm</title>
+  <defs>
+    <clipPath id="pass-circle">
+      <circle cx="64" cy="64" r="58"/>
+    </clipPath>
+    <circle id="fast-snow" cx="0" cy="0" r="3"/>
+  </defs>
+  <g clip-path="url(#pass-circle)">
+    <circle cx="64" cy="64" r="58" fill="#717b80"/>
+    <g transform="translate(0 -8)">
+      <path d="M-5 50c0-10 8-18 18-18 7 0 12 3 16 8 3-4 9-7 15-7 10 0 18 8 18 18s-8 18-18 18H-3c-8 0-15-6-15-14 0-6 5-12 13-13z" fill="#7f7f7f" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
+      <path d="M23 45c0-11 9-20 20-20 8 0 15 4 19 10 4-5 11-8 19-8 12 0 22 10 22 22s-10 22-22 22H25c-10 0-17-7-17-16 0-7 6-14 15-15z" fill="#686868" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
+      <path d="M64 42c0-11 9-20 20-20 8 0 15 4 19 10 4-5 11-8 19-8 12 0 22 10 22 22s-10 22-22 22H66c-10 0-17-7-17-16 0-7 6-14 15-15z" fill="#7f7f7f" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
+      <path d="M16 64c0-9 7-16 16-16 6 0 11 3 14 8 4-4 9-6 15-6 9 0 17 8 17 17s-8 17-17 17H18c-8 0-14-6-14-13 0-6 5-11 12-12z" fill="#737373" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
+      <path d="M39 55c0-10 8-18 18-18 7 0 13 4 16 9 3-3 8-5 13-5 9 0 16 7 16 16s-7 16-16 16H41c-8 0-14-6-14-13 0-6 5-11 12-12z" fill="#5e5e5e" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
+      <path d="M62 68c0-8 6-14 14-14 5 0 10 3 12 7 3-3 7-5 11-5 8 0 14 7 14 15s-6 15-14 15H64c-7 0-12-5-12-11 0-5 4-10 10-11z" fill="#737373" stroke="#111111" stroke-width="1" stroke-linejoin="round"/>
+    </g>
+    <g fill="#ffffff">
+      <use href="#fast-snow" transform="translate(30 87)"/>
+      <use href="#fast-snow" transform="translate(42 96)"/>
+      <use href="#fast-snow" transform="translate(54 87)"/>
+      <use href="#fast-snow" transform="translate(66 96)"/>
+      <use href="#fast-snow" transform="translate(78 87)"/>
+      <use href="#fast-snow" transform="translate(90 96)"/>
+      <use href="#fast-snow" transform="translate(102 87)"/>
+      <use href="#fast-snow" transform="translate(54 106)"/>
+      <use href="#fast-snow" transform="translate(78 106)"/>
+    </g>
+  </g>
+</svg>

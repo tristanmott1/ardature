@@ -152,8 +152,8 @@ async function runSourceChecks() {
   const troopIconFiles = await readdir(new URL("../public/troops/icons/", import.meta.url));
   const caradhrasPassIconFiles = await readdir(new URL("../public/caradhras-pass/", import.meta.url));
   const caradhrasPassIconSources = await Promise.all(
-    Array.from({ length: 10 }, (_, index) =>
-      readFile(new URL(`../public/caradhras-pass/pass-${String(index + 1).padStart(2, "0")}.svg`, import.meta.url), "utf8")),
+    Array.from({ length: 9 }, (_, index) =>
+      readFile(new URL(`../public/caradhras-pass/pass-${String(index + 2).padStart(2, "0")}.svg`, import.meta.url), "utf8")),
   );
   const verifySource = await readFile(new URL("../scripts/verify-ui.mjs", import.meta.url), "utf8");
   const formControlsSource = await readFile(new URL("../src/ui/FormControls.tsx", import.meta.url), "utf8");
@@ -245,11 +245,12 @@ async function runSourceChecks() {
     "User-facing names preserve required special characters.",
   );
   assert(serviceWorkerSource.includes('const CACHE_NAME = "ardature-v7"'), "Service worker cache version is bumped for refreshed shell assets.");
-  assert(caradhrasPassIconFiles.filter((fileName) => /^pass-\d\d\.svg$/.test(fileName)).length === 10, "Caradhras pass has ten committed SVG icons.");
+  assert(caradhrasPassIconFiles.filter((fileName) => /^pass-\d\d\.svg$/.test(fileName)).length === 9, "Caradhras pass has nine simplified top-level SVG icons.");
   assert(caradhrasPassIconSources.every((source) => !source.includes('stroke="#ffffff"') && !source.includes('fill="none"')), "Caradhras pass icons do not render an outer circle outline.");
-  assert(caradhrasPassIconSources.slice(0, 5).every((source) => /<circle[^>]+fill="#ffd45a"[^>]+stroke="#111111"[^>]+stroke-width="1"/.test(source)), "Caradhras pass suns use a thin black outline.");
-  assert(caradhrasPassIconSources.slice(1).every((source) => !source.includes("<path") || source.includes('stroke="#111111" stroke-width="1"')), "Caradhras pass cloud paths use a thin black outline.");
-  assert(Array.from({ length: 10 }, (_, index) => `./caradhras-pass/pass-${String(index + 1).padStart(2, "0")}.svg`).every((asset) => serviceWorkerSource.includes(asset)), "Service worker precaches every Caradhras pass icon.");
+  assert(caradhrasPassIconSources.every((source) => !source.includes("#ffd45a")), "Caradhras pass simplified icons do not render suns.");
+  assert(caradhrasPassIconSources.every((source) => !source.includes("<path") || source.includes('stroke="#202020" stroke-linejoin="round" stroke-width="3"')), "Caradhras pass cloud paths use a skinny dark outline.");
+  assert(!caradhrasPassIconFiles.includes("pass-01.svg") && Array.from({ length: 9 }, (_, index) => `pass-${String(index + 2).padStart(2, "0")}.svg`).every((asset) => caradhrasPassIconFiles.includes(asset)), "Caradhras pass state 1 has no icon and states 2-10 have simplified top-level icons.");
+  assert(Array.from({ length: 9 }, (_, index) => `./caradhras-pass/pass-${String(index + 2).padStart(2, "0")}.svg`).every((asset) => serviceWorkerSource.includes(asset)), "Service worker precaches every simplified Caradhras pass icon.");
   assert(serviceWorkerSource.includes("./troops/icons/ghost.png") && serviceWorkerSource.includes("./troops/icons/ghost-head.png") && troopIconFiles.includes("ghost.png") && troopIconFiles.includes("ghost-head.png"), "Service worker precaches the Paths of the Dead marker and battle ghost icons.");
   assert(territoryLookupSource.includes("territoryForId") && !appSource.includes("generatedMapData.territories.find") && !gameSectionsSource.includes("generatedMapData.territories.find") && !gameViewSource.includes("new Map<string, GeneratedTerritoryData>"), "Territory lookup uses one shared generated-data helper.");
   assert(mapWidth === sourceWidth * 10 + 3000 && mapHeight === sourceHeight * 10 + 3000, "Generated app data includes the 1500-unit display frame.");

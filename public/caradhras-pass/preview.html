@@ -18,6 +18,11 @@
         margin: 0 0 20px;
       }
 
+      h2 {
+        font-size: 16px;
+        margin: 24px 0 12px;
+      }
+
       .grid {
         display: grid;
         gap: 16px;
@@ -42,6 +47,17 @@
         width: 96px;
       }
 
+      .empty-icon {
+        align-items: center;
+        color: #6b6256;
+        display: flex;
+        font-size: 13px;
+        font-weight: 700;
+        height: 96px;
+        justify-content: center;
+        width: 96px;
+      }
+
       span {
         font-size: 13px;
         font-weight: 700;
@@ -50,17 +66,31 @@
   </head>
   <body>
     <h1>Caradhras Pass Icon Review</h1>
+    <h2>Simplified</h2>
     <main class="grid">
-      <div class="icon-card"><img src="pass-01.svg" alt="Clear pass icon"><span>State 1</span></div>
-      <div class="icon-card"><img src="pass-02.svg" alt="Mostly clear pass icon"><span>State 2</span></div>
-      <div class="icon-card"><img src="pass-03.svg" alt="Partly cloudy pass icon"><span>State 3</span></div>
-      <div class="icon-card"><img src="pass-04.svg" alt="Windy pass icon"><span>State 4</span></div>
-      <div class="icon-card"><img src="pass-05.svg" alt="Snowy passable icon"><span>State 5</span></div>
-      <div class="icon-card"><img src="pass-06.svg" alt="Blocked snowy pass icon"><span>State 6</span></div>
-      <div class="icon-card"><img src="pass-07.svg" alt="Heavy snow pass icon"><span>State 7</span></div>
-      <div class="icon-card"><img src="pass-08.svg" alt="Blizzard pass icon"><span>State 8</span></div>
-      <div class="icon-card"><img src="pass-09.svg" alt="Whiteout pass icon"><span>State 9</span></div>
-      <div class="icon-card"><img src="pass-10.svg" alt="Severe storm pass icon"><span>State 10</span></div>
+      <div class="icon-card"><div class="empty-icon">No icon</div><span>State 1</span></div>
+      <div class="icon-card"><img src="pass-02.svg" alt="One small white cloud"><span>State 2</span></div>
+      <div class="icon-card"><img src="pass-03.svg" alt="Two small white clouds"><span>State 3</span></div>
+      <div class="icon-card"><img src="pass-04.svg" alt="Two white clouds"><span>State 4</span></div>
+      <div class="icon-card"><img src="pass-05.svg" alt="Two light gray clouds"><span>State 5</span></div>
+      <div class="icon-card"><img src="pass-06.svg" alt="Two light gray clouds with light snow"><span>State 6</span></div>
+      <div class="icon-card"><img src="pass-07.svg" alt="Two medium gray clouds with light snow"><span>State 7</span></div>
+      <div class="icon-card"><img src="pass-08.svg" alt="Three medium gray clouds with light snow"><span>State 8</span></div>
+      <div class="icon-card"><img src="pass-09.svg" alt="Three darker gray clouds with heavy snow"><span>State 9</span></div>
+      <div class="icon-card"><img src="pass-10.svg" alt="Three dark gray clouds with heavy snow"><span>State 10</span></div>
+    </main>
+    <h2>Deprecated</h2>
+    <main class="grid">
+      <div class="icon-card"><img src="deprecated/pass-01.svg" alt="Deprecated clear pass icon"><span>State 1</span></div>
+      <div class="icon-card"><img src="deprecated/pass-02.svg" alt="Deprecated mostly clear pass icon"><span>State 2</span></div>
+      <div class="icon-card"><img src="deprecated/pass-03.svg" alt="Deprecated partly cloudy pass icon"><span>State 3</span></div>
+      <div class="icon-card"><img src="deprecated/pass-04.svg" alt="Deprecated windy pass icon"><span>State 4</span></div>
+      <div class="icon-card"><img src="deprecated/pass-05.svg" alt="Deprecated snowy passable icon"><span>State 5</span></div>
+      <div class="icon-card"><img src="deprecated/pass-06.svg" alt="Deprecated blocked snowy pass icon"><span>State 6</span></div>
+      <div class="icon-card"><img src="deprecated/pass-07.svg" alt="Deprecated heavy snow pass icon"><span>State 7</span></div>
+      <div class="icon-card"><img src="deprecated/pass-08.svg" alt="Deprecated blizzard pass icon"><span>State 8</span></div>
+      <div class="icon-card"><img src="deprecated/pass-09.svg" alt="Deprecated whiteout pass icon"><span>State 9</span></div>
+      <div class="icon-card"><img src="deprecated/pass-10.svg" alt="Deprecated severe storm pass icon"><span>State 10</span></div>
     </main>
   </body>
 </html>

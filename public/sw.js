@@ -7,7 +7,6 @@ const CORE_ASSETS = [
   "./app-icons/icon-192.png",
   "./app-icons/icon-512.png",
   "./balrog/balrog.gif",
-  "./caradhras-pass/pass-01.svg",
   "./caradhras-pass/pass-02.svg",
   "./caradhras-pass/pass-03.svg",
   "./caradhras-pass/pass-04.svg",
