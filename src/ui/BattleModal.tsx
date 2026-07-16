@@ -58,7 +58,8 @@ export function BattleModal({
   const defenderScore = battleUnitScore(battle.defendingUnits);
   const scoresReady = attackerScore !== null && defenderScore !== null;
   const balrogRollKey = battle.latestRoll?.type === "balrog" ? battleRollKey(battle.latestRoll) : null;
-  const [balrogAnimating, setBalrogAnimating] = useState(false);
+  const [completedBalrogRollKey, setCompletedBalrogRollKey] = useState<string | null>(null);
+  const balrogAnimating = balrogRollKey !== null && completedBalrogRollKey !== balrogRollKey;
   const message = battle.result
     ? resultMessage(battle, attacker, defender)
     : scoresReady
@@ -74,16 +75,14 @@ export function BattleModal({
   const challengeSpies = challengePlayer.id === battle.defenderPlayerId ? defenderSpies : [];
 
   useEffect(() => {
-    if (!balrogRollKey) {
-      setBalrogAnimating(false);
+    if (!balrogRollKey || completedBalrogRollKey === balrogRollKey) {
       return;
     }
 
-    setBalrogAnimating(true);
-    const timerId = window.setTimeout(() => setBalrogAnimating(false), BALROG_ANIMATION_MS);
+    const timerId = window.setTimeout(() => setCompletedBalrogRollKey(balrogRollKey), BALROG_ANIMATION_MS);
 
     return () => window.clearTimeout(timerId);
-  }, [balrogRollKey]);
+  }, [balrogRollKey, completedBalrogRollKey]);
 
   if (canChallenge) {
     return (
