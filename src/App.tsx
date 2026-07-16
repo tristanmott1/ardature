@@ -14,6 +14,7 @@ import {
   applySyncTurnCommand,
   beginAllocationTurn,
   beginDraftTimer,
+  battleUnitsReady,
   beginTurnAfterHandoff,
   canAddTroop,
   canAddReinforcementTroop,
@@ -738,8 +739,8 @@ function App() {
       battleViewerId &&
       game.config.attackStyle === "challenge" &&
       !activeBattle.result &&
-      ((battleViewerId === activeBattle.attackerPlayerId && activeBattle.attackerScore === null) ||
-        (game.mode === "sync" && battleViewerId === activeBattle.defenderPlayerId && activeBattle.defenderScore === null)),
+      ((battleViewerId === activeBattle.attackerPlayerId && !battleUnitsReady(activeBattle.attackingUnits)) ||
+        (game.mode === "sync" && battleViewerId === activeBattle.defenderPlayerId && !battleUnitsReady(activeBattle.defendingUnits))),
   );
   const battleDefenderSpies = activeBattle ? capturedSpiesOnTerritory(game, activeBattle.targetTerritoryId) : [];
   const showBattleOverlay = Boolean(activeBattle && isBattleParticipant);

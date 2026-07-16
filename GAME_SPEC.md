@@ -559,7 +559,7 @@ G = min(committed attacking troop count, pathsOfTheDeadState - 3)
 
 Sample one integer uniformly from every value in `[-G, G]`.
 
-- A negative value kills that many committed real attacking troops before the battle score/challenge. Casualties use normal battle casualty sampling: non-leaders are sampled uniformly first and the leader can die only when it is the last real troop.
+- A negative value kills that many committed real attacking troops before battle unit scoring/challenge. Pre-battle casualties are sampled from the committed real attackers, excluding leaders while any non-leader committed attacker remains.
 - If every committed real attacker dies here, the challenge is skipped and the defender immediately wins. The defender victory result modal is shown.
 - A positive value adds that many battle-only ghost soldiers to the attacking force.
 - Ghost soldiers use `public/troops/icons/ghost.png`.
@@ -622,9 +622,9 @@ The battle state must include:
 
 The active turn also stores source-target pairs already attacked this turn.
 
-Committed real troops define the attacker's score force. Uncommitted troops in the source territory have no bearing on the attack score, dice, or casualties. Paths of the Dead ghost soldiers can join the attacking battle force only for an active `Edoras -> Lamedon` attack. They count for dice and casualties but not score. The defender's battle force is all troops in the target territory at attack lock.
+Committed real troops define the attacker's starting score distribution. Uncommitted troops in the source territory have no bearing on the attack score, dice, or casualties. Paths of the Dead ghost soldiers can join the attacking battle force only for an active `Edoras -> Lamedon` attack. They count for dice and casualties but not the starting score distribution. The defender's battle force is all troops in the target territory at attack lock.
 
-Scores are fixed at battle lock/challenge submission and do not change as troops die.
+At battle lock/challenge submission, each real troop becomes a battle unit with one fixed personal score. Ghost soldiers also become battle units, using the attacker's starting sample directly as their personal score.
 
 Committed attacking troops still visually count on the source territory while the battle is active. Casualties reduce the source territory total live. If the attacker retreats, surviving committed troops remain on the source. If the attacker captures the target, surviving committed troops move from source to target at battle end.
 
@@ -632,7 +632,7 @@ Committed attacking troops still visually count on the source territory while th
 
 The battle modal is centered and is a task modal.
 
-The defender is displayed at the top: defender name centered above the defender troop row, defender score centered below it. The attacker is displayed at the bottom: attacker score centered above the attacker troop row, attacker name centered below it. Scores render with one decimal and `/ 10`, for example `7.3 / 10`.
+The defender is displayed at the top: defender name centered above the defender troop row, defender score centered below it. The attacker is displayed at the bottom: attacker score centered above the attacker troop row, attacker name centered below it. Scores render with one decimal and `/ 10`, for example `7.3 / 10`. The displayed score is the average personal score of that side's remaining battle units, including ghosts while present. If any unit score is still missing, the score renders as `-- / 10`.
 
 Dice are centered between the two scores. Defender dice are white with black pips. Attacker dice are red with white pips. Dice are large raw dice controls with no surrounding card or rectangle. Before the first roll, blank dice show the correct dice count with no pips.
 
@@ -640,7 +640,7 @@ While the battle is active, the modal layout is a fixed vertical stack: reserved
 
 Battle unit rows follow the shared known-content icon contract. They show troop types with counts greater than zero plus captured spies present with that battle force. The attacker row also shows battle-only ghost soldiers when Paths of the Dead added them. Visible icons keep the normal compact icon size and recenter. If a side has no troops after the battle ends, that row renders no troop icons but still reserves the same vertical row space.
 
-Both sides' current battle troop breakdowns are visible in the battle modal. Everyone who sees the modal sees the same battle contents, captured spies present with the battle forces, and which troop types die. Captured spies are not casualties and do not affect dice. The modal shows the latest roll only, not a full roll history. The latest roll always shows exactly the dice that were rolled, sorted highest to lowest from left to right for both attacker and defender. Casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
+Both sides' current battle troop breakdowns are visible in the battle modal. Everyone who sees the modal sees the same battle contents, captured spies present with the battle forces, and which troop types die. Captured spies are not battle units, casualties, or dice candidates. The modal shows the latest roll only, not a full roll history. The latest roll always shows exactly the dice that were rolled, sorted highest to lowest from left to right for both attacker and defender. Each rolled die shows the troop or ghost unit that rolled it. Casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
 
 In sync mode, only the attacker and defender see the battle modal. Only the attacker can roll, retreat, or dismiss the final result. Other connected players do not see the battle modal, but they do see committed map facts such as live territory troop totals and ownership changes. Non-participants stay in normal explore mode, but the battle source and target territories flash between selected and unselected visual states while the battle is active. The source/attacking territory flashes at a higher frequency, while the target/defending territory uses a slower pulse. Non-participants may still select any territory, including the source or target. If the selected territory is one of the flashing battle territories, the battle flash overrides the normal selected-fill color.
 
@@ -652,7 +652,7 @@ When battle ends by conquest or attacker elimination, the normal battle layout i
 
 ### Combat Score
 
-Each side receives one score from `0` to `10`. The score determines that side's die distribution. It does not directly change troop counts or the Risk-like comparison rules.
+Each real battle unit receives one fixed personal score from `0` to `10`. The score determines that unit's die distribution when that unit is selected to roll. It does not directly change troop counts or the Risk-like comparison rules.
 
 Troop score values:
 
@@ -682,13 +682,13 @@ mu = (2.5H + 5C + 7.5E + 9L) / (H + C + E + L)
 
 This requires at least one battle troop.
 
-In regular mode:
+In regular mode, the starting sample is deterministic:
 
 ```text
 S = mu
 ```
 
-In challenge mode:
+In challenge mode, the battle force defines a beta distribution over starting samples:
 
 ```text
 p = mu / 10
@@ -699,11 +699,25 @@ Y ~ Beta(alpha, beta)
 S = 10Y
 ```
 
-The beta distribution has mean `mu`. A leader-only force has `p = 0.9`, `alpha = 18`, and `beta = 2`.
+The beta distribution has mean `mu`. A leader-only force has `p = 0.9`, `alpha = 18`, and `beta = 2`. The implementation uses `kappa = 20`.
+
+After the starting sample `S` is known, convert it into a percentile of the overall battle-force beta distribution:
+
+```text
+percentile = CDF_overall(S / 10)
+```
+
+Then map that percentile through each troop type's own beta distribution, using the troop score values above as that distribution's mean:
+
+```text
+unitScore(troopType) = 10 * inverseCDF_troopType(percentile)
+```
+
+Only the personal unit scores are stored after conversion. The original sample and percentile do not persist. Ghost soldiers use `S` directly as their personal score.
 
 ### Score To Dice
 
-First center the score:
+First center the personal unit score:
 
 ```text
 q(S) = (S - 5) / 5
@@ -747,9 +761,11 @@ Score `5` produces fair dice. Scores above `5` make high faces more likely. Scor
 For each roll:
 
 - Attacker rolls up to 3 dice.
-- Attacker dice are capped by the number of surviving committed attacking troops.
+- Attacker dice are capped by the number of surviving attacking battle units.
 - Defender rolls up to 2 dice.
-- Defender dice are capped by the number of surviving defending troops in the target territory.
+- Defender dice are capped by the number of surviving defending battle units.
+- Dice units are selected uniformly without replacement, except attacking ghost soldiers are selected before real attacking troops.
+- Each die rolls from that die unit's personal score and role-specific tilt.
 - Sort attacker dice from highest to lowest.
 - Sort defender dice from highest to lowest.
 - Compare the top dice in order.
@@ -763,16 +779,19 @@ The number of troops that die in one roll is always the number of encounters.
 
 ### Casualty Selection
 
-When a troop dies, randomly sample one troop from that side's remaining battle force.
+When a troop dies, choose casualties from the dice units from that same roll, not from the whole battle force.
 
 Rules:
 
-- Heavy, cavalry, and elite troops are sampled uniformly by individual troop.
-- Leaders are excluded from casualty sampling while any non-leader troop remains.
+- Ghost dice units die before real dice units.
+- Heavy, cavalry, and elite dice units are sampled uniformly by individual unit.
+- Leaders may roll dice but remain protected while possible.
+- If enough non-leader dice units exist, casualties are sampled only from those dice units.
+- If there are not enough non-leader dice units, a non-dice non-leader unit from the same side dies on behalf of the leader.
 - A leader can die only if it is the last remaining troop on that side.
 - Captured spies are never casualty candidates.
 
-For example, if a force has `2 heavy` and `1 elite`, a casualty has a `2/3` chance to be heavy and a `1/3` chance to be elite. If a force has `1 heavy` and `1 leader`, the heavy must die before the leader can die.
+For example, if the selected dice units are `2 heavy` and `1 elite`, a casualty has a `2/3` chance to be heavy and a `1/3` chance to be elite. If selected dice units are `1 heavy` and `1 leader`, the heavy must die before the leader can die. If the selected dice units include only a leader but a non-dice heavy remains in the battle force, the heavy dies on behalf of the leader.
 
 When an attacking troop dies, subtract it from surviving committed attackers and from the source territory. When a defending troop dies, subtract it from surviving defenders and from the target territory.
 

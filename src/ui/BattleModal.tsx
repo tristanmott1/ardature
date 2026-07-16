@@ -1,7 +1,8 @@
 import { Check, Flag } from "lucide-react";
-import type { BattleState, GamePlayer, TroopCounts, TroopType } from "../game/gameTypes";
+import { battleGhostCount, battleTroopCounts, battleUnitScore } from "../game/gameState";
+import type { BattleDie, BattleState, BattleUnitType, GamePlayer, TroopCounts, TroopType } from "../game/gameTypes";
 import type { CapturedSpyView } from "../game/gameView";
-import { ghostSoldierIconSrc, TroopIconImage } from "../game/troopIcons";
+import { ghostSoldierIconSrc, troopIconSrc, TroopIconImage } from "../game/troopIcons";
 import type { CapturedSpyToken } from "./TroopControls";
 import { TroopCountRow } from "./TroopControls";
 
@@ -47,7 +48,12 @@ export function BattleModal({
   onRoll: () => void;
   players: GamePlayer[];
 }) {
-  const scoresReady = battle.attackerScore !== null && battle.defenderScore !== null;
+  const attackingTroops = battleTroopCounts(battle.attackingUnits);
+  const defendingTroops = battleTroopCounts(battle.defendingUnits);
+  const attackingGhostTroops = battleGhostCount(battle.attackingUnits);
+  const attackerScore = battleUnitScore(battle.attackingUnits);
+  const defenderScore = battleUnitScore(battle.defendingUnits);
+  const scoresReady = attackerScore !== null && defenderScore !== null;
   const message = battle.result
     ? resultMessage(battle, attacker, defender)
     : scoresReady
@@ -55,11 +61,11 @@ export function BattleModal({
       : "Waiting...";
   const canRoll = canControl && scoresReady && !battle.result;
   const canRetreat = canControl && battle.hasRolled && !battle.result;
-  const defenderDice = displayedDice(battle.latestRoll?.defenderDice, Math.min(2, troopTotal(battle.defendingTroops)));
-  const attackerDice = displayedDice(battle.latestRoll?.attackerDice, Math.min(3, attackingBattleTotal(battle)));
+  const defenderDice = displayedDice(battle.latestRoll?.defenderDice, Math.min(2, battle.defendingUnits.length));
+  const attackerDice = displayedDice(battle.latestRoll?.attackerDice, Math.min(3, battle.attackingUnits.length));
   const challengePlayer = challengePlayerId === battle.defenderPlayerId ? defender : attacker;
-  const challengeTroops = challengePlayer.id === battle.defenderPlayerId ? battle.defendingTroops : battle.attackingTroops;
-  const challengeGhostTroops = challengePlayer.id === battle.attackerPlayerId ? battle.attackingGhostTroops : 0;
+  const challengeTroops = challengePlayer.id === battle.defenderPlayerId ? defendingTroops : attackingTroops;
+  const challengeGhostTroops = challengePlayer.id === battle.attackerPlayerId ? attackingGhostTroops : 0;
   const challengeSpies = challengePlayer.id === battle.defenderPlayerId ? defenderSpies : [];
 
   if (canChallenge) {
@@ -78,7 +84,7 @@ export function BattleModal({
   if (battle.result?.type === "attackerWon" || battle.result?.type === "defenderWon") {
     const winner = battle.result.type === "attackerWon" ? attacker : defender;
     const loser = battle.result.type === "attackerWon" ? defender : attacker;
-    const winningTroops = battle.result.type === "attackerWon" ? battle.attackingTroops : battle.defendingTroops;
+    const winningTroops = battle.result.type === "attackerWon" ? attackingTroops : defendingTroops;
     const resultSpies = battle.result.type === "attackerWon" && battle.releasedAttackerSpy
       ? [...defenderSpies, { captured: false, ownerPlayerId: attacker.id }]
       : defenderSpies;
@@ -88,17 +94,17 @@ export function BattleModal({
         <section className="modal-panel battle-modal battle-result-modal" role="dialog" aria-label="Battle result">
           <p className="battle-result-message">{winner.name} defeated {loser.name}</p>
           {battle.result.type === "attackerWon" ? (
-            <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
+            <BattleDiceRows attacker={attacker} attackerDice={attackerDice} defender={defender} defenderDice={defenderDice} />
           ) : null}
           <BattleTroops
-            ghostTroops={battle.result.type === "attackerWon" ? battle.attackingGhostTroops : 0}
+            ghostTroops={battle.result.type === "attackerWon" ? attackingGhostTroops : 0}
             player={winner}
             players={players}
             spies={resultSpies}
             troops={winningTroops}
           />
           {battle.result.type === "defenderWon" ? (
-            <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
+            <BattleDiceRows attacker={attacker} attackerDice={attackerDice} defender={defender} defenderDice={defenderDice} />
           ) : null}
           <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl} aria-label="Dismiss battle">
             <Check size={20} />
@@ -113,15 +119,15 @@ export function BattleModal({
       <section className="modal-panel battle-modal" role="dialog" aria-label="Battle">
         {message ? <p className="battle-message">{message}</p> : <p className="battle-message" aria-hidden="true">&nbsp;</p>}
         <strong className="battle-player-name">{defender.name} at {defenderTerritoryName}</strong>
-        <BattleTroops player={defender} players={players} spies={defenderSpies} troops={battle.defendingTroops} />
-        <BattleScore score={battle.defenderScore} />
+        <BattleTroops player={defender} players={players} spies={defenderSpies} troops={defendingTroops} />
+        <BattleScore score={defenderScore} />
         <div className="battle-dice-area">
           <button className="battle-dice-button" type="button" onClick={onRoll} disabled={!canRoll} aria-label="Roll dice">
-            <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
+            <BattleDiceRows attacker={attacker} attackerDice={attackerDice} defender={defender} defenderDice={defenderDice} />
           </button>
         </div>
-        <BattleScore score={battle.attackerScore} />
-        <BattleTroops ghostTroops={battle.attackingGhostTroops} player={attacker} players={players} troops={battle.attackingTroops} />
+        <BattleScore score={attackerScore} />
+        <BattleTroops ghostTroops={attackingGhostTroops} player={attacker} players={players} troops={attackingTroops} />
         <strong className="battle-player-name">{attacker.name} at {attackerTerritoryName}</strong>
         {battle.result ? (
           <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl} aria-label="Dismiss battle">
@@ -162,34 +168,36 @@ function BattleScore({ score }: { score: number | null }) {
   return <span className="battle-score">{score !== null ? `${score.toFixed(1)} / 10` : "-- / 10"}</span>;
 }
 
-function displayedDice(latestDice: number[] | undefined, currentDiceCount: number) {
-  return latestDice ? [...latestDice].sort((left, right) => right - left) : emptyDice(currentDiceCount);
+function displayedDice(latestDice: BattleDie[] | undefined, currentDiceCount: number) {
+  return latestDice ? [...latestDice].sort((left, right) => right.value - left.value) : emptyDice(currentDiceCount);
 }
 
-function BattleDiceRows({ attackerDice, defenderDice }: { attackerDice: Array<number | null>; defenderDice: Array<number | null> }) {
+function BattleDiceRows({ attacker, attackerDice, defender, defenderDice }: { attacker: GamePlayer; attackerDice: Array<BattleDie | null>; defender: GamePlayer; defenderDice: Array<BattleDie | null> }) {
   return (
     <>
-      <DiceRow dice={defenderDice} label="Defender dice" tone="defender" />
-      <DiceRow dice={attackerDice} label="Attacker dice" tone="attacker" />
+      <DiceRow dice={defenderDice} label="Defender dice" player={defender} tone="defender" />
+      <DiceRow dice={attackerDice} label="Attacker dice" player={attacker} tone="attacker" />
     </>
   );
 }
 
-function DiceRow({ dice, label, tone }: { dice: Array<number | null>; label: string; tone: "attacker" | "defender" }) {
+function DiceRow({ dice, label, player, tone }: { dice: Array<BattleDie | null>; label: string; player: GamePlayer; tone: "attacker" | "defender" }) {
   return (
     <div className="battle-dice-row" aria-label={label}>
       {dice.map((die, index) => (
-        <Die face={die} key={index} tone={tone} />
+        <Die die={die} key={die?.unitId ?? index} player={player} tone={tone} />
       ))}
     </div>
   );
 }
 
-function Die({ face, tone }: { face: number | null; tone: "attacker" | "defender" }) {
+function Die({ die, player, tone }: { die: BattleDie | null; player: GamePlayer; tone: "attacker" | "defender" }) {
+  const face = die?.value ?? null;
   const positions = face ? DIE_PIPS[face] : [];
 
   return (
     <span className={`battle-die battle-die-${tone}`} data-empty={face === null ? "true" : undefined}>
+      {die ? <BattleDieUnitIcon player={player} unitType={die.unitType} /> : null}
       {Array.from({ length: 9 }, (_, index) => (
         <span className={positions.includes(index) ? `battle-pip p${index} visible` : `battle-pip p${index}`} key={index} />
       ))}
@@ -197,16 +205,18 @@ function Die({ face, tone }: { face: number | null; tone: "attacker" | "defender
   );
 }
 
+function BattleDieUnitIcon({ player, unitType }: { player: GamePlayer; unitType: BattleUnitType }) {
+  const src = unitType === "ghost" ? ghostSoldierIconSrc() : troopIconSrc(player.color, unitType);
+
+  return (
+    <span className="battle-die-unit" aria-label={`${unitType} die`}>
+      <TroopIconImage ownerColor={player.color} src={src} />
+    </span>
+  );
+}
+
 function emptyDice(count: number) {
   return Array.from({ length: count }, () => null);
-}
-
-function troopTotal(troops: TroopCounts) {
-  return troops.cavalry + troops.elite + troops.heavy + troops.leader;
-}
-
-function attackingBattleTotal(battle: Pick<BattleState, "attackingGhostTroops" | "attackingTroops">) {
-  return troopTotal(battle.attackingTroops) + battle.attackingGhostTroops;
 }
 
 function resultMessage(battle: BattleState, attacker: GamePlayer, defender: GamePlayer) {

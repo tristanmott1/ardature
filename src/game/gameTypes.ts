@@ -94,11 +94,31 @@ export type ReinforcementState = {
   territories: Record<string, TroopCounts>;
 };
 
+export type BattleUnitType = TroopType | "ghost";
+
+export type BattleUnit = {
+  id: string;
+  score: number | null;
+  type: BattleUnitType;
+};
+
+export type BattleDie = {
+  score: number;
+  unitId: string;
+  unitType: BattleUnitType;
+  value: number;
+};
+
+export type BattleCasualty = {
+  unitId: string;
+  unitType: BattleUnitType;
+};
+
 export type BattleDiceRoll = {
-  attackerDice: number[];
-  defenderDice: number[];
-  attackerLosses: TroopType[];
-  defenderLosses: TroopType[];
+  attackerDice: BattleDie[];
+  defenderDice: BattleDie[];
+  attackerLosses: BattleCasualty[];
+  defenderLosses: BattleCasualty[];
 };
 
 export type BattleResult =
@@ -120,11 +140,8 @@ export type BattleState = {
   targetTerritoryId: string;
   committedAttackingTroops: TroopCounts;
   initialDefendingTroops: TroopCounts;
-  attackingTroops: TroopCounts;
-  attackingGhostTroops: number;
-  defendingTroops: TroopCounts;
-  attackerScore: number | null;
-  defenderScore: number | null;
+  attackingUnits: BattleUnit[];
+  defendingUnits: BattleUnit[];
   latestRoll: BattleDiceRoll | null;
   hasRolled: boolean;
   pathsOfTheDeadSwing: number | null;

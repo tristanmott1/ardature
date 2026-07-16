@@ -2,7 +2,7 @@ import { generatedMapData } from "../map/generated/mapData";
 import type { MapSkin, TerritoryState } from "../map/mapTypes";
 import { territoriesInRegion } from "../map/territoryLookup";
 import { MIXTURE_TROOP_TYPES, armyCountsForMarker, reinforcementCountsForMarker } from "./armyBuild";
-import { challengeScoreForTroops, combatScoreForTroops, rollCombatDice, sampleCasualty } from "./combat";
+import { challengeScoreForTroops, combatScoreForTroops, rollCombatDie, sampleCasualty, scorePercentileForTroops, troopScoreAtPercentile } from "./combat";
 import { createCaradhrasPassState, createPathsOfTheDeadState, directedDistanceFromAny, directedOwnedSourcesReachingTarget, driftCaradhrasPassState, driftPathsOfTheDeadState, hasDirectedConnection, outgoingTerritoryIds, type DynamicEdgeState } from "./mapGraph";
 import type {
   AllocationStyle,
@@ -10,7 +10,11 @@ import type {
   ArmyMarker,
   AppPhase,
   AttackStyle,
+  BattleCasualty,
+  BattleDie,
   BattleState,
+  BattleUnit,
+  BattleUnitType,
   DraftState,
   DraftStyle,
   FortifyMovesBySource,
@@ -321,8 +325,28 @@ export function troopTotal(counts: TroopCounts) {
   return counts.heavy + counts.cavalry + counts.elite + counts.leader;
 }
 
-function attackingBattleTotal(battle: Pick<BattleState, "attackingGhostTroops" | "attackingTroops">) {
-  return troopTotal(battle.attackingTroops) + battle.attackingGhostTroops;
+export function battleTroopCounts(units: BattleUnit[]) {
+  const counts = createTroopCounts();
+
+  for (const unit of units) {
+    if (unit.type !== "ghost") {
+      counts[unit.type] += 1;
+    }
+  }
+
+  return counts;
+}
+
+export function battleGhostCount(units: BattleUnit[]) {
+  return units.filter((unit) => unit.type === "ghost").length;
+}
+
+export function battleUnitScore(units: BattleUnit[]) {
+  if (units.length === 0 || units.some((unit) => unit.score === null)) {
+    return null;
+  }
+
+  return units.reduce((sum, unit) => sum + (unit.score ?? 0), 0) / units.length;
 }
 
 export function addTroops(left: TroopCounts, right: TroopCounts): TroopCounts {
@@ -1072,6 +1096,46 @@ export function canCommitAttack(state: GameState, playerId: string, sourceTerrit
     validTroopCounts(leftBehind);
 }
 
+function createBattleUnits(prefix: string, counts: TroopCounts, scoreSample: number | null, ghostCount = 0) {
+  const units: BattleUnit[] = [];
+
+  for (const troopType of TROOP_TYPES) {
+    for (let index = 0; index < counts[troopType]; index += 1) {
+      units.push({
+        id: `${prefix}-${troopType}-${index}`,
+        score: null,
+        type: troopType,
+      });
+    }
+  }
+
+  for (let index = 0; index < ghostCount; index += 1) {
+    units.push({
+      id: `${prefix}-ghost-${index}`,
+      score: scoreSample,
+      type: "ghost",
+    });
+  }
+
+  return scoreSample === null ? units : scoreBattleUnits(units, counts, scoreSample);
+}
+
+function scoreBattleUnits(units: BattleUnit[], realCounts: TroopCounts, scoreSample: number) {
+  const boundedScore = Math.max(0, Math.min(10, scoreSample));
+  const percentile = troopTotal(realCounts) > 0
+    ? scorePercentileForTroops(realCounts, boundedScore)
+    : 0.5;
+
+  return units.map((unit) => ({
+    ...unit,
+    score: unit.type === "ghost" ? boundedScore : troopScoreAtPercentile(unit.type, percentile),
+  }));
+}
+
+export function battleUnitsReady(units: BattleUnit[]) {
+  return units.length > 0 && units.every((unit) => unit.score !== null);
+}
+
 export function commitAttack(state: GameState, playerId: string, sourceTerritoryId: string, targetTerritoryId: string, attackingTroops: TroopCounts, random = Math.random): GameState {
   const turn = state.turn;
   const ownership = state.draft?.ownership;
@@ -1106,6 +1170,14 @@ export function commitAttack(state: GameState, playerId: string, sourceTerritory
   }
 
   const attackersDestroyed = troopTotal(nextAttackingTroops) === 0;
+  const attackerScoreSample = attackersDestroyed
+    ? 0
+    : usesChallenge
+      ? null
+      : combatScoreForTroops(nextAttackingTroops);
+  const defenderScoreSample = usesChallenge && state.mode === "sync"
+    ? null
+    : combatScoreForTroops(defendingTroops);
 
   return {
     ...state,
@@ -1124,11 +1196,10 @@ export function commitAttack(state: GameState, playerId: string, sourceTerritory
         targetTerritoryId,
         committedAttackingTroops: createTroopCounts(attackingTroops),
         initialDefendingTroops: createTroopCounts(defendingTroops),
-        attackingTroops: nextAttackingTroops,
-        attackingGhostTroops,
-        defendingTroops: createTroopCounts(defendingTroops),
-        attackerScore: attackersDestroyed ? 0 : usesChallenge ? null : combatScoreForTroops(nextAttackingTroops),
-        defenderScore: usesChallenge && state.mode === "sync" ? null : combatScoreForTroops(defendingTroops),
+        attackingUnits: attackersDestroyed
+          ? []
+          : createBattleUnits("attacker", nextAttackingTroops, attackerScoreSample, attackingGhostTroops),
+        defendingUnits: createBattleUnits("defender", defendingTroops, defenderScoreSample),
         latestRoll: null,
         hasRolled: false,
         pathsOfTheDeadSwing: pathsSwing,
@@ -1151,27 +1222,27 @@ export function submitBattleScore(state: GameState, playerId: string, battleId: 
   }
 
   const boundedScore = Math.max(0, Math.min(10, score));
-  if (playerId === battle.attackerPlayerId && battle.attackerScore === null) {
+  if (playerId === battle.attackerPlayerId && !battleUnitsReady(battle.attackingUnits)) {
     return {
       ...state,
       turn: {
         ...turn,
         battle: {
           ...battle,
-          attackerScore: boundedScore,
+          attackingUnits: scoreBattleUnits(battle.attackingUnits, battleTroopCounts(battle.attackingUnits), boundedScore),
         },
       },
     };
   }
 
-  if (playerId === battle.defenderPlayerId && battle.defenderScore === null) {
+  if (playerId === battle.defenderPlayerId && !battleUnitsReady(battle.defendingUnits)) {
     return {
       ...state,
       turn: {
         ...turn,
         battle: {
           ...battle,
-          defenderScore: boundedScore,
+          defendingUnits: scoreBattleUnits(battle.defendingUnits, battleTroopCounts(battle.defendingUnits), boundedScore),
         },
       },
     };
@@ -1207,61 +1278,52 @@ export function rollBattle(state: GameState, playerId: string, battleId: string,
     battle.id !== battleId ||
     battle.attackerPlayerId !== playerId ||
     battle.result ||
-    battle.attackerScore === null ||
-    battle.defenderScore === null ||
+    !battleUnitsReady(battle.attackingUnits) ||
+    !battleUnitsReady(battle.defendingUnits) ||
     !allocation
   ) {
     return state;
   }
 
-  const attackerDice = rollCombatDice(battle.attackerScore, "attacker", Math.min(3, attackingBattleTotal(battle)), random);
-  const defenderDice = rollCombatDice(battle.defenderScore, "defender", Math.min(2, troopTotal(battle.defendingTroops)), random);
+  const attackerDiceUnits = selectBattleDiceUnits(battle.attackingUnits, Math.min(3, battle.attackingUnits.length), "attacker", random);
+  const defenderDiceUnits = selectBattleDiceUnits(battle.defendingUnits, Math.min(2, battle.defendingUnits.length), "defender", random);
+  const attackerDice = rollBattleDice(attackerDiceUnits, "attacker", random);
+  const defenderDice = rollBattleDice(defenderDiceUnits, "defender", random);
   const comparisonCount = Math.min(attackerDice.length, defenderDice.length);
-  const attackerLosses: TroopType[] = [];
-  const defenderLosses: TroopType[] = [];
-  let attackingTroops = battle.attackingTroops;
-  let attackingGhostTroops = battle.attackingGhostTroops;
-  let defendingTroops = battle.defendingTroops;
-  let nextAllocation = allocation;
+  let attackerLossCount = 0;
+  let defenderLossCount = 0;
 
   // Compare the highest dice side by side, with ties going to the defender.
   for (let index = 0; index < comparisonCount; index += 1) {
-    if (attackerDice[index] > defenderDice[index]) {
-      const casualty = sampleCasualty(defendingTroops, random);
-      if (casualty) {
-        defenderLosses.push(casualty);
-        defendingTroops = subtractOneTroop(defendingTroops, casualty);
-        nextAllocation = adjustCommittedTerritoryTroop(nextAllocation, battle.defenderPlayerId, battle.targetTerritoryId, casualty, -1);
-      }
+    if (attackerDice[index].value > defenderDice[index].value) {
+      defenderLossCount += 1;
     } else {
-      if (attackingGhostTroops > 0) {
-        attackingGhostTroops -= 1;
-      } else {
-        const casualty = sampleCasualty(attackingTroops, random);
-        if (casualty) {
-          attackerLosses.push(casualty);
-          attackingTroops = subtractOneTroop(attackingTroops, casualty);
-          nextAllocation = adjustCommittedTerritoryTroop(nextAllocation, battle.attackerPlayerId, battle.sourceTerritoryId, casualty, -1);
-        }
-      }
+      attackerLossCount += 1;
     }
   }
 
+  const attackerCasualties = resolveBattleCasualties(battle.attackingUnits, attackerDice, attackerLossCount, random);
+  const defenderCasualties = resolveBattleCasualties(battle.defendingUnits, defenderDice, defenderLossCount, random);
+  const nextAllocation = applyBattleCasualtiesToAllocation(
+    applyBattleCasualtiesToAllocation(allocation, battle.attackerPlayerId, battle.sourceTerritoryId, attackerCasualties.losses),
+    battle.defenderPlayerId,
+    battle.targetTerritoryId,
+    defenderCasualties.losses,
+  );
   const rolledBattle = {
     ...battle,
-    attackingTroops,
-    attackingGhostTroops,
-    defendingTroops,
+    attackingUnits: attackerCasualties.units,
+    defendingUnits: defenderCasualties.units,
     latestRoll: {
       attackerDice,
       defenderDice,
-      attackerLosses,
-      defenderLosses,
+      attackerLosses: attackerCasualties.losses,
+      defenderLosses: defenderCasualties.losses,
     },
     hasRolled: true,
-    result: troopTotal(defendingTroops) === 0
+    result: defenderCasualties.units.length === 0
       ? { type: "attackerWon" as const }
-      : troopTotal(attackingTroops) + attackingGhostTroops === 0
+      : attackerCasualties.units.length === 0
         ? { type: "defenderWon" as const }
         : null,
   };
@@ -1277,6 +1339,103 @@ export function rollBattle(state: GameState, playerId: string, battleId: string,
   return rolledBattle.result?.type === "attackerWon"
     ? finishBattleConquest(rolledState, rolledBattle)
     : rolledState;
+}
+
+function selectBattleDiceUnits(units: BattleUnit[], count: number, role: "attacker" | "defender", random: () => number) {
+  if (role === "defender") {
+    return sampleUnits(units, count, random);
+  }
+
+  const ghosts = units.filter((unit) => unit.type === "ghost");
+  const selectedGhosts = sampleUnits(ghosts, Math.min(count, ghosts.length), random);
+  const remainingCount = count - selectedGhosts.length;
+
+  return remainingCount > 0
+    ? [...selectedGhosts, ...sampleUnits(units.filter((unit) => unit.type !== "ghost"), remainingCount, random)]
+    : selectedGhosts;
+}
+
+function rollBattleDice(units: BattleUnit[], role: "attacker" | "defender", random: () => number): BattleDie[] {
+  return units
+    .filter((unit): unit is BattleUnit & { score: number } => unit.score !== null)
+    .map((unit) => ({
+      score: unit.score,
+      unitId: unit.id,
+      unitType: unit.type,
+      value: rollCombatDie(unit.score, role, random),
+    }))
+    .sort((left, right) => right.value - left.value);
+}
+
+function resolveBattleCasualties(units: BattleUnit[], dice: BattleDie[], lossCount: number, random: () => number) {
+  const losses: BattleCasualty[] = [];
+  const lostIds = new Set<string>();
+  let remainingLosses = lossCount;
+
+  // Paths ghosts are dice troops first and casualties before real troops.
+  for (const ghost of sampleUnits(dice.filter((die) => die.unitType === "ghost"), remainingLosses, random)) {
+    losses.push({ unitId: ghost.unitId, unitType: ghost.unitType });
+    lostIds.add(ghost.unitId);
+    remainingLosses -= 1;
+  }
+
+  if (remainingLosses > 0) {
+    const selectedNonLeaders = dice.filter((die) => die.unitType !== "ghost" && die.unitType !== "leader" && !lostIds.has(die.unitId));
+    const selectedLosses = selectedNonLeaders.length >= remainingLosses
+      ? sampleUnits(selectedNonLeaders, remainingLosses, random)
+      : selectedNonLeaders;
+
+    for (const loss of selectedLosses) {
+      losses.push({ unitId: loss.unitId, unitType: loss.unitType });
+      lostIds.add(loss.unitId);
+      remainingLosses -= 1;
+    }
+  }
+
+  // Leader dice are protected by non-dice non-leaders when possible.
+  while (remainingLosses > 0) {
+    const fallback = sampleUnits(units.filter((unit) =>
+      unit.type !== "ghost" &&
+      unit.type !== "leader" &&
+      !lostIds.has(unit.id) &&
+      !dice.some((die) => die.unitId === unit.id)), 1, random)[0];
+    const leader = sampleUnits(units.filter((unit) => unit.type === "leader" && !lostIds.has(unit.id)), 1, random)[0];
+    const loss = fallback ?? leader;
+
+    if (!loss) {
+      break;
+    }
+
+    losses.push({ unitId: loss.id, unitType: loss.type });
+    lostIds.add(loss.id);
+    remainingLosses -= 1;
+  }
+
+  return {
+    losses,
+    units: units.filter((unit) => !lostIds.has(unit.id)),
+  };
+}
+
+function applyBattleCasualtiesToAllocation(allocation: AllocationState, playerId: string, territoryId: string, losses: BattleCasualty[]) {
+  return losses.reduce((nextAllocation, loss) =>
+    loss.unitType === "ghost"
+      ? nextAllocation
+      : adjustCommittedTerritoryTroop(nextAllocation, playerId, territoryId, loss.unitType, -1),
+  allocation);
+}
+
+function sampleUnits<T>(items: T[], count: number, random: () => number) {
+  const pool = [...items];
+  const selected: T[] = [];
+
+  for (let index = 0; index < count && pool.length > 0; index += 1) {
+    const itemIndex = Math.floor(random() * pool.length);
+    selected.push(pool[itemIndex]);
+    pool.splice(itemIndex, 1);
+  }
+
+  return selected;
 }
 
 export function retreatBattle(state: GameState, playerId: string, battleId: string): GameState {
@@ -1323,12 +1482,12 @@ export function sampleBattleChallengeScore(state: GameState, playerId: string, b
     return null;
   }
 
-  if (playerId === battle.attackerPlayerId && battle.attackerScore === null) {
-    return challengeScoreForTroops(battle.attackingTroops);
+  if (playerId === battle.attackerPlayerId && !battleUnitsReady(battle.attackingUnits)) {
+    return challengeScoreForTroops(battleTroopCounts(battle.attackingUnits));
   }
 
-  if (playerId === battle.defenderPlayerId && battle.defenderScore === null) {
-    return challengeScoreForTroops(battle.defendingTroops);
+  if (playerId === battle.defenderPlayerId && !battleUnitsReady(battle.defendingUnits)) {
+    return challengeScoreForTroops(battleTroopCounts(battle.defendingUnits));
   }
 
   return null;
@@ -3036,10 +3195,11 @@ function finishBattleConquest(state: GameState, battle: BattleState): GameState 
   const attackerSpy = state.turn.spies[battle.attackerPlayerId];
   const releasedAttackerSpy = attackerSpy?.status === "captured" && attackerSpy.territoryId === battle.targetTerritoryId;
   const sourceTroops = attackerAllocation.territories[battle.sourceTerritoryId] ?? createTroopCounts();
+  const survivingAttackers = battleTroopCounts(battle.attackingUnits);
   const attackingTerritories = {
     ...attackerAllocation.territories,
-    [battle.sourceTerritoryId]: subtractTroops(sourceTroops, battle.attackingTroops),
-    [battle.targetTerritoryId]: createTroopCounts(battle.attackingTroops),
+    [battle.sourceTerritoryId]: subtractTroops(sourceTroops, survivingAttackers),
+    [battle.targetTerritoryId]: createTroopCounts(survivingAttackers),
   };
   const defendingTerritories = { ...defenderAllocation.territories };
   delete defendingTerritories[battle.targetTerritoryId];
@@ -3542,13 +3702,10 @@ function normalizeBattle(value: unknown): BattleState | null {
     defenderPlayerId: battle.defenderPlayerId,
     sourceTerritoryId: battle.sourceTerritoryId,
     targetTerritoryId: battle.targetTerritoryId,
-    committedAttackingTroops: normalizeTroopCounts(battle.committedAttackingTroops ?? battle.attackingTroops),
-    initialDefendingTroops: normalizeTroopCounts(battle.initialDefendingTroops ?? battle.defendingTroops),
-    attackingTroops: normalizeTroopCounts(battle.attackingTroops),
-    attackingGhostTroops: normalizeGhostTroops(battle.attackingGhostTroops),
-    defendingTroops: normalizeTroopCounts(battle.defendingTroops),
-    attackerScore: finiteScore(battle.attackerScore),
-    defenderScore: finiteScore(battle.defenderScore),
+    committedAttackingTroops: normalizeTroopCounts(battle.committedAttackingTroops),
+    initialDefendingTroops: normalizeTroopCounts(battle.initialDefendingTroops),
+    attackingUnits: normalizeBattleUnits(battle.attackingUnits),
+    defendingUnits: normalizeBattleUnits(battle.defendingUnits),
     latestRoll: normalizeBattleRoll(battle.latestRoll),
     hasRolled: battle.hasRolled === true,
     pathsOfTheDeadSwing: finitePathsSwing(battle.pathsOfTheDeadSwing),
@@ -3559,16 +3716,29 @@ function normalizeBattle(value: unknown): BattleState | null {
   };
 }
 
-function normalizeGhostTroops(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, Math.floor(value))
-    : 0;
-}
-
 function finitePathsSwing(value: unknown) {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.round(value)
     : null;
+}
+
+function normalizeBattleUnits(value: unknown) {
+  return Array.isArray(value)
+    ? value.map(normalizeBattleUnit).filter((unit): unit is BattleUnit => Boolean(unit))
+    : [];
+}
+
+function normalizeBattleUnit(value: unknown) {
+  const unit = value as Partial<BattleUnit>;
+  if (!unit || typeof unit !== "object" || typeof unit.id !== "string" || !isBattleUnitType(unit.type)) {
+    return null;
+  }
+
+  return {
+    id: unit.id,
+    score: finiteScore(unit.score),
+    type: unit.type,
+  };
 }
 
 function normalizeBattleRoll(value: unknown) {
@@ -3578,23 +3748,46 @@ function normalizeBattleRoll(value: unknown) {
   }
 
   return {
-    attackerDice: normalizeDice(roll.attackerDice),
-    defenderDice: normalizeDice(roll.defenderDice),
-    attackerLosses: normalizeTroopTypeList(roll.attackerLosses),
-    defenderLosses: normalizeTroopTypeList(roll.defenderLosses),
+    attackerDice: normalizeBattleDice(roll.attackerDice),
+    defenderDice: normalizeBattleDice(roll.defenderDice),
+    attackerLosses: normalizeBattleCasualties(roll.attackerLosses),
+    defenderLosses: normalizeBattleCasualties(roll.defenderLosses),
   };
 }
 
-function normalizeDice(value: unknown[]) {
-  return value
-    .filter((die): die is number => typeof die === "number" && Number.isInteger(die) && die >= 1 && die <= 6)
-    .slice(0, 3);
+function normalizeBattleDice(value: unknown[]) {
+  return value.map(normalizeBattleDie).filter((die): die is BattleDie => Boolean(die)).slice(0, 3);
 }
 
-function normalizeTroopTypeList(value: unknown) {
+function normalizeBattleDie(value: unknown) {
+  const die = value as Partial<BattleDie>;
+  if (!die || typeof die !== "object" || typeof die.unitId !== "string" || !isBattleUnitType(die.unitType) || typeof die.value !== "number" || !Number.isInteger(die.value) || die.value < 1 || die.value > 6) {
+    return null;
+  }
+
+  return {
+    score: finiteScore(die.score) ?? 0,
+    unitId: die.unitId,
+    unitType: die.unitType,
+    value: die.value,
+  };
+}
+
+function normalizeBattleCasualties(value: unknown) {
   return Array.isArray(value)
-    ? value.filter((troopType): troopType is TroopType => TROOP_TYPES.includes(troopType as TroopType))
+    ? value.map(normalizeBattleCasualty).filter((loss): loss is BattleCasualty => Boolean(loss))
     : [];
+}
+
+function normalizeBattleCasualty(value: unknown) {
+  const casualty = value as Partial<BattleCasualty>;
+  return casualty && typeof casualty === "object" && typeof casualty.unitId === "string" && isBattleUnitType(casualty.unitType)
+    ? { unitId: casualty.unitId, unitType: casualty.unitType }
+    : null;
+}
+
+function isBattleUnitType(value: unknown): value is BattleUnitType {
+  return value === "ghost" || TROOP_TYPES.includes(value as TroopType);
 }
 
 function finiteScore(value: unknown) {

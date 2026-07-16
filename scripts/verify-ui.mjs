@@ -193,7 +193,7 @@ async function runSourceChecks() {
   assert(mapGraphSource.includes("const PATHS_OF_THE_DEAD_MAX = 6") && mapGraphSource.includes("const PATHS_OF_THE_DEAD_OPEN_AT = 4"), "Paths of the Dead uses six states and opens at state four.");
   assert(gameTypesSource.includes("caradhrasPassState: number | null") && gameTypesSource.includes("pathsOfTheDeadState: number | null") && gameStateSource.includes("caradhrasPassState: null") && gameStateSource.includes("pathsOfTheDeadState: null") && gameStateSource.includes("caradhrasPassState: state.caradhrasPassState ?? createCaradhrasPassState()") && gameStateSource.includes("pathsOfTheDeadState: state.pathsOfTheDeadState ?? createPathsOfTheDeadState()") && gameStateSource.includes("pathsOfTheDeadState: driftPathsOfTheDeadState(state.pathsOfTheDeadState)"), "GameState keeps dynamic pass states null before first turn, samples them at turn start, and drifts them on turn advance.");
   assert(appSource.includes("regularTurnPhaseHasWeather") && appSource.includes("dynamicMapWeatherMarkers") && appSource.includes("pathsOfTheDeadWeatherMarkers") && appSource.includes('id: "paths-of-the-dead"'), "Dynamic pass icons render only during regular-turn game stages.");
-  assert(gameTypesSource.includes("attackingGhostTroops: number") && gameTypesSource.includes("pathsOfTheDeadSwing: number | null") && gameStateSource.includes("pathsOfTheDeadAttackSwing") && gameStateSource.includes("sourceTerritoryId !== EDORAS_ID") && gameStateSource.includes("targetTerritoryId !== LAMEDON_ID") && gameStateSource.includes("pathsState - (PATHS_OF_THE_DEAD_OPEN_AT - 1)") && gameStateSource.includes("attackingGhostTroops > 0"), "Battle state stores Paths swing and battle-only ghost soldiers that die before real attackers.");
+  assert(gameTypesSource.includes('export type BattleUnitType = TroopType | "ghost"') && gameTypesSource.includes("attackingUnits: BattleUnit[]") && gameTypesSource.includes("defendingUnits: BattleUnit[]") && gameTypesSource.includes("pathsOfTheDeadSwing: number | null") && gameStateSource.includes("pathsOfTheDeadAttackSwing") && gameStateSource.includes("sourceTerritoryId !== EDORAS_ID") && gameStateSource.includes("targetTerritoryId !== LAMEDON_ID") && gameStateSource.includes("pathsState - (PATHS_OF_THE_DEAD_OPEN_AT - 1)") && gameStateSource.includes('type: "ghost"'), "Battle state stores Paths swing and battle-only ghost units that die before real attackers.");
   assert(battleModalSource.includes("challengePlayerId") && battleModalSource.includes("challengeGhostTroops") && battleModalSource.includes("GhostSoldierCount") && troopIconsSource.includes("ghostSoldierIconSrc"), "Battle modal shows challenge army rows and battle-only ghost soldiers.");
   assert(!mapConnectionsSource.includes("shipRoute") && !gameStateSource.includes("shipRoute") && !syncMessagesSource.includes("shipRoute"), "Visual ship routes are not consumed by gameplay or sync code.");
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
@@ -386,17 +386,18 @@ async function runSourceChecks() {
   assert(gameStateSource.includes("function commitAttack") && gameStateSource.includes("function rollBattle") && gameStateSource.includes("function retreatBattle") && gameStateSource.includes("completedAttacks"), "Attack state transitions live in game-state helpers.");
   assert(gameStateSource.includes("function canSelectAttackTargetTerritory") && appSource.includes("canSelectAttackTargetTerritory(game") && !appSource.includes("completedAttacks.includes(`${attackSetup.sourceTerritoryId}->${territoryId}`)"), "Attack target selection and hints use one completed-pair helper.");
   assert(gameTypesSource.includes("BattleState") && gameTypesSource.includes('type: "commitAttack"') && gameTypesSource.includes('type: "submitBattleScore"') && gameTypesSource.includes('type: "rollBattle"'), "Turn commands include locked battle actions.");
-  assert(gameTypesSource.includes("committedAttackingTroops: TroopCounts") && gameTypesSource.includes("initialDefendingTroops: TroopCounts") && gameTypesSource.includes("attackingTroops: TroopCounts") && gameTypesSource.includes("defendingTroops: TroopCounts"), "Battle state preserves locked original troop counts and current survivor counts.");
+  assert(gameTypesSource.includes("committedAttackingTroops: TroopCounts") && gameTypesSource.includes("initialDefendingTroops: TroopCounts") && gameTypesSource.includes("attackingUnits: BattleUnit[]") && gameTypesSource.includes("defendingUnits: BattleUnit[]") && gameTypesSource.includes("unitId: string") && gameTypesSource.includes("unitType: BattleUnitType"), "Battle state preserves locked original troop counts and current survivor units.");
   assert(syncMessagesSource.includes('command.type === "commitAttack"') && syncMessagesSource.includes('command.type === "rollBattle"') && syncMessagesSource.includes('command.type === "retreatBattle"'), "Sync message validation covers battle commands.");
   assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)") && battleModalSource.includes("/ 10") && battleModalSource.includes("defeated") && battleModalSource.includes("battle-pip"), "Battle modal renders pip dice, retreat, result text, and one-decimal scores out of ten.");
-  assert(battleModalSource.includes("function BattleDiceRows") && battleModalSource.includes("latestDice ? [...latestDice].sort") && battleModalSource.includes('battle.result.type === "attackerWon"') && battleModalSource.includes('battle.result.type === "defenderWon"'), "Battle modal displays sorted latest-roll dice and keeps final dice in victory layouts.");
+  assert(battleModalSource.includes("function BattleDiceRows") && battleModalSource.includes("latestDice ? [...latestDice].sort") && battleModalSource.includes("BattleDieUnitIcon") && battleModalSource.includes('battle.result.type === "attackerWon"') && battleModalSource.includes('battle.result.type === "defenderWon"'), "Battle modal displays sorted unit dice and keeps final dice in victory layouts.");
   assert(gameTypesSource.includes("export type PendingResolution") && gameTypesSource.includes("export type HostTransferState") && gameStateSource.includes("function confirmPendingElimination") && gameStateSource.includes("function restartVictoryGameToSetup") && gameStateSource.includes("function transferHostAuthority"), "Game state has explicit pending elimination, victory restart, and host-transfer helpers.");
   assert(gameViewSource.includes('type: "elimination"') && gameViewSource.includes('type: "victory"') && overlaysSource.includes("function EliminationDialog") && overlaysSource.includes("function VictoryDialog"), "Elimination and victory render through explicit overlay types.");
   assert(!gameStateSource.includes("markDeadSpiesForEliminatedPlayers") && gameStateSource.includes("beginPostBattleResolution") && gameStateSource.includes("killPlayerSpy"), "Conquest does not silently kill eliminated spies before the elimination confirmation.");
   assert(syncMessagesSource.includes('type: "hostTransfer"') && syncMessagesSource.includes('type: "hostTransferAccepted"') && appSource.includes("acceptHostTransfer") && appSource.includes('type: "hostTransfer"') && appSource.includes('type: "hostTransferAccepted"') && appSource.includes('setSyncRole("host")'), "Sync host transfer uses an explicit acknowledged terminal transfer message and the selected joiner becomes host authority.");
   assert(appSource.includes("if (rawMessage.revision < lastSnapshotRevisionRef.current)") && appSource.includes("acceptHostTransfer(rawMessage.game, rawMessage.revision)"), "Host-transfer terminal snapshots accept the current revision instead of being rejected like duplicate ordinary snapshots.");
   assert(gameViewSource.includes("connectedSyncPlayers.length > 1") && gameViewSource.includes("hostTransferRequired || connectedSyncPlayers.length > 1") && !appSource.includes("!game.hostTransfer)"), "Host transfer is available on normal sync pause, not only forced host-transfer pause.");
-  assert(combatSource.includes("COMBAT_SCORE_VALUES") && combatSource.includes("challengeScoreForTroops") && combatSource.includes("rollCombatDice") && combatSource.includes("sampleCasualty"), "Combat math stores centralized score, challenge, dice, and casualty helpers.");
+  assert(combatSource.includes("COMBAT_SCORE_VALUES") && combatSource.includes("challengeScoreForTroops") && combatSource.includes("scorePercentileForTroops") && combatSource.includes("troopScoreAtPercentile") && combatSource.includes("rollCombatDie") && combatSource.includes("sampleCasualty"), "Combat math stores centralized score, percentile, per-die, and casualty helpers.");
+  assert(gameStateSource.includes("function selectBattleDiceUnits") && gameStateSource.includes("function resolveBattleCasualties") && gameStateSource.includes("function applyBattleCasualtiesToAllocation") && !gameStateSource.includes("rollCombatDice"), "Battle rolls sample dice units and resolve casualties in one game-state helper.");
   assert(gameStateSource.includes("function randomCompleteAllAllocations") && gameStateSource.includes("function randomArmyMarker") && gameStateSource.includes("function bordersOpponentTerritory"), "Random allocation has dedicated army and border placement helpers.");
   assert(gameStateSource.includes("outgoingTerritoryIds(territoryId, edgeState).some") && gameStateSource.includes("ownership[connectedId] !== playerId"), "Random allocation uses active outgoing directed connections to find opponent borders.");
   assert(setupPanelsSource.includes("Territory Draft") && setupPanelsSource.includes("Troop Allocation") && setupPanelsSource.includes("Allocation style"), "Setup UI has draft and troop allocation config sections.");
@@ -2488,8 +2489,8 @@ async function runTurnAttackChecks(browser) {
     randomValues: [0.999],
   });
   assert(pathsGhostBattle.turn.battle.pathsOfTheDeadSwing === 3, "Paths of the Dead can add the maximum ghost soldiers before battle.");
-  assert(pathsGhostBattle.turn.battle.attackingGhostTroops === 3, "Positive Paths swing stores battle-only ghost soldiers.");
-  assert(pathsGhostBattle.turn.battle.attackerScore === null, "Paths ghosts do not replace the attacker's challenge score.");
+  assert(battleFixtureUnitCount(pathsGhostBattle.turn.battle.attackingUnits, "ghost") === 3, "Positive Paths swing stores battle-only ghost units.");
+  assert(pathsGhostBattle.turn.battle.attackingUnits.every((unit) => unit.score === null), "Paths ghosts do not replace the attacker's challenge score.");
   await loadLocalGameFixture(challenge, pathsGhostBattle, ".battle-challenge-modal");
   await capture(challenge, "18ga-paths-ghost-challenge-mobile.png");
   assert((await challenge.locator('.battle-challenge-modal [aria-label="Ghost soldiers: 3"]').count()) === 1, "Challenge modal shows Paths ghost soldiers in the attacker army.");
@@ -2505,7 +2506,7 @@ async function runTurnAttackChecks(browser) {
     randomValues: [0, 0],
   });
   assert(pathsInstantLossBattle.turn.battle.result?.type === "defenderWon", "Negative Paths swing can kill all committed attackers and skip the challenge.");
-  assert(pathsInstantLossBattle.turn.battle.attackerScore === 0, "Instant Paths defender win stores a completed attacker score placeholder.");
+  assert(pathsInstantLossBattle.turn.battle.attackingUnits.length === 0, "Instant Paths defender win stores no surviving attacker units.");
   await loadLocalGameFixture(challenge, pathsInstantLossBattle, ".battle-result-modal");
   await capture(challenge, "18gc-paths-instant-defender-win-mobile.png");
   await assertBattleResultLayout(challenge, { dicePosition: "below", iconCount: 1, message: "Sauron defeated Frodo", spyCount: 0 });
@@ -2517,8 +2518,8 @@ async function runTurnAttackChecks(browser) {
     defenderScore: 10,
     defendingTroops: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
   }, [0, 0, 0, 0, 0, 0, 0, 0]);
-  assert(ghostFirstRollBattle.turn.battle.attackingGhostTroops === 0, "Battle casualties remove ghost soldiers before real attacking troops.");
-  assert(ghostFirstRollBattle.turn.battle.attackingTroops.heavy === 1, "Ghost-first casualties leave real attackers untouched until ghosts are gone.");
+  assert(battleFixtureUnitCount(ghostFirstRollBattle.turn.battle.attackingUnits, "ghost") === 0, "Battle casualties remove ghost soldiers before real attacking troops.");
+  assert(battleFixtureUnitCount(ghostFirstRollBattle.turn.battle.attackingUnits, "heavy") === 1, "Ghost-first casualties leave real attackers untouched until ghosts are gone.");
 
   await loadBattleStateFixture(challenge, {
     attackerScore: 7.3,
@@ -2547,6 +2548,7 @@ async function runTurnAttackChecks(browser) {
     Array.from(row.querySelectorAll(".battle-die")).map((die) => die.querySelectorAll(".battle-pip.visible").length),
   ));
   assert(JSON.stringify(displayedRoll[0]) === JSON.stringify([3, 2]) && JSON.stringify(displayedRoll[1]) === JSON.stringify([6, 5, 4]), "Latest roll dice display sorted largest to smallest.");
+  assert((await challenge.locator(".battle-die-unit").count()) === 5, "Latest roll dice show the troop identity assigned to each die.");
 
   await loadBattleStateFixture(challenge, {
     attackerScore: 7.3,
@@ -3040,6 +3042,112 @@ async function loadTurnFortifyFixture(page) {
   await page.waitForSelector(".turn-action-panel");
 }
 
+const battleFixtureTroopTypes = ["heavy", "cavalry", "elite", "leader"];
+
+function battleFixtureCounts(overrides = {}) {
+  return { heavy: 0, cavalry: 0, elite: 0, leader: 0, ...overrides };
+}
+
+function battleFixtureUnits(prefix, counts, score, ghostCount = 0) {
+  const units = [];
+
+  for (const troopType of battleFixtureTroopTypes) {
+    for (let index = 0; index < (counts[troopType] ?? 0); index += 1) {
+      units.push({
+        id: `${prefix}-${troopType}-${index}`,
+        score,
+        type: troopType,
+      });
+    }
+  }
+
+  for (let index = 0; index < ghostCount; index += 1) {
+    units.push({
+      id: `${prefix}-ghost-${index}`,
+      score,
+      type: "ghost",
+    });
+  }
+
+  return units;
+}
+
+function battleFixtureUnitCount(units, unitType) {
+  return units.filter((unit) => unit.type === unitType).length;
+}
+
+function battleFixtureDice(values, units) {
+  return values.map((die, index) => {
+    if (typeof die === "object" && die !== null) {
+      return die;
+    }
+
+    const unit = units[index % Math.max(units.length, 1)];
+    return {
+      score: unit?.score ?? 5,
+      unitId: unit?.id ?? `fixture-die-${index}`,
+      unitType: unit?.type ?? "heavy",
+      value: die,
+    };
+  });
+}
+
+function battleFixtureCasualties(losses, prefix) {
+  return (losses ?? []).map((loss, index) => typeof loss === "object" && loss !== null
+    ? loss
+    : {
+        unitId: `${prefix}-loss-${index}`,
+        unitType: loss,
+      });
+}
+
+function battleFixtureRoll(latestRoll, attackingUnits, defendingUnits) {
+  if (!latestRoll) {
+    return null;
+  }
+
+  return {
+    attackerDice: battleFixtureDice(latestRoll.attackerDice ?? [], attackingUnits),
+    attackerLosses: battleFixtureCasualties(latestRoll.attackerLosses, "attacker"),
+    defenderDice: battleFixtureDice(latestRoll.defenderDice ?? [], defendingUnits),
+    defenderLosses: battleFixtureCasualties(latestRoll.defenderLosses, "defender"),
+  };
+}
+
+function battleFixtureState(battleOverrides = {}) {
+  const {
+    attackerScore = 7.3,
+    attackingGhostTroops = 0,
+    attackingTroops = battleFixtureCounts({ heavy: 1, cavalry: 1 }),
+    attackingUnits,
+    defenderScore = 6.2,
+    defendingTroops = battleFixtureCounts({ heavy: 3 }),
+    defendingUnits,
+    latestRoll = null,
+    ...rest
+  } = battleOverrides;
+  const nextAttackingUnits = attackingUnits ?? battleFixtureUnits("attacker", battleFixtureCounts(attackingTroops), attackerScore, attackingGhostTroops);
+  const nextDefendingUnits = defendingUnits ?? battleFixtureUnits("defender", battleFixtureCounts(defendingTroops), defenderScore);
+
+  return {
+    id: "battle-fixture",
+    attackerPlayerId: "viewer",
+    defenderPlayerId: "opponent",
+    sourceTerritoryId: "shire",
+    targetTerritoryId: "bree",
+    committedAttackingTroops: battleFixtureCounts({ heavy: 1, cavalry: 1 }),
+    initialDefendingTroops: battleFixtureCounts({ heavy: 3 }),
+    attackingUnits: nextAttackingUnits,
+    defendingUnits: nextDefendingUnits,
+    latestRoll: battleFixtureRoll(latestRoll, nextAttackingUnits, nextDefendingUnits),
+    hasRolled: false,
+    pathsOfTheDeadSwing: null,
+    releasedAttackerSpy: false,
+    result: null,
+    ...rest,
+  };
+}
+
 async function loadBattleStateFixture(page, battleOverrides, options = {}) {
   const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
   const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
@@ -3062,26 +3170,7 @@ async function loadBattleStateFixture(page, battleOverrides, options = {}) {
   }
 
   state.turn.stage = "battle";
-  state.turn.battle = {
-    id: "battle-fixture",
-    attackerPlayerId: "viewer",
-    defenderPlayerId: "opponent",
-    sourceTerritoryId: "shire",
-    targetTerritoryId: "bree",
-    committedAttackingTroops: { heavy: 1, cavalry: 1, elite: 0, leader: 0 },
-    initialDefendingTroops: { heavy: 3, cavalry: 0, elite: 0, leader: 0 },
-    attackingTroops: { heavy: 1, cavalry: 1, elite: 0, leader: 0 },
-    attackingGhostTroops: 0,
-    defendingTroops: { heavy: 3, cavalry: 0, elite: 0, leader: 0 },
-    attackerScore: 7.3,
-    defenderScore: 6.2,
-    latestRoll: null,
-    hasRolled: false,
-    pathsOfTheDeadSwing: null,
-    releasedAttackerSpy: false,
-    result: null,
-    ...battleOverrides,
-  };
+  state.turn.battle = battleFixtureState(battleOverrides);
 
   await page.addInitScript((savedState) => {
     localStorage.clear();
@@ -3126,26 +3215,15 @@ async function rollBattleState(page, battleOverrides, randomValues) {
   const state = turnSpyGameState(territoryIds);
 
   state.turn.stage = "battle";
-  state.turn.battle = {
-    id: "battle-fixture",
-    attackerPlayerId: "viewer",
-    defenderPlayerId: "opponent",
-    sourceTerritoryId: "shire",
-    targetTerritoryId: "bree",
-    committedAttackingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
-    initialDefendingTroops: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
-    attackingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
-    attackingGhostTroops: 0,
-    defendingTroops: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
+  state.turn.battle = battleFixtureState({
     attackerScore: 0,
+    attackingTroops: battleFixtureCounts({ heavy: 1 }),
     defenderScore: 10,
-    latestRoll: null,
-    hasRolled: false,
-    pathsOfTheDeadSwing: null,
-    releasedAttackerSpy: false,
-    result: null,
+    defendingTroops: battleFixtureCounts({ heavy: 2 }),
+    committedAttackingTroops: battleFixtureCounts({ heavy: 1 }),
+    initialDefendingTroops: battleFixtureCounts({ heavy: 2 }),
     ...battleOverrides,
-  };
+  });
 
   await page.goto(baseUrl);
   return page.evaluate(async ({ savedState, randomValues: values }) => {

@@ -38,15 +38,18 @@ export function challengeScoreForTroops(troops: TroopCounts, random = Math.rando
   return 10 * left / (left + right);
 }
 
-export function rollCombatDice(score: number, role: "attacker" | "defender", count: number, random = Math.random) {
-  const distribution = dieDistribution(score, role);
-  const dice: number[] = [];
+export function scorePercentileForTroops(troops: TroopCounts, score: number) {
+  const distribution = betaDistributionForScore(combatScoreForTroops(troops));
+  return betaCdf(Math.max(0, Math.min(10, score)) / 10, distribution.alpha, distribution.beta);
+}
 
-  for (let index = 0; index < count; index += 1) {
-    dice.push(sampleDie(distribution, random));
-  }
+export function troopScoreAtPercentile(troopType: TroopType, percentile: number) {
+  const distribution = betaDistributionForScore(COMBAT_SCORE_VALUES[troopType]);
+  return 10 * betaInv(Math.max(0.000001, Math.min(0.999999, percentile)), distribution.alpha, distribution.beta);
+}
 
-  return dice.sort((left, right) => right - left);
+export function rollCombatDie(score: number, role: "attacker" | "defender", random = Math.random) {
+  return sampleDie(dieDistribution(score, role), random);
 }
 
 export function sampleCasualty(troops: TroopCounts, random = Math.random): TroopType | null {
@@ -79,6 +82,134 @@ function dieDistribution(score: number, role: "attacker" | "defender") {
   const total = weights.reduce((sum, weight) => sum + weight, 0);
 
   return weights.map((weight) => weight / total);
+}
+
+function betaDistributionForScore(score: number) {
+  const mean = Math.max(0.001, Math.min(0.999, score / 10));
+
+  return {
+    alpha: CHALLENGE_KAPPA * mean,
+    beta: CHALLENGE_KAPPA * (1 - mean),
+  };
+}
+
+function betaCdf(x: number, alpha: number, beta: number) {
+  if (x <= 0) {
+    return 0;
+  }
+
+  if (x >= 1) {
+    return 1;
+  }
+
+  const front = Math.exp(
+    alpha * Math.log(x) +
+    beta * Math.log(1 - x) -
+    logGamma(alpha) -
+    logGamma(beta) +
+    logGamma(alpha + beta),
+  );
+
+  return x < (alpha + 1) / (alpha + beta + 2)
+    ? front * betaContinuedFraction(x, alpha, beta) / alpha
+    : 1 - front * betaContinuedFraction(1 - x, beta, alpha) / beta;
+}
+
+function betaInv(percentile: number, alpha: number, beta: number) {
+  let low = 0;
+  let high = 1;
+
+  // Binary search is slow but tiny and stable for the small battle unit counts.
+  for (let index = 0; index < 48; index += 1) {
+    const middle = (low + high) / 2;
+    if (betaCdf(middle, alpha, beta) < percentile) {
+      low = middle;
+    } else {
+      high = middle;
+    }
+  }
+
+  return (low + high) / 2;
+}
+
+function betaContinuedFraction(x: number, alpha: number, beta: number) {
+  const maxIterations = 100;
+  const epsilon = 3e-7;
+  const fpMin = 1e-30;
+  const qab = alpha + beta;
+  const qap = alpha + 1;
+  const qam = alpha - 1;
+  let c = 1;
+  let d = 1 - qab * x / qap;
+
+  if (Math.abs(d) < fpMin) {
+    d = fpMin;
+  }
+
+  d = 1 / d;
+  let h = d;
+
+  for (let m = 1; m <= maxIterations; m += 1) {
+    const m2 = 2 * m;
+    let aa = m * (beta - m) * x / ((qam + m2) * (alpha + m2));
+
+    d = 1 + aa * d;
+    if (Math.abs(d) < fpMin) {
+      d = fpMin;
+    }
+    c = 1 + aa / c;
+    if (Math.abs(c) < fpMin) {
+      c = fpMin;
+    }
+    d = 1 / d;
+    h *= d * c;
+
+    aa = -(alpha + m) * (qab + m) * x / ((alpha + m2) * (qap + m2));
+    d = 1 + aa * d;
+    if (Math.abs(d) < fpMin) {
+      d = fpMin;
+    }
+    c = 1 + aa / c;
+    if (Math.abs(c) < fpMin) {
+      c = fpMin;
+    }
+    d = 1 / d;
+    const delta = d * c;
+
+    h *= delta;
+    if (Math.abs(delta - 1) < epsilon) {
+      break;
+    }
+  }
+
+  return h;
+}
+
+function logGamma(value: number): number {
+  const coefficients = [
+    676.5203681218851,
+    -1259.1392167224028,
+    771.3234287776531,
+    -176.6150291621406,
+    12.507343278686905,
+    -0.13857109526572012,
+    9.984369578019572e-6,
+    1.5056327351493116e-7,
+  ];
+
+  if (value < 0.5) {
+    return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * value)) - logGamma(1 - value);
+  }
+
+  let x = 0.9999999999998099;
+  const z = value - 1;
+
+  for (let index = 0; index < coefficients.length; index += 1) {
+    x += coefficients[index] / (z + index + 1);
+  }
+
+  const t = z + coefficients.length - 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
 }
 
 function scoreToTilt(score: number, role: "attacker" | "defender") {
