@@ -1427,27 +1427,6 @@ select {
   background: #dc2626;
 }
 
-.battle-die-unit {
-  position: absolute;
-  right: -8px;
-  top: -8px;
-  z-index: 2;
-  display: block;
-  width: 24px;
-  height: 24px;
-}
-
-.battle-die-unit .troop-icon-frame {
-  width: 24px;
-  height: 24px;
-  border-width: 2px;
-}
-
-.battle-die-unit .troop-icon-frame img {
-  width: 100%;
-  height: 100%;
-}
-
 .battle-die[data-empty="true"] {
   opacity: 0.4;
 }

@@ -390,7 +390,7 @@ async function runSourceChecks() {
   assert(gameTypesSource.includes('type: "dice"') && gameTypesSource.includes('type: "balrog"') && gameTypesSource.includes("balrogAwakened: true") && gameTypesSource.includes("BattleBlankDie"), "Battle latest-roll state distinguishes normal dice rolls from Balrog blank dice.");
   assert(syncMessagesSource.includes('command.type === "commitAttack"') && syncMessagesSource.includes('command.type === "rollBattle"') && syncMessagesSource.includes('command.type === "retreatBattle"'), "Sync message validation covers battle commands.");
   assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)") && battleModalSource.includes("/ 10") && battleModalSource.includes("defeated") && battleModalSource.includes("battle-pip"), "Battle modal renders pip dice, retreat, result text, and one-decimal scores out of ten.");
-  assert(battleModalSource.includes("function BattleDiceRows") && battleModalSource.includes("latestDice ? [...latestDice].sort") && battleModalSource.includes("BattleDieUnitIcon") && battleModalSource.includes('battle.result.type === "attackerWon"') && battleModalSource.includes('battle.result.type === "defenderWon"'), "Battle modal displays sorted unit dice and keeps final dice in victory layouts.");
+  assert(battleModalSource.includes("function BattleDiceRows") && battleModalSource.includes("latestDice ? [...latestDice].sort") && !battleModalSource.includes("BattleDieUnitIcon") && !stylesSource.includes(".battle-die-unit") && battleModalSource.includes('battle.result.type === "attackerWon"') && battleModalSource.includes('battle.result.type === "defenderWon"'), "Battle modal displays sorted dice without troop-icon badges and keeps final dice in victory layouts.");
   assert(gameStateSource.includes('const MORIA_ID = "moria"') && gameStateSource.includes("battle.targetTerritoryId === MORIA_ID") && gameStateSource.includes("(attackerDiceUnits.length + defenderDiceUnits.length) / 20") && gameStateSource.includes("function resolveBalrogRoll") && gameStateSource.includes("function resolveBalrogCasualties"), "Moria battle rolls check Balrog probability before rolling dice and resolve direct selected-unit casualties.");
   assert(battleModalSource.includes("BALROG_ANIMATION_MS = 1400") && battleModalSource.includes("balrog/balrog.gif") && battleModalSource.includes("battle-balrog-background") && stylesSource.includes("opacity: 0.5") && stylesSource.includes("object-fit: cover") && serviceWorkerSource.includes("./balrog/balrog.gif"), "Balrog modal UI uses the precached GIF as a 50% opacity cover background.");
   assert(gameTypesSource.includes("export type PendingResolution") && gameTypesSource.includes("export type HostTransferState") && gameStateSource.includes("function confirmPendingElimination") && gameStateSource.includes("function restartVictoryGameToSetup") && gameStateSource.includes("function transferHostAuthority"), "Game state has explicit pending elimination, victory restart, and host-transfer helpers.");
@@ -2591,7 +2591,7 @@ async function runTurnAttackChecks(browser) {
     Array.from(row.querySelectorAll(".battle-die")).map((die) => die.querySelectorAll(".battle-pip.visible").length),
   ));
   assert(JSON.stringify(displayedRoll[0]) === JSON.stringify([3, 2]) && JSON.stringify(displayedRoll[1]) === JSON.stringify([6, 5, 4]), "Latest roll dice display sorted largest to smallest.");
-  assert((await challenge.locator(".battle-die-unit").count()) === 5, "Latest roll dice show the troop identity assigned to each die.");
+  assert((await challenge.locator(".battle-die-unit").count()) === 0, "Latest roll dice do not show troop icon badges.");
 
   await loadBattleStateFixture(challenge, {
     attackerScore: 7.3,
@@ -2633,14 +2633,42 @@ async function runTurnAttackChecks(browser) {
     };
   });
   assert(balrogBackground.coversModal && balrogBackground.objectFit === "cover" && balrogBackground.opacity === "0.5", "Balrog GIF covers the full modal background at 50% opacity.");
-  assert((await challenge.locator(".battle-dice-row").count()) === 0, "Balrog animation hides dice while the GIF plays.");
+  assert((await challenge.locator('.battle-die[data-balrog="true"]').count()) === 2, "Balrog dice appear immediately while the GIF plays.");
+  assert((await challenge.locator(".battle-pip.visible").count()) === 0, "Balrog dice have no pips during the GIF.");
+  assert((await challenge.locator(".battle-die-unit").count()) === 0, "Balrog dice do not show troop icon badges.");
+  assert(await challenge.getByRole("button", { name: "Roll dice" }).isDisabled(), "Balrog animation disables the dice button.");
+  assert(await challenge.getByRole("button", { name: "Retreat" }).isDisabled(), "Balrog animation disables retreat.");
   await challenge.waitForTimeout(1500);
   await capture(challenge, "18kb-moria-balrog-blank-dice-mobile.png");
   assert((await challenge.locator(".battle-balrog-background").count()) === 0, "Balrog GIF disappears after one fixed-duration play.");
-  assert((await challenge.locator('.battle-die[data-balrog="true"]').count()) === 2, "Balrog dice reappear as black blank dice.");
+  assert((await challenge.locator('.battle-die[data-balrog="true"]').count()) === 2, "Balrog dice remain as black blank dice after the GIF.");
   assert((await challenge.locator(".battle-pip.visible").count()) === 0, "Balrog blank dice have no pips.");
-  assert((await challenge.locator(".battle-die-unit").count()) === 2, "Balrog blank dice keep troop badges visible.");
+  assert((await challenge.locator(".battle-die-unit").count()) === 0, "Balrog blank dice still have no troop icon badges.");
   assert(!(await challenge.getByRole("button", { name: "Retreat" }).isDisabled()), "A continuing Balrog event enables retreat because it counts as a roll.");
+
+  await loadBattleStateFixture(challenge, {
+    attackerScore: 7.3,
+    attackingTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
+    defenderScore: 6.2,
+    defendingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+    hasRolled: true,
+    latestRoll: {
+      attackerDice: [{ score: 7.3, unitId: "attacker-leader-0", unitType: "leader" }],
+      attackerLosses: ["leader"],
+      defenderDice: [{ score: 6.2, unitId: "defender-heavy-0", unitType: "heavy" }],
+      defenderLosses: [],
+      type: "balrog",
+    },
+    result: { type: "defenderWon" },
+    targetTerritoryId: "moria",
+  });
+  await challenge.locator(".battle-result-modal .battle-balrog-background img").waitFor();
+  await capture(challenge, "18kc-moria-balrog-result-gif-mobile.png");
+  assert((await challenge.locator('.battle-result-modal .battle-die[data-balrog="true"]').count()) === 2, "Balrog result modal shows black blank dice while the GIF plays.");
+  assert(await challenge.getByRole("button", { name: "Dismiss battle" }).isDisabled(), "Balrog result dismissal waits for the GIF to complete.");
+  await challenge.waitForTimeout(1500);
+  assert((await challenge.locator(".battle-result-modal .battle-balrog-background").count()) === 0, "Balrog result GIF disappears after one fixed-duration play.");
+  assert(!(await challenge.getByRole("button", { name: "Dismiss battle" }).isDisabled()), "Balrog result dismissal unlocks after the GIF completes.");
 
   await loadBattleStateFixture(challenge, {
     attackerScore: 7.3,
