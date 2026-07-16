@@ -109,17 +109,33 @@ export type BattleDie = {
   value: number;
 };
 
+export type BattleBlankDie = {
+  score: number;
+  unitId: string;
+  unitType: BattleUnitType;
+};
+
 export type BattleCasualty = {
   unitId: string;
   unitType: BattleUnitType;
 };
 
-export type BattleDiceRoll = {
-  attackerDice: BattleDie[];
-  defenderDice: BattleDie[];
-  attackerLosses: BattleCasualty[];
-  defenderLosses: BattleCasualty[];
-};
+export type BattleDiceRoll =
+  | {
+      attackerDice: BattleDie[];
+      attackerLosses: BattleCasualty[];
+      defenderDice: BattleDie[];
+      defenderLosses: BattleCasualty[];
+      type: "dice";
+    }
+  | {
+      attackerDice: BattleBlankDie[];
+      attackerLosses: BattleCasualty[];
+      balrogAwakened: true;
+      defenderDice: BattleBlankDie[];
+      defenderLosses: BattleCasualty[];
+      type: "balrog";
+    };
 
 export type BattleResult =
   | {

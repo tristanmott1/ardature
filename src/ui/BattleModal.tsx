@@ -1,12 +1,15 @@
 import { Check, Flag } from "lucide-react";
+import { useEffect, useState } from "react";
 import { battleGhostCount, battleTroopCounts, battleUnitScore } from "../game/gameState";
-import type { BattleDie, BattleState, BattleUnitType, GamePlayer, TroopCounts, TroopType } from "../game/gameTypes";
+import type { BattleBlankDie, BattleDie, BattleState, BattleUnitType, GamePlayer, TroopCounts, TroopType } from "../game/gameTypes";
 import type { CapturedSpyView } from "../game/gameView";
 import { ghostSoldierIconSrc, troopIconSrc, TroopIconImage } from "../game/troopIcons";
 import type { CapturedSpyToken } from "./TroopControls";
 import { TroopCountRow } from "./TroopControls";
 
 const BATTLE_TROOP_TYPES: TroopType[] = ["heavy", "cavalry", "elite", "leader"];
+const BALROG_ANIMATION_MS = 1400;
+const BALROG_GIF_SRC = `${import.meta.env.BASE_URL || "./"}balrog/balrog.gif`;
 
 const DIE_PIPS: Record<number, number[]> = {
   1: [4],
@@ -54,12 +57,16 @@ export function BattleModal({
   const attackerScore = battleUnitScore(battle.attackingUnits);
   const defenderScore = battleUnitScore(battle.defendingUnits);
   const scoresReady = attackerScore !== null && defenderScore !== null;
+  const balrogRollKey = battle.latestRoll?.type === "balrog" ? battleRollKey(battle.latestRoll) : null;
+  const [balrogAnimating, setBalrogAnimating] = useState(false);
   const message = battle.result
     ? resultMessage(battle, attacker, defender)
-    : scoresReady
+    : battle.latestRoll?.type === "balrog"
+      ? "The Balrog awoke"
+      : scoresReady
       ? ""
       : "Waiting...";
-  const canRoll = canControl && scoresReady && !battle.result;
+  const canRoll = canControl && scoresReady && !battle.result && !balrogAnimating;
   const canRetreat = canControl && battle.hasRolled && !battle.result;
   const defenderDice = displayedDice(battle.latestRoll?.defenderDice, Math.min(2, battle.defendingUnits.length));
   const attackerDice = displayedDice(battle.latestRoll?.attackerDice, Math.min(3, battle.attackingUnits.length));
@@ -67,6 +74,18 @@ export function BattleModal({
   const challengeTroops = challengePlayer.id === battle.defenderPlayerId ? defendingTroops : attackingTroops;
   const challengeGhostTroops = challengePlayer.id === battle.attackerPlayerId ? attackingGhostTroops : 0;
   const challengeSpies = challengePlayer.id === battle.defenderPlayerId ? defenderSpies : [];
+
+  useEffect(() => {
+    if (!balrogRollKey) {
+      setBalrogAnimating(false);
+      return;
+    }
+
+    setBalrogAnimating(true);
+    const timerId = window.setTimeout(() => setBalrogAnimating(false), BALROG_ANIMATION_MS);
+
+    return () => window.clearTimeout(timerId);
+  }, [balrogRollKey]);
 
   if (canChallenge) {
     return (
@@ -92,8 +111,9 @@ export function BattleModal({
     return (
       <div className="modal-scrim battle-scrim">
         <section className="modal-panel battle-modal battle-result-modal" role="dialog" aria-label="Battle result">
+          {balrogAnimating ? <BalrogBackground rollKey={balrogRollKey} /> : null}
           <p className="battle-result-message">{winner.name} defeated {loser.name}</p>
-          {battle.result.type === "attackerWon" ? (
+          {battle.result.type === "attackerWon" && !balrogAnimating ? (
             <BattleDiceRows attacker={attacker} attackerDice={attackerDice} defender={defender} defenderDice={defenderDice} />
           ) : null}
           <BattleTroops
@@ -103,7 +123,7 @@ export function BattleModal({
             spies={resultSpies}
             troops={winningTroops}
           />
-          {battle.result.type === "defenderWon" ? (
+          {battle.result.type === "defenderWon" && !balrogAnimating ? (
             <BattleDiceRows attacker={attacker} attackerDice={attackerDice} defender={defender} defenderDice={defenderDice} />
           ) : null}
           <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl} aria-label="Dismiss battle">
@@ -117,13 +137,14 @@ export function BattleModal({
   return (
     <div className="modal-scrim battle-scrim">
       <section className="modal-panel battle-modal" role="dialog" aria-label="Battle">
+        {balrogAnimating ? <BalrogBackground rollKey={balrogRollKey} /> : null}
         {message ? <p className="battle-message">{message}</p> : <p className="battle-message" aria-hidden="true">&nbsp;</p>}
         <strong className="battle-player-name">{defender.name} at {defenderTerritoryName}</strong>
         <BattleTroops player={defender} players={players} spies={defenderSpies} troops={defendingTroops} />
         <BattleScore score={defenderScore} />
         <div className="battle-dice-area">
           <button className="battle-dice-button" type="button" onClick={onRoll} disabled={!canRoll} aria-label="Roll dice">
-            <BattleDiceRows attacker={attacker} attackerDice={attackerDice} defender={defender} defenderDice={defenderDice} />
+            {balrogAnimating ? null : <BattleDiceRows attacker={attacker} attackerDice={attackerDice} defender={defender} defenderDice={defenderDice} />}
           </button>
         </div>
         <BattleScore score={attackerScore} />
@@ -141,6 +162,14 @@ export function BattleModal({
         )}
       </section>
     </div>
+  );
+}
+
+function BalrogBackground({ rollKey }: { rollKey: string | null }) {
+  return (
+    <span className="battle-balrog-background" aria-hidden="true">
+      <img alt="" key={rollKey ?? "balrog"} src={balrogAssetUrl()} />
+    </span>
   );
 }
 
@@ -168,11 +197,11 @@ function BattleScore({ score }: { score: number | null }) {
   return <span className="battle-score">{score !== null ? `${score.toFixed(1)} / 10` : "-- / 10"}</span>;
 }
 
-function displayedDice(latestDice: BattleDie[] | undefined, currentDiceCount: number) {
-  return latestDice ? [...latestDice].sort((left, right) => right.value - left.value) : emptyDice(currentDiceCount);
+function displayedDice(latestDice: Array<BattleBlankDie | BattleDie> | undefined, currentDiceCount: number) {
+  return latestDice ? [...latestDice].sort((left, right) => dieValue(right) - dieValue(left)) : emptyDice(currentDiceCount);
 }
 
-function BattleDiceRows({ attacker, attackerDice, defender, defenderDice }: { attacker: GamePlayer; attackerDice: Array<BattleDie | null>; defender: GamePlayer; defenderDice: Array<BattleDie | null> }) {
+function BattleDiceRows({ attacker, attackerDice, defender, defenderDice }: { attacker: GamePlayer; attackerDice: Array<BattleBlankDie | BattleDie | null>; defender: GamePlayer; defenderDice: Array<BattleBlankDie | BattleDie | null> }) {
   return (
     <>
       <DiceRow dice={defenderDice} label="Defender dice" player={defender} tone="defender" />
@@ -181,7 +210,7 @@ function BattleDiceRows({ attacker, attackerDice, defender, defenderDice }: { at
   );
 }
 
-function DiceRow({ dice, label, player, tone }: { dice: Array<BattleDie | null>; label: string; player: GamePlayer; tone: "attacker" | "defender" }) {
+function DiceRow({ dice, label, player, tone }: { dice: Array<BattleBlankDie | BattleDie | null>; label: string; player: GamePlayer; tone: "attacker" | "defender" }) {
   return (
     <div className="battle-dice-row" aria-label={label}>
       {dice.map((die, index) => (
@@ -191,12 +220,12 @@ function DiceRow({ dice, label, player, tone }: { dice: Array<BattleDie | null>;
   );
 }
 
-function Die({ die, player, tone }: { die: BattleDie | null; player: GamePlayer; tone: "attacker" | "defender" }) {
-  const face = die?.value ?? null;
+function Die({ die, player, tone }: { die: BattleBlankDie | BattleDie | null; player: GamePlayer; tone: "attacker" | "defender" }) {
+  const face = die && "value" in die ? die.value : null;
   const positions = face ? DIE_PIPS[face] : [];
 
   return (
-    <span className={`battle-die battle-die-${tone}`} data-empty={face === null ? "true" : undefined}>
+    <span className={`battle-die battle-die-${tone}`} data-balrog={die && !("value" in die) ? "true" : undefined} data-empty={face === null ? "true" : undefined}>
       {die ? <BattleDieUnitIcon player={player} unitType={die.unitType} /> : null}
       {Array.from({ length: 9 }, (_, index) => (
         <span className={positions.includes(index) ? `battle-pip p${index} visible` : `battle-pip p${index}`} key={index} />
@@ -217,6 +246,28 @@ function BattleDieUnitIcon({ player, unitType }: { player: GamePlayer; unitType:
 
 function emptyDice(count: number) {
   return Array.from({ length: count }, () => null);
+}
+
+function dieValue(die: BattleBlankDie | BattleDie) {
+  return "value" in die ? die.value : 0;
+}
+
+function battleRollKey(roll: NonNullable<BattleState["latestRoll"]>) {
+  return [
+    roll.type,
+    ...roll.attackerDice.map((die) => die.unitId),
+    ...roll.defenderDice.map((die) => die.unitId),
+    ...roll.attackerLosses.map((loss) => loss.unitId),
+    ...roll.defenderLosses.map((loss) => loss.unitId),
+  ].join("|");
+}
+
+function balrogAssetUrl() {
+  if (typeof window === "undefined") {
+    return BALROG_GIF_SRC;
+  }
+
+  return new URL(BALROG_GIF_SRC, window.location.href).toString();
 }
 
 function resultMessage(battle: BattleState, attacker: GamePlayer, defender: GamePlayer) {

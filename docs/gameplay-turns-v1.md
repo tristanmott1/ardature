@@ -420,6 +420,20 @@ Sample one integer uniformly from every value in `[-G, G]`.
 - If the attacker retreats, all ghost soldiers disappear.
 - If the attacker wins, surviving ghost soldiers appear in the attacker victory result row and then disappear when the battle result is dismissed. They never occupy Lamedon in the post-battle map state.
 
+If the locked target is `Moria`, every roll attempt may awaken the Balrog after dice units are selected but before dice values are rolled. Let:
+
+```text
+P(Balrog) = (attacker dice count + defender dice count) / 20
+```
+
+- If the Balrog does not awaken, the roll proceeds normally.
+- If the Balrog awakens, no dice values are rolled.
+- The selected dice units from both sides die immediately, including leaders.
+- The event counts as a roll, so retreat becomes available if the battle continues.
+- If exactly one side has no surviving units afterward, the other side wins normally.
+- If both sides would have no surviving units afterward, choose one random survivor from the defending dice units. The defender wins, and that single defending troop is the only occupying force.
+- The latest roll is stored as a Balrog roll with blank dice tied to the selected unit ids, not as fake die values.
+
 ### Authoritative Battle State
 
 Confirmed battle state is authoritative game state, not local presentation state.
@@ -433,12 +447,10 @@ The battle state must include:
 - target territory id
 - committed attacking troop counts
 - defender troop counts at lock
-- current surviving attacking troop counts
-- current battle-only attacking ghost soldier count
-- current surviving defending troop counts
-- attacker score, once submitted or computed
-- defender score, once submitted or computed
-- latest dice roll, if any
+- current surviving attacking battle units
+- current surviving defending battle units
+- each unit's fixed personal score, once submitted or computed
+- latest normal or Balrog roll, if any
 - Paths of the Dead pre-battle swing, if any
 - whether at least one roll has happened
 - terminal result, if the battle has ended
@@ -463,7 +475,9 @@ While the battle is active, the modal layout is a fixed vertical stack: reserved
 
 Battle unit rows follow the shared known-content icon contract. They show troop types with counts greater than zero plus captured spies present with that battle force. The attacker row also shows battle-only ghost soldiers when Paths of the Dead added them. The visible icons keep the normal compact icon size and recenter. If a side has no troops after the battle ends, that row renders no troop icons but still reserves the same vertical row space.
 
-Both sides' current battle troop breakdowns are visible during the battle. Everyone who can see the battle modal sees the same battle contents, captured spies present with the battle forces, and which troop types die. Captured spies are not battle units, casualties, or dice candidates. The modal shows the latest roll only, not a full roll history. The latest roll always shows exactly the dice that were rolled, sorted highest to lowest from left to right for both attacker and defender. Each rolled die shows the troop or ghost unit that rolled it. Casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
+Both sides' current battle troop breakdowns are visible during the battle. Everyone who can see the battle modal sees the same battle contents, captured spies present with the battle forces, and which troop types die. Captured spies are not battle units, casualties, or dice candidates. The modal shows the latest roll only, not a full roll history. The latest normal roll always shows exactly the dice that were rolled, sorted highest to lowest from left to right for both attacker and defender. Each rolled die shows the troop or ghost unit that rolled it. Casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
+
+When the latest roll is a Balrog roll, the message row says `The Balrog awoke`. The Balrog GIF at `public/balrog/balrog.gif` fills the full modal background at 50% opacity for `1400ms`; it uses cover-style sizing, may bleed beyond the modal bounds, and is clipped by the modal. During that animation, dice are hidden. Afterward, the selected dice return as black blank dice with troop badges and no pips.
 
 In sync mode:
 

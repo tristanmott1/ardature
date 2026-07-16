@@ -10,6 +10,7 @@ import type {
   ArmyMarker,
   AppPhase,
   AttackStyle,
+  BattleBlankDie,
   BattleCasualty,
   BattleDie,
   BattleState,
@@ -69,6 +70,7 @@ const REGION_REINFORCEMENTS = {
 const REGION_IDS = Object.keys(REGION_REINFORCEMENTS);
 const EDORAS_ID = "edoras";
 const LAMEDON_ID = "lamedon";
+const MORIA_ID = "moria";
 const PATHS_OF_THE_DEAD_OPEN_AT = 4;
 
 export function createInitialGameState(): GameState {
@@ -1287,6 +1289,13 @@ export function rollBattle(state: GameState, playerId: string, battleId: string,
 
   const attackerDiceUnits = selectBattleDiceUnits(battle.attackingUnits, Math.min(3, battle.attackingUnits.length), "attacker", random);
   const defenderDiceUnits = selectBattleDiceUnits(battle.defendingUnits, Math.min(2, battle.defendingUnits.length), "defender", random);
+  const balrogAwakens = battle.targetTerritoryId === MORIA_ID &&
+    random() < (attackerDiceUnits.length + defenderDiceUnits.length) / 20;
+
+  if (balrogAwakens) {
+    return resolveBalrogRoll(state, turn, battle, allocation, attackerDiceUnits, defenderDiceUnits, random);
+  }
+
   const attackerDice = rollBattleDice(attackerDiceUnits, "attacker", random);
   const defenderDice = rollBattleDice(defenderDiceUnits, "defender", random);
   const comparisonCount = Math.min(attackerDice.length, defenderDice.length);
@@ -1319,6 +1328,7 @@ export function rollBattle(state: GameState, playerId: string, battleId: string,
       defenderDice,
       attackerLosses: attackerCasualties.losses,
       defenderLosses: defenderCasualties.losses,
+      type: "dice" as const,
     },
     hasRolled: true,
     result: defenderCasualties.units.length === 0
@@ -1355,6 +1365,63 @@ function selectBattleDiceUnits(units: BattleUnit[], count: number, role: "attack
     : selectedGhosts;
 }
 
+function resolveBalrogRoll(
+  state: GameState,
+  turn: TurnState,
+  battle: BattleState,
+  allocation: AllocationState,
+  attackerDiceUnits: BattleUnit[],
+  defenderDiceUnits: BattleUnit[],
+  random: () => number,
+) {
+  const attackerDice = blankBattleDice(attackerDiceUnits);
+  const defenderDice = blankBattleDice(defenderDiceUnits);
+  const attackerDestroyed = battle.attackingUnits.every((unit) => attackerDice.some((die) => die.unitId === unit.id));
+  const defenderDestroyed = battle.defendingUnits.every((unit) => defenderDice.some((die) => die.unitId === unit.id));
+  const defenderSurvivor = attackerDestroyed && defenderDestroyed
+    ? sampleUnits(defenderDice, 1, random)[0] ?? null
+    : null;
+  const attackerCasualties = resolveBalrogCasualties(battle.attackingUnits, attackerDice, null);
+  const defenderCasualties = resolveBalrogCasualties(battle.defendingUnits, defenderDice, defenderSurvivor?.unitId ?? null);
+  const nextAllocation = applyBattleCasualtiesToAllocation(
+    applyBattleCasualtiesToAllocation(allocation, battle.attackerPlayerId, battle.sourceTerritoryId, attackerCasualties.losses),
+    battle.defenderPlayerId,
+    battle.targetTerritoryId,
+    defenderCasualties.losses,
+  );
+  const rolledBattle = {
+    ...battle,
+    attackingUnits: attackerCasualties.units,
+    defendingUnits: defenderCasualties.units,
+    latestRoll: {
+      attackerDice,
+      attackerLosses: attackerCasualties.losses,
+      balrogAwakened: true as const,
+      defenderDice,
+      defenderLosses: defenderCasualties.losses,
+      type: "balrog" as const,
+    },
+    hasRolled: true,
+    result: defenderCasualties.units.length === 0
+      ? { type: "attackerWon" as const }
+      : attackerCasualties.units.length === 0
+        ? { type: "defenderWon" as const }
+        : null,
+  };
+  const rolledState = {
+    ...state,
+    allocation: nextAllocation,
+    turn: {
+      ...turn,
+      battle: rolledBattle,
+    },
+  };
+
+  return rolledBattle.result?.type === "attackerWon"
+    ? finishBattleConquest(rolledState, rolledBattle)
+    : rolledState;
+}
+
 function rollBattleDice(units: BattleUnit[], role: "attacker" | "defender", random: () => number): BattleDie[] {
   return units
     .filter((unit): unit is BattleUnit & { score: number } => unit.score !== null)
@@ -1365,6 +1432,36 @@ function rollBattleDice(units: BattleUnit[], role: "attacker" | "defender", rand
       value: rollCombatDie(unit.score, role, random),
     }))
     .sort((left, right) => right.value - left.value);
+}
+
+function blankBattleDice(units: BattleUnit[]): BattleBlankDie[] {
+  return units
+    .filter((unit): unit is BattleUnit & { score: number } => unit.score !== null)
+    .map((unit) => ({
+      score: unit.score,
+      unitId: unit.id,
+      unitType: unit.type,
+    }));
+}
+
+function resolveBalrogCasualties(units: BattleUnit[], dice: BattleBlankDie[], survivorUnitId: string | null) {
+  const losses: BattleCasualty[] = [];
+  const lostIds = new Set<string>();
+
+  // The Balrog takes selected dice units directly, leaders included.
+  for (const die of dice) {
+    if (die.unitId === survivorUnitId) {
+      continue;
+    }
+
+    losses.push({ unitId: die.unitId, unitType: die.unitType });
+    lostIds.add(die.unitId);
+  }
+
+  return {
+    losses,
+    units: units.filter((unit) => !lostIds.has(unit.id)),
+  };
 }
 
 function resolveBattleCasualties(units: BattleUnit[], dice: BattleDie[], lossCount: number, random: () => number) {
@@ -3747,11 +3844,23 @@ function normalizeBattleRoll(value: unknown) {
     return null;
   }
 
+  if (roll.type === "balrog" && roll.balrogAwakened === true) {
+    return {
+      attackerDice: normalizeBattleBlankDice(roll.attackerDice),
+      attackerLosses: normalizeBattleCasualties(roll.attackerLosses),
+      balrogAwakened: true as const,
+      defenderDice: normalizeBattleBlankDice(roll.defenderDice),
+      defenderLosses: normalizeBattleCasualties(roll.defenderLosses),
+      type: "balrog" as const,
+    };
+  }
+
   return {
     attackerDice: normalizeBattleDice(roll.attackerDice),
-    defenderDice: normalizeBattleDice(roll.defenderDice),
     attackerLosses: normalizeBattleCasualties(roll.attackerLosses),
+    defenderDice: normalizeBattleDice(roll.defenderDice),
     defenderLosses: normalizeBattleCasualties(roll.defenderLosses),
+    type: "dice" as const,
   };
 }
 
@@ -3770,6 +3879,23 @@ function normalizeBattleDie(value: unknown) {
     unitId: die.unitId,
     unitType: die.unitType,
     value: die.value,
+  };
+}
+
+function normalizeBattleBlankDice(value: unknown[]) {
+  return value.map(normalizeBattleBlankDie).filter((die): die is BattleBlankDie => Boolean(die)).slice(0, 3);
+}
+
+function normalizeBattleBlankDie(value: unknown) {
+  const die = value as Partial<BattleBlankDie>;
+  if (!die || typeof die !== "object" || typeof die.unitId !== "string" || !isBattleUnitType(die.unitType)) {
+    return null;
+  }
+
+  return {
+    score: finiteScore(die.score) ?? 0,
+    unitId: die.unitId,
+    unitType: die.unitType,
   };
 }
 
