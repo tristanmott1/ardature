@@ -1328,6 +1328,7 @@ export function rollBattle(state: GameState, playerId: string, battleId: string,
       defenderDice,
       attackerLosses: attackerCasualties.losses,
       defenderLosses: defenderCasualties.losses,
+      id: nextBattleRollId(battle),
       type: "dice" as const,
     },
     hasRolled: true,
@@ -1399,6 +1400,7 @@ function resolveBalrogRoll(
       balrogAwakened: true as const,
       defenderDice,
       defenderLosses: defenderCasualties.losses,
+      id: nextBattleRollId(battle),
       type: "balrog" as const,
     },
     hasRolled: true,
@@ -1432,6 +1434,13 @@ function rollBattleDice(units: BattleUnit[], role: "attacker" | "defender", rand
       value: rollCombatDie(unit.score, role, random),
     }))
     .sort((left, right) => right.value - left.value);
+}
+
+function nextBattleRollId(battle: BattleState) {
+  const previousId = battle.latestRoll?.id ?? "";
+  const previousIndex = Number(previousId.slice(previousId.lastIndexOf("-") + 1));
+
+  return `${battle.id}-roll-${Number.isFinite(previousIndex) ? previousIndex + 1 : 1}`;
 }
 
 function blankBattleDice(units: BattleUnit[]): BattleBlankDie[] {
@@ -3851,6 +3860,7 @@ function normalizeBattleRoll(value: unknown) {
       balrogAwakened: true as const,
       defenderDice: normalizeBattleBlankDice(roll.defenderDice),
       defenderLosses: normalizeBattleCasualties(roll.defenderLosses),
+      id: typeof roll.id === "string" ? roll.id : "normalized-balrog-roll",
       type: "balrog" as const,
     };
   }
@@ -3860,6 +3870,7 @@ function normalizeBattleRoll(value: unknown) {
     attackerLosses: normalizeBattleCasualties(roll.attackerLosses),
     defenderDice: normalizeBattleDice(roll.defenderDice),
     defenderLosses: normalizeBattleCasualties(roll.defenderLosses),
+    id: typeof roll.id === "string" ? roll.id : "normalized-dice-roll",
     type: "dice" as const,
   };
 }

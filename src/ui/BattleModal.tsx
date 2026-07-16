@@ -1,5 +1,6 @@
 import { Check, Flag } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { battleGhostCount, battleTroopCounts, battleUnitScore } from "../game/gameState";
 import type { BattleBlankDie, BattleDie, BattleState, GamePlayer, TroopCounts, TroopType } from "../game/gameTypes";
 import type { CapturedSpyView } from "../game/gameView";
@@ -57,7 +58,7 @@ export function BattleModal({
   const attackerScore = battleUnitScore(battle.attackingUnits);
   const defenderScore = battleUnitScore(battle.defendingUnits);
   const scoresReady = attackerScore !== null && defenderScore !== null;
-  const balrogRollKey = battle.latestRoll?.type === "balrog" ? battleRollKey(battle.latestRoll) : null;
+  const balrogRollKey = battle.latestRoll?.type === "balrog" ? battle.latestRoll.id : null;
   const [completedBalrogRollKey, setCompletedBalrogRollKey] = useState<string | null>(null);
   const balrogAnimating = balrogRollKey !== null && completedBalrogRollKey !== balrogRollKey;
   const message = battle.result
@@ -106,57 +107,62 @@ export function BattleModal({
       : defenderSpies;
 
     return (
-      <div className="modal-scrim battle-scrim">
-        <section className="modal-panel battle-modal battle-result-modal" role="dialog" aria-label="Battle result">
-          {balrogAnimating ? <BalrogBackground rollKey={balrogRollKey} /> : null}
-          <p className="battle-result-message">{winner.name} defeated {loser.name}</p>
-          {battle.result.type === "attackerWon" ? (
-            <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
-          ) : null}
-          <BattleTroops
-            ghostTroops={battle.result.type === "attackerWon" ? attackingGhostTroops : 0}
-            player={winner}
-            players={players}
-            spies={resultSpies}
-            troops={winningTroops}
-          />
-          {battle.result.type === "defenderWon" ? (
-            <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
-          ) : null}
-          <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl || balrogAnimating} aria-label="Dismiss battle">
-            <Check size={20} />
-          </button>
-        </section>
-      </div>
+      <BattleModalFrame ariaLabel="Battle result" balrogAnimating={balrogAnimating} balrogRollKey={balrogRollKey} className="battle-result-modal">
+        <p className="battle-result-message">{winner.name} defeated {loser.name}</p>
+        {battle.result.type === "attackerWon" ? (
+          <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
+        ) : null}
+        <BattleTroops
+          ghostTroops={battle.result.type === "attackerWon" ? attackingGhostTroops : 0}
+          player={winner}
+          players={players}
+          spies={resultSpies}
+          troops={winningTroops}
+        />
+        {battle.result.type === "defenderWon" ? (
+          <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
+        ) : null}
+        <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl || balrogAnimating} aria-label="Dismiss battle">
+          <Check size={20} />
+        </button>
+      </BattleModalFrame>
     );
   }
 
   return (
+    <BattleModalFrame ariaLabel="Battle" balrogAnimating={balrogAnimating} balrogRollKey={balrogRollKey}>
+      {message ? <p className="battle-message">{message}</p> : <p className="battle-message" aria-hidden="true">&nbsp;</p>}
+      <strong className="battle-player-name">{defender.name} at {defenderTerritoryName}</strong>
+      <BattleTroops player={defender} players={players} spies={defenderSpies} troops={defendingTroops} />
+      <BattleScore score={defenderScore} />
+      <div className="battle-dice-area">
+        <button className="battle-dice-button" type="button" onClick={onRoll} disabled={!canRoll} aria-label="Roll dice">
+          <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
+        </button>
+      </div>
+      <BattleScore score={attackerScore} />
+      <BattleTroops ghostTroops={attackingGhostTroops} player={attacker} players={players} troops={attackingTroops} />
+      <strong className="battle-player-name">{attacker.name} at {attackerTerritoryName}</strong>
+      {battle.result ? (
+        <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl} aria-label="Dismiss battle">
+          <Check size={20} />
+        </button>
+      ) : (
+        <button className="secondary icon-text-button wide-button" type="button" onClick={onRetreat} disabled={!canRetreat}>
+          <Flag size={18} />
+          Retreat
+        </button>
+      )}
+    </BattleModalFrame>
+  );
+}
+
+function BattleModalFrame({ ariaLabel, balrogAnimating, balrogRollKey, children, className = "" }: { ariaLabel: string; balrogAnimating: boolean; balrogRollKey: string | null; children: ReactNode; className?: string }) {
+  return (
     <div className="modal-scrim battle-scrim">
-      <section className="modal-panel battle-modal" role="dialog" aria-label="Battle">
+      <section className={`modal-panel battle-modal ${className}`.trim()} role="dialog" aria-label={ariaLabel}>
         {balrogAnimating ? <BalrogBackground rollKey={balrogRollKey} /> : null}
-        {message ? <p className="battle-message">{message}</p> : <p className="battle-message" aria-hidden="true">&nbsp;</p>}
-        <strong className="battle-player-name">{defender.name} at {defenderTerritoryName}</strong>
-        <BattleTroops player={defender} players={players} spies={defenderSpies} troops={defendingTroops} />
-        <BattleScore score={defenderScore} />
-        <div className="battle-dice-area">
-          <button className="battle-dice-button" type="button" onClick={onRoll} disabled={!canRoll} aria-label="Roll dice">
-            <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
-          </button>
-        </div>
-        <BattleScore score={attackerScore} />
-        <BattleTroops ghostTroops={attackingGhostTroops} player={attacker} players={players} troops={attackingTroops} />
-        <strong className="battle-player-name">{attacker.name} at {attackerTerritoryName}</strong>
-        {battle.result ? (
-          <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl} aria-label="Dismiss battle">
-            <Check size={20} />
-          </button>
-        ) : (
-          <button className="secondary icon-text-button wide-button" type="button" onClick={onRetreat} disabled={!canRetreat}>
-            <Flag size={18} />
-            Retreat
-          </button>
-        )}
+        {children}
       </section>
     </div>
   );
@@ -236,16 +242,6 @@ function emptyDice(count: number) {
 
 function dieValue(die: BattleBlankDie | BattleDie) {
   return "value" in die ? die.value : 0;
-}
-
-function battleRollKey(roll: NonNullable<BattleState["latestRoll"]>) {
-  return [
-    roll.type,
-    ...roll.attackerDice.map((die) => die.unitId),
-    ...roll.defenderDice.map((die) => die.unitId),
-    ...roll.attackerLosses.map((loss) => loss.unitId),
-    ...roll.defenderLosses.map((loss) => loss.unitId),
-  ].join("|");
 }
 
 function balrogAssetUrl() {

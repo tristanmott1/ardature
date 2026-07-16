@@ -126,6 +126,7 @@ export type BattleDiceRoll =
       attackerLosses: BattleCasualty[];
       defenderDice: BattleDie[];
       defenderLosses: BattleCasualty[];
+      id: string;
       type: "dice";
     }
   | {
@@ -134,6 +135,7 @@ export type BattleDiceRoll =
       balrogAwakened: true;
       defenderDice: BattleBlankDie[];
       defenderLosses: BattleCasualty[];
+      id: string;
       type: "balrog";
     };
 

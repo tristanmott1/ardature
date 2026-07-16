@@ -387,12 +387,12 @@ async function runSourceChecks() {
   assert(gameStateSource.includes("function canSelectAttackTargetTerritory") && appSource.includes("canSelectAttackTargetTerritory(game") && !appSource.includes("completedAttacks.includes(`${attackSetup.sourceTerritoryId}->${territoryId}`)"), "Attack target selection and hints use one completed-pair helper.");
   assert(gameTypesSource.includes("BattleState") && gameTypesSource.includes('type: "commitAttack"') && gameTypesSource.includes('type: "submitBattleScore"') && gameTypesSource.includes('type: "rollBattle"'), "Turn commands include locked battle actions.");
   assert(gameTypesSource.includes("committedAttackingTroops: TroopCounts") && gameTypesSource.includes("initialDefendingTroops: TroopCounts") && gameTypesSource.includes("attackingUnits: BattleUnit[]") && gameTypesSource.includes("defendingUnits: BattleUnit[]") && gameTypesSource.includes("unitId: string") && gameTypesSource.includes("unitType: BattleUnitType"), "Battle state preserves locked original troop counts and current survivor units.");
-  assert(gameTypesSource.includes('type: "dice"') && gameTypesSource.includes('type: "balrog"') && gameTypesSource.includes("balrogAwakened: true") && gameTypesSource.includes("BattleBlankDie"), "Battle latest-roll state distinguishes normal dice rolls from Balrog blank dice.");
+  assert(gameTypesSource.includes('type: "dice"') && gameTypesSource.includes('type: "balrog"') && gameTypesSource.includes("balrogAwakened: true") && gameTypesSource.includes("BattleBlankDie") && gameTypesSource.includes("id: string;"), "Battle latest-roll state distinguishes normal dice rolls from Balrog blank dice with stable roll ids.");
   assert(syncMessagesSource.includes('command.type === "commitAttack"') && syncMessagesSource.includes('command.type === "rollBattle"') && syncMessagesSource.includes('command.type === "retreatBattle"'), "Sync message validation covers battle commands.");
   assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)") && battleModalSource.includes("/ 10") && battleModalSource.includes("defeated") && battleModalSource.includes("battle-pip"), "Battle modal renders pip dice, retreat, result text, and one-decimal scores out of ten.");
   assert(battleModalSource.includes("function BattleDiceRows") && battleModalSource.includes("latestDice ? [...latestDice].sort") && !battleModalSource.includes("BattleDieUnitIcon") && !stylesSource.includes(".battle-die-unit") && battleModalSource.includes('battle.result.type === "attackerWon"') && battleModalSource.includes('battle.result.type === "defenderWon"'), "Battle modal displays sorted dice without troop-icon badges and keeps final dice in victory layouts.");
   assert(gameStateSource.includes('const MORIA_ID = "moria"') && gameStateSource.includes("battle.targetTerritoryId === MORIA_ID") && gameStateSource.includes("(attackerDiceUnits.length + defenderDiceUnits.length) / 20") && gameStateSource.includes("function resolveBalrogRoll") && gameStateSource.includes("function resolveBalrogCasualties"), "Moria battle rolls check Balrog probability before rolling dice and resolve direct selected-unit casualties.");
-  assert(battleModalSource.includes("BALROG_ANIMATION_MS = 1400") && battleModalSource.includes("balrog/balrog.gif") && battleModalSource.includes("battle-balrog-background") && battleModalSource.includes("completedBalrogRollKey !== balrogRollKey") && stylesSource.includes("opacity: 0.5") && stylesSource.includes("object-fit: cover") && serviceWorkerSource.includes("./balrog/balrog.gif"), "Balrog modal UI uses the precached GIF as an immediate 50% opacity cover background.");
+  assert(battleModalSource.includes("BALROG_ANIMATION_MS = 1400") && battleModalSource.includes("balrog/balrog.gif") && battleModalSource.includes("battle-balrog-background") && battleModalSource.includes("battle.latestRoll.id") && battleModalSource.includes("function BattleModalFrame") && battleModalSource.includes("completedBalrogRollKey !== balrogRollKey") && stylesSource.includes("opacity: 0.5") && stylesSource.includes("object-fit: cover") && serviceWorkerSource.includes("./balrog/balrog.gif"), "Balrog modal UI uses one stable roll id and shared frame for the immediate 50% opacity cover background.");
   assert(gameTypesSource.includes("export type PendingResolution") && gameTypesSource.includes("export type HostTransferState") && gameStateSource.includes("function confirmPendingElimination") && gameStateSource.includes("function restartVictoryGameToSetup") && gameStateSource.includes("function transferHostAuthority"), "Game state has explicit pending elimination, victory restart, and host-transfer helpers.");
   assert(gameViewSource.includes('type: "elimination"') && gameViewSource.includes('type: "victory"') && overlaysSource.includes("function EliminationDialog") && overlaysSource.includes("function VictoryDialog"), "Elimination and victory render through explicit overlay types.");
   assert(!gameStateSource.includes("markDeadSpiesForEliminatedPlayers") && gameStateSource.includes("beginPostBattleResolution") && gameStateSource.includes("killPlayerSpy"), "Conquest does not silently kill eliminated spies before the elimination confirmation.");
@@ -3222,6 +3222,7 @@ function battleFixtureRoll(latestRoll, attackingUnits, defendingUnits) {
       balrogAwakened: true,
       defenderDice: battleFixtureBlankDice(latestRoll.defenderDice ?? [], defendingUnits),
       defenderLosses: battleFixtureCasualties(latestRoll.defenderLosses, "defender"),
+      id: latestRoll.id ?? "fixture-balrog-roll",
       type: "balrog",
     };
   }
@@ -3231,6 +3232,7 @@ function battleFixtureRoll(latestRoll, attackingUnits, defendingUnits) {
     attackerLosses: battleFixtureCasualties(latestRoll.attackerLosses, "attacker"),
     defenderDice: battleFixtureDice(latestRoll.defenderDice ?? [], defendingUnits),
     defenderLosses: battleFixtureCasualties(latestRoll.defenderLosses, "defender"),
+    id: latestRoll.id ?? "fixture-dice-roll",
     type: "dice",
   };
 }
