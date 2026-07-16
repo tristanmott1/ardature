@@ -121,11 +121,13 @@ export type BattleState = {
   committedAttackingTroops: TroopCounts;
   initialDefendingTroops: TroopCounts;
   attackingTroops: TroopCounts;
+  attackingGhostTroops: number;
   defendingTroops: TroopCounts;
   attackerScore: number | null;
   defenderScore: number | null;
   latestRoll: BattleDiceRoll | null;
   hasRolled: boolean;
+  pathsOfTheDeadSwing: number | null;
   releasedAttackerSpy: boolean;
   result: BattleResult | null;
 };

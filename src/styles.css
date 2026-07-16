@@ -1292,7 +1292,7 @@ select {
 }
 
 .battle-challenge-modal {
-  width: min(260px, calc(100vw - 48px));
+  width: min(360px, calc(100vw - 32px));
 }
 
 .battle-result-modal {
@@ -1309,10 +1309,16 @@ select {
 }
 
 .battle-troops {
-  display: grid;
-  justify-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
   min-height: 54px;
   align-items: center;
+}
+
+.battle-troops > .troop-count-row {
+  display: contents;
 }
 
 .battle-player-name,

@@ -63,6 +63,9 @@ const REGION_REINFORCEMENTS = {
   mordor: createTroopCounts({ heavy: 3 }),
 } as const;
 const REGION_IDS = Object.keys(REGION_REINFORCEMENTS);
+const EDORAS_ID = "edoras";
+const LAMEDON_ID = "lamedon";
+const PATHS_OF_THE_DEAD_OPEN_AT = 4;
 
 export function createInitialGameState(): GameState {
   return {
@@ -316,6 +319,10 @@ export function createTroopCounts(values: Partial<TroopCounts> = {}): TroopCount
 
 export function troopTotal(counts: TroopCounts) {
   return counts.heavy + counts.cavalry + counts.elite + counts.leader;
+}
+
+function attackingBattleTotal(battle: Pick<BattleState, "attackingGhostTroops" | "attackingTroops">) {
+  return troopTotal(battle.attackingTroops) + battle.attackingGhostTroops;
 }
 
 export function addTroops(left: TroopCounts, right: TroopCounts): TroopCounts {
@@ -1065,20 +1072,44 @@ export function canCommitAttack(state: GameState, playerId: string, sourceTerrit
     validTroopCounts(leftBehind);
 }
 
-export function commitAttack(state: GameState, playerId: string, sourceTerritoryId: string, targetTerritoryId: string, attackingTroops: TroopCounts): GameState {
+export function commitAttack(state: GameState, playerId: string, sourceTerritoryId: string, targetTerritoryId: string, attackingTroops: TroopCounts, random = Math.random): GameState {
   const turn = state.turn;
   const ownership = state.draft?.ownership;
+  const allocation = state.allocation;
   const defenderPlayerId = ownership?.[targetTerritoryId] ?? null;
 
-  if (!turn || !defenderPlayerId || !canCommitAttack(state, playerId, sourceTerritoryId, targetTerritoryId, attackingTroops)) {
+  if (!turn || !allocation || !defenderPlayerId || !canCommitAttack(state, playerId, sourceTerritoryId, targetTerritoryId, attackingTroops)) {
     return state;
   }
 
   const defendingTroops = territoryTroops(state.allocation, targetTerritoryId);
   const usesChallenge = state.config.attackStyle === "challenge";
+  const pathsSwing = pathsOfTheDeadAttackSwing(state, sourceTerritoryId, targetTerritoryId, attackingTroops, random);
+  let nextAllocation = allocation;
+  let nextAttackingTroops = createTroopCounts(attackingTroops);
+  let attackingGhostTroops = 0;
+
+  if (pathsSwing !== null && pathsSwing < 0) {
+    for (let index = 0; index < Math.abs(pathsSwing); index += 1) {
+      const casualty = sampleCasualty(nextAttackingTroops, random);
+      if (!casualty) {
+        break;
+      }
+
+      nextAttackingTroops = subtractOneTroop(nextAttackingTroops, casualty);
+      nextAllocation = adjustCommittedTerritoryTroop(nextAllocation, playerId, sourceTerritoryId, casualty, -1);
+    }
+  }
+
+  if (pathsSwing !== null && pathsSwing > 0) {
+    attackingGhostTroops = pathsSwing;
+  }
+
+  const attackersDestroyed = troopTotal(nextAttackingTroops) === 0;
 
   return {
     ...state,
+    allocation: nextAllocation,
     turn: {
       ...turn,
       stage: "battle",
@@ -1093,14 +1124,16 @@ export function commitAttack(state: GameState, playerId: string, sourceTerritory
         targetTerritoryId,
         committedAttackingTroops: createTroopCounts(attackingTroops),
         initialDefendingTroops: createTroopCounts(defendingTroops),
-        attackingTroops: createTroopCounts(attackingTroops),
+        attackingTroops: nextAttackingTroops,
+        attackingGhostTroops,
         defendingTroops: createTroopCounts(defendingTroops),
-        attackerScore: usesChallenge ? null : combatScoreForTroops(attackingTroops),
+        attackerScore: attackersDestroyed ? 0 : usesChallenge ? null : combatScoreForTroops(nextAttackingTroops),
         defenderScore: usesChallenge && state.mode === "sync" ? null : combatScoreForTroops(defendingTroops),
         latestRoll: null,
         hasRolled: false,
+        pathsOfTheDeadSwing: pathsSwing,
         releasedAttackerSpy: false,
-        result: null,
+        result: attackersDestroyed ? { type: "defenderWon" } : null,
       },
       completedAttacks: [
         ...turn.completedAttacks,
@@ -1147,6 +1180,21 @@ export function submitBattleScore(state: GameState, playerId: string, battleId: 
   return state;
 }
 
+function pathsOfTheDeadAttackSwing(state: GameState, sourceTerritoryId: string, targetTerritoryId: string, attackingTroops: TroopCounts, random: () => number) {
+  if (sourceTerritoryId !== EDORAS_ID || targetTerritoryId !== LAMEDON_ID || state.pathsOfTheDeadState === null) {
+    return null;
+  }
+
+  const pathsState = Math.max(1, Math.min(6, Math.round(state.pathsOfTheDeadState)));
+  if (pathsState < PATHS_OF_THE_DEAD_OPEN_AT) {
+    return null;
+  }
+
+  const swingLimit = Math.min(troopTotal(attackingTroops), pathsState - (PATHS_OF_THE_DEAD_OPEN_AT - 1));
+  const swingRange = swingLimit * 2 + 1;
+  return Math.floor(random() * swingRange) - swingLimit;
+}
+
 export function rollBattle(state: GameState, playerId: string, battleId: string, random = Math.random): GameState {
   const turn = state.turn;
   const battle = turn?.battle;
@@ -1166,12 +1214,13 @@ export function rollBattle(state: GameState, playerId: string, battleId: string,
     return state;
   }
 
-  const attackerDice = rollCombatDice(battle.attackerScore, "attacker", Math.min(3, troopTotal(battle.attackingTroops)), random);
+  const attackerDice = rollCombatDice(battle.attackerScore, "attacker", Math.min(3, attackingBattleTotal(battle)), random);
   const defenderDice = rollCombatDice(battle.defenderScore, "defender", Math.min(2, troopTotal(battle.defendingTroops)), random);
   const comparisonCount = Math.min(attackerDice.length, defenderDice.length);
   const attackerLosses: TroopType[] = [];
   const defenderLosses: TroopType[] = [];
   let attackingTroops = battle.attackingTroops;
+  let attackingGhostTroops = battle.attackingGhostTroops;
   let defendingTroops = battle.defendingTroops;
   let nextAllocation = allocation;
 
@@ -1185,11 +1234,15 @@ export function rollBattle(state: GameState, playerId: string, battleId: string,
         nextAllocation = adjustCommittedTerritoryTroop(nextAllocation, battle.defenderPlayerId, battle.targetTerritoryId, casualty, -1);
       }
     } else {
-      const casualty = sampleCasualty(attackingTroops, random);
-      if (casualty) {
-        attackerLosses.push(casualty);
-        attackingTroops = subtractOneTroop(attackingTroops, casualty);
-        nextAllocation = adjustCommittedTerritoryTroop(nextAllocation, battle.attackerPlayerId, battle.sourceTerritoryId, casualty, -1);
+      if (attackingGhostTroops > 0) {
+        attackingGhostTroops -= 1;
+      } else {
+        const casualty = sampleCasualty(attackingTroops, random);
+        if (casualty) {
+          attackerLosses.push(casualty);
+          attackingTroops = subtractOneTroop(attackingTroops, casualty);
+          nextAllocation = adjustCommittedTerritoryTroop(nextAllocation, battle.attackerPlayerId, battle.sourceTerritoryId, casualty, -1);
+        }
       }
     }
   }
@@ -1197,6 +1250,7 @@ export function rollBattle(state: GameState, playerId: string, battleId: string,
   const rolledBattle = {
     ...battle,
     attackingTroops,
+    attackingGhostTroops,
     defendingTroops,
     latestRoll: {
       attackerDice,
@@ -1207,7 +1261,7 @@ export function rollBattle(state: GameState, playerId: string, battleId: string,
     hasRolled: true,
     result: troopTotal(defendingTroops) === 0
       ? { type: "attackerWon" as const }
-      : troopTotal(attackingTroops) === 0
+      : troopTotal(attackingTroops) + attackingGhostTroops === 0
         ? { type: "defenderWon" as const }
         : null,
   };
@@ -3207,7 +3261,7 @@ function normalizeCaradhrasPassState(value: unknown) {
 
 function normalizePathsOfTheDeadState(value: unknown) {
   return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(1, Math.min(5, Math.round(value)))
+    ? Math.max(1, Math.min(6, Math.round(value)))
     : null;
 }
 
@@ -3491,16 +3545,30 @@ function normalizeBattle(value: unknown): BattleState | null {
     committedAttackingTroops: normalizeTroopCounts(battle.committedAttackingTroops ?? battle.attackingTroops),
     initialDefendingTroops: normalizeTroopCounts(battle.initialDefendingTroops ?? battle.defendingTroops),
     attackingTroops: normalizeTroopCounts(battle.attackingTroops),
+    attackingGhostTroops: normalizeGhostTroops(battle.attackingGhostTroops),
     defendingTroops: normalizeTroopCounts(battle.defendingTroops),
     attackerScore: finiteScore(battle.attackerScore),
     defenderScore: finiteScore(battle.defenderScore),
     latestRoll: normalizeBattleRoll(battle.latestRoll),
     hasRolled: battle.hasRolled === true,
+    pathsOfTheDeadSwing: finitePathsSwing(battle.pathsOfTheDeadSwing),
     releasedAttackerSpy: battle.releasedAttackerSpy === true,
     result: battle.result?.type === "attackerWon" || battle.result?.type === "defenderWon" || battle.result?.type === "retreated"
       ? { type: battle.result.type }
       : null,
   };
+}
+
+function normalizeGhostTroops(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.floor(value))
+    : 0;
+}
+
+function finitePathsSwing(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.round(value)
+    : null;
 }
 
 function normalizeBattleRoll(value: unknown) {

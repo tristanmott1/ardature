@@ -11,6 +11,10 @@ export function spyIconSrc(color: PlayerColor | null, captured = false) {
   return troopIconAssetUrl(`${name}${captured ? "-captured" : ""}`);
 }
 
+export function ghostSoldierIconSrc() {
+  return troopIconAssetUrl("ghost");
+}
+
 export function preloadTroopIcons() {
   if (troopIconPreloadStarted || typeof window === "undefined") {
     return;
@@ -126,6 +130,8 @@ const TROOP_ICON_NAMES = [
   "crow-captured",
   "dwarf",
   "elf",
+  "ghost",
+  "ghost-head",
   "orc",
   "rohirrim",
   "smeagul",

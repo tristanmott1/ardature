@@ -21,7 +21,7 @@ const PASS_DRIFT_WEIGHTS = [
   { delta: 2, weight: 20 },
 ];
 const PATHS_OF_THE_DEAD_MIN = 1;
-const PATHS_OF_THE_DEAD_MAX = 5;
+const PATHS_OF_THE_DEAD_MAX = 6;
 const PATHS_OF_THE_DEAD_OPEN_AT = 4;
 const EDORAS_ID = "edoras";
 const LAMEDON_ID = "lamedon";

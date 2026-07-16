@@ -203,7 +203,7 @@ const CARADHRAS_PASS_ICON_SIZE = 620;
 const CARADHRAS_PASS_ICON_X_OFFSET = -130;
 const CARADHRAS_PASS_ICON_Y_OFFSET = 300;
 const PATHS_OF_THE_DEAD_ICON_SIZE = 620;
-const PATHS_OF_THE_DEAD_MIN_VISIBLE_STATE = 2;
+const PATHS_OF_THE_DEAD_MIN_VISIBLE_STATE = 4;
 const PATHS_OF_THE_DEAD_ICON_X_OFFSET = -900;
 const PATHS_OF_THE_DEAD_ICON_Y_OFFSET = 250;
 
@@ -318,7 +318,7 @@ function pathsOfTheDeadWeatherMarkers(pathsState: number | null) {
     return [];
   }
 
-  const displayState = Math.max(1, Math.min(5, Math.round(pathsState)));
+  const displayState = Math.max(1, Math.min(6, Math.round(pathsState)));
   return [
     {
       center: {
@@ -328,7 +328,7 @@ function pathsOfTheDeadWeatherMarkers(pathsState: number | null) {
       href: publicAssetUrl("troops/icons/ghost-head.png"),
       id: "paths-of-the-dead",
       label: `Paths of the Dead state ${displayState}`,
-      opacity: (displayState - 1) / 4,
+      opacity: (displayState - 3) / 3,
       size: PATHS_OF_THE_DEAD_ICON_SIZE,
     },
   ];
@@ -737,6 +737,7 @@ function App() {
     activeBattle &&
       battleViewerId &&
       game.config.attackStyle === "challenge" &&
+      !activeBattle.result &&
       ((battleViewerId === activeBattle.attackerPlayerId && activeBattle.attackerScore === null) ||
         (game.mode === "sync" && battleViewerId === activeBattle.defenderPlayerId && activeBattle.defenderScore === null)),
   );
@@ -2776,6 +2777,7 @@ function App() {
               battle={activeBattle}
               canChallenge={canChallengeBattle}
               canControl={canControlBattle}
+              challengePlayerId={canChallengeBattle ? battleViewerId : null}
               defender={defender}
               defenderSpies={battleDefenderSpies}
               defenderTerritoryName={targetTerritory.name}

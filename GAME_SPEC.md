@@ -243,7 +243,7 @@ Dynamic pass states live in `GameState` after regular turns begin:
 caradhrasPassState = null before the first regular turn
 caradhrasPassState = integer 1-10 during regular turns
 pathsOfTheDeadState = null before the first regular turn
-pathsOfTheDeadState = integer 1-5 during regular turns
+pathsOfTheDeadState = integer 1-6 during regular turns
 ```
 
 `caradhrasPassState` represents current weather on the Rivendell-Caradhras pass:
@@ -254,7 +254,7 @@ pathsOfTheDeadState = integer 1-5 during regular turns
 
 When `caradhrasPassState` is `1-5`, the active graph includes every generated directed edge between Rivendell and Caradhras. When `caradhrasPassState` is `6-10`, every directed edge between Rivendell and Caradhras is treated as nonexistent. This affects every edge-based rule and view:
 
-`pathsOfTheDeadState` represents the ghostly opening of the Paths of the Dead from Edoras to Lamedon. The generated base graph contains `Edoras -> Lamedon` and never contains `Lamedon -> Edoras`. When `pathsOfTheDeadState` is `1-3`, `Edoras -> Lamedon` is treated as nonexistent. When it is `4-5`, that one directed edge is active. The reverse direction is never active.
+`pathsOfTheDeadState` represents the ghostly opening of the Paths of the Dead from Edoras to Lamedon. The generated base graph contains `Edoras -> Lamedon` and never contains `Lamedon -> Edoras`. When `pathsOfTheDeadState` is `1-3`, `Edoras -> Lamedon` is treated as nonexistent. When it is `4-6`, that one directed edge is active. The reverse direction is never active.
 
 Dynamic pass filtering affects every edge-based rule and view:
 
@@ -270,7 +270,7 @@ Dynamic pass filtering affects every edge-based rule and view:
 
 Physical border ink remains visual map data. Dynamic pass state never deletes or redraws static border ink.
 
-New authoritative games keep both dynamic pass states as `null` through setup, draft, and troop allocation. When the first regular turn loop is created after allocation, Caradhras is sampled uniformly from `1-10` and Paths of the Dead is sampled uniformly from `1-5`. A null Paths state is closed. Once initialized, each value is fixed through each player's whole turn. Each changes exactly once when a turn actually advances to the next player. Pausing, refreshing, reconnecting, opening handoff, resolving an in-progress battle, confirming elimination, or resuming the same current turn does not drift a pass by itself.
+New authoritative games keep both dynamic pass states as `null` through setup, draft, and troop allocation. When the first regular turn loop is created after allocation, Caradhras is sampled uniformly from `1-10` and Paths of the Dead is sampled uniformly from `1-6`. A null Paths state is closed. Once initialized, each value is fixed through each player's whole turn. Each changes exactly once when a turn actually advances to the next player. Pausing, refreshing, reconnecting, opening handoff, resolving an in-progress battle, confirming elimination, or resuming the same current turn does not drift a pass by itself.
 
 At turn advance, sample this Caradhras drift table from the current state:
 
@@ -292,9 +292,9 @@ At turn advance, sample this Paths of the Dead drift table from the current stat
 | 0 | 20 |
 | +1 | 40 |
 
-Before sampling, discard deltas that would leave the `1-5` range, then normalize the remaining weights.
+Before sampling, discard deltas that would leave the `1-6` range, then normalize the remaining weights.
 
-The map renders the matching committed icon from `public/caradhras-pass/pass-01.svg` through `pass-10.svg` above the Rivendell-Caradhras connection only after regular turns begin and `caradhrasPassState` is an integer. Paths of the Dead renders `public/troops/icons/ghost-head.png` near the southwest corner of Edoras only during regular turns and only for states `2-5`. Its opacity is `25%`, `50%`, `75%`, and `100%` for states `2`, `3`, `4`, and `5`. These icons are visual, pointer-inert, and synced/persisted only through the authoritative integer states.
+The map renders the matching committed icon from `public/caradhras-pass/pass-01.svg` through `pass-10.svg` above the Rivendell-Caradhras connection only after regular turns begin and `caradhrasPassState` is an integer. Paths of the Dead renders `public/troops/icons/ghost-head.png` near the southwest corner of Edoras only during regular turns and only for states `4-6`. Its opacity is `33%`, `67%`, and `100%` for states `4`, `5`, and `6`. States `1-3` render no ghost marker. These icons are visual, pointer-inert, and synced/persisted only through the authoritative integer states.
 
 ## Information Visibility
 
@@ -551,6 +551,24 @@ During troop commitment, the troop section uses the same visual structure as rei
 
 Once committed troops are confirmed, the attack is locked and must happen. The troop section and action section hide, the challenge/battle modal appears, the player bar remains visible, the map freezes, and camera buttons hide.
 
+If the locked attack is `Edoras -> Lamedon` and `pathsOfTheDeadState` is `4-6`, Paths of the Dead immediately changes the attacking force before scores are computed. Let:
+
+```text
+G = min(committed attacking troop count, pathsOfTheDeadState - 3)
+```
+
+Sample one integer uniformly from every value in `[-G, G]`.
+
+- A negative value kills that many committed real attacking troops before the battle score/challenge. Casualties use normal battle casualty sampling: non-leaders are sampled uniformly first and the leader can die only when it is the last real troop.
+- If every committed real attacker dies here, the challenge is skipped and the defender immediately wins. The defender victory result modal is shown.
+- A positive value adds that many battle-only ghost soldiers to the attacking force.
+- Ghost soldiers use `public/troops/icons/ghost.png`.
+- Ghost soldiers do not affect deterministic scores or challenge score distributions.
+- Ghost soldiers count toward attacker dice.
+- Ghost soldiers are always killed before real attacking troops.
+- If the attacker retreats, all ghost soldiers disappear.
+- If the attacker wins, surviving ghost soldiers appear in the attacker victory result row and then disappear when the battle result is dismissed. They never occupy Lamedon in the post-battle map state.
+
 ### Attack Style
 
 Setup includes an `ATTACK STYLE` section with one dropdown:
@@ -568,8 +586,10 @@ In `Challenge` mode:
 - The attacker always receives a challenge modal.
 - In sync mode, the defender also receives a challenge modal.
 - In local mode, the defender receives a deterministic score.
-- The temporary challenge modal contains one centered button.
-- The challenge button, and later the challenge itself, is the only content in the modal; it is not embedded inside the regular battle layout.
+- The temporary challenge modal contains the challenged player's current battle army row and one centered button.
+- The challenge button, and later the challenge itself, is the only action in the modal; it is not embedded inside the regular battle layout.
+- The army row includes battle-only ghost soldiers for the attacker when Paths of the Dead added them.
+- The army row includes captured spies present with the defender's battle force when the defender is the challenged player.
 - Pressing the button immediately samples and submits that player's score from the beta score distribution.
 - The player cannot preview the score before submission.
 - Once submitted, the score is fixed for the battle.
@@ -591,16 +611,18 @@ The battle state must include:
 - committed attacking troop counts
 - defender troop counts at lock
 - current surviving attacking troop counts
+- current battle-only attacking ghost soldier count
 - current surviving defending troop counts
 - attacker score, once submitted or computed
 - defender score, once submitted or computed
 - latest dice roll, if any
+- Paths of the Dead pre-battle swing, if any
 - whether at least one roll has happened
 - terminal result, if the battle has ended
 
 The active turn also stores source-target pairs already attacked this turn.
 
-Committed troops define the attacker's battle force. Uncommitted troops in the source territory have no bearing on the attack score, dice, or casualties. The defender's battle force is all troops in the target territory at attack lock.
+Committed real troops define the attacker's score force. Uncommitted troops in the source territory have no bearing on the attack score, dice, or casualties. Paths of the Dead ghost soldiers can join the attacking battle force only for an active `Edoras -> Lamedon` attack. They count for dice and casualties but not score. The defender's battle force is all troops in the target territory at attack lock.
 
 Scores are fixed at battle lock/challenge submission and do not change as troops die.
 
@@ -616,7 +638,7 @@ Dice are centered between the two scores. Defender dice are white with black pip
 
 While the battle is active, the modal layout is a fixed vertical stack: reserved message row, defender name, defender troop row, defender score, dice, attacker score, attacker troop row, attacker name, and retreat button. The top message row is always present. It may be empty or say `Waiting...`.
 
-Battle unit rows follow the shared known-content icon contract. They show troop types with counts greater than zero plus captured spies present with that battle force. Visible icons keep the normal compact icon size and recenter. If a side has no troops after the battle ends, that row renders no troop icons but still reserves the same vertical row space.
+Battle unit rows follow the shared known-content icon contract. They show troop types with counts greater than zero plus captured spies present with that battle force. The attacker row also shows battle-only ghost soldiers when Paths of the Dead added them. Visible icons keep the normal compact icon size and recenter. If a side has no troops after the battle ends, that row renders no troop icons but still reserves the same vertical row space.
 
 Both sides' current battle troop breakdowns are visible in the battle modal. Everyone who sees the modal sees the same battle contents, captured spies present with the battle forces, and which troop types die. Captured spies are not casualties and do not affect dice. The modal shows the latest roll only, not a full roll history. The latest roll always shows exactly the dice that were rolled, sorted highest to lowest from left to right for both attacker and defender. Casualties change troop rows immediately and change the next roll's dice count, but they do not remove dice from the just-finished roll.
 
@@ -626,7 +648,7 @@ In local mode, only the active attacker sees the battle modal. The defender does
 
 The attacker must roll at least once before retreating. Before the first roll, the retreat button is disabled. After at least one roll, the attacker may press retreat. Retreat asks for confirmation. If retreat is confirmed, the attack ends immediately.
 
-When battle ends by conquest or attacker elimination, the normal battle layout is replaced by a simple result layout. It shows `{winner} defeated {loser}`, the winning side's resulting unit row, the final roll dice, and the final check button. The result layout does not show scores, the loser row, or the regular mirrored stack. If the defender wins, the result row shows surviving defending troops plus any captured spies already on the defended territory, and the final roll dice appear below the victorious army. If the attacker wins, the final roll dice appear above the victorious army, and the result row shows surviving attacking troops plus captured third-party spies from the conquered territory. A captured spy owned by the attacker is released immediately by the conquest and appears in this victory result row as the attacker's normal unbarred spy icon; after the result is dismissed, that released spy is no longer displayed in the territory because an available spy is not tied to one territory. Nothing else may happen until the attacker dismisses that final result. When the attacker confirms a retreat, the battle ends immediately and the battle modal closes without showing a final retreat message.
+When battle ends by conquest or attacker elimination, the normal battle layout is replaced by a simple result layout. It shows `{winner} defeated {loser}`, the winning side's resulting unit row, the final roll dice, and the final check button. The result layout does not show scores, the loser row, or the regular mirrored stack. If the defender wins, the result row shows surviving defending troops plus any captured spies already on the defended territory, and the final roll dice appear below the victorious army. If the attacker wins, the final roll dice appear above the victorious army, and the result row shows surviving attacking troops, surviving battle-only ghost soldiers, and captured third-party spies from the conquered territory. A captured spy owned by the attacker is released immediately by the conquest and appears in this victory result row as the attacker's normal unbarred spy icon; after the result is dismissed, that released spy is no longer displayed in the territory because an available spy is not tied to one territory. Surviving ghost soldiers also disappear on dismissal and never occupy the conquered territory in the map state. Nothing else may happen until the attacker dismisses that final result. When the attacker confirms a retreat, the battle ends immediately and the battle modal closes without showing a final retreat message.
 
 ### Combat Score
 

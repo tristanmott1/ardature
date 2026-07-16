@@ -190,8 +190,11 @@ async function runSourceChecks() {
   assert(mapGraphSource.includes("directedDistanceFromAny") && mapGraphSource.includes("directedOwnedSourcesReachingTarget") && mapGraphSource.includes("pathsOfTheDeadState"), "Directed gameplay graph helpers consume dynamic edge state.");
   assert(["-2", "-1", "0", "1", "2"].every((delta) => mapGraphSource.includes(`{ delta: ${delta}, weight: 20 }`)), "Caradhras pass drift uses the current uniform 20/20/20/20/20 distribution.");
   assert(["-1", "0", "1"].every((delta) => mapGraphSource.includes(`{ delta: ${delta}, weight: ${delta === "0" ? "20" : "40"} }`)), "Paths of the Dead drift uses the current 40/20/40 distribution.");
+  assert(mapGraphSource.includes("const PATHS_OF_THE_DEAD_MAX = 6") && mapGraphSource.includes("const PATHS_OF_THE_DEAD_OPEN_AT = 4"), "Paths of the Dead uses six states and opens at state four.");
   assert(gameTypesSource.includes("caradhrasPassState: number | null") && gameTypesSource.includes("pathsOfTheDeadState: number | null") && gameStateSource.includes("caradhrasPassState: null") && gameStateSource.includes("pathsOfTheDeadState: null") && gameStateSource.includes("caradhrasPassState: state.caradhrasPassState ?? createCaradhrasPassState()") && gameStateSource.includes("pathsOfTheDeadState: state.pathsOfTheDeadState ?? createPathsOfTheDeadState()") && gameStateSource.includes("pathsOfTheDeadState: driftPathsOfTheDeadState(state.pathsOfTheDeadState)"), "GameState keeps dynamic pass states null before first turn, samples them at turn start, and drifts them on turn advance.");
   assert(appSource.includes("regularTurnPhaseHasWeather") && appSource.includes("dynamicMapWeatherMarkers") && appSource.includes("pathsOfTheDeadWeatherMarkers") && appSource.includes('id: "paths-of-the-dead"'), "Dynamic pass icons render only during regular-turn game stages.");
+  assert(gameTypesSource.includes("attackingGhostTroops: number") && gameTypesSource.includes("pathsOfTheDeadSwing: number | null") && gameStateSource.includes("pathsOfTheDeadAttackSwing") && gameStateSource.includes("sourceTerritoryId !== EDORAS_ID") && gameStateSource.includes("targetTerritoryId !== LAMEDON_ID") && gameStateSource.includes("pathsState - (PATHS_OF_THE_DEAD_OPEN_AT - 1)") && gameStateSource.includes("attackingGhostTroops > 0"), "Battle state stores Paths swing and battle-only ghost soldiers that die before real attackers.");
+  assert(battleModalSource.includes("challengePlayerId") && battleModalSource.includes("challengeGhostTroops") && battleModalSource.includes("GhostSoldierCount") && troopIconsSource.includes("ghostSoldierIconSrc"), "Battle modal shows challenge army rows and battle-only ghost soldiers.");
   assert(!mapConnectionsSource.includes("shipRoute") && !gameStateSource.includes("shipRoute") && !syncMessagesSource.includes("shipRoute"), "Visual ship routes are not consumed by gameplay or sync code.");
   assert(!mapDataSource.includes("NaN"), "Generated map data has no NaN values.");
   assert(!mapDataSource.includes("Infinity"), "Generated map data has no Infinity values.");
@@ -228,7 +231,7 @@ async function runSourceChecks() {
   assert(caradhrasPassIconSources.slice(0, 5).every((source) => /<circle[^>]+fill="#ffd45a"[^>]+stroke="#111111"[^>]+stroke-width="1"/.test(source)), "Caradhras pass suns use a thin black outline.");
   assert(caradhrasPassIconSources.slice(1).every((source) => !source.includes("<path") || source.includes('stroke="#111111" stroke-width="1"')), "Caradhras pass cloud paths use a thin black outline.");
   assert(Array.from({ length: 10 }, (_, index) => `./caradhras-pass/pass-${String(index + 1).padStart(2, "0")}.svg`).every((asset) => serviceWorkerSource.includes(asset)), "Service worker precaches every Caradhras pass icon.");
-  assert(serviceWorkerSource.includes("./troops/icons/ghost-head.png") && troopIconFiles.includes("ghost-head.png"), "Service worker precaches the Paths of the Dead ghost icon.");
+  assert(serviceWorkerSource.includes("./troops/icons/ghost.png") && serviceWorkerSource.includes("./troops/icons/ghost-head.png") && troopIconFiles.includes("ghost.png") && troopIconFiles.includes("ghost-head.png"), "Service worker precaches the Paths of the Dead marker and battle ghost icons.");
   assert(territoryLookupSource.includes("territoryForId") && !appSource.includes("generatedMapData.territories.find") && !gameSectionsSource.includes("generatedMapData.territories.find") && !gameViewSource.includes("new Map<string, GeneratedTerritoryData>"), "Territory lookup uses one shared generated-data helper.");
   assert(mapWidth === sourceWidth * 10 + 3000 && mapHeight === sourceHeight * 10 + 3000, "Generated app data includes the 1500-unit display frame.");
   assert(
@@ -1039,13 +1042,16 @@ async function assertBattleTroopRows(page, message) {
       const box = icon.getBoundingClientRect();
       return {
         height: box.height,
+        left: box.left,
+        right: box.right,
         width: box.width,
       };
     });
-    const iconRow = row.querySelector(".troop-count-row")?.getBoundingClientRect();
+    const left = icons.length > 0 ? Math.min(...icons.map((icon) => icon.left)) : rowBox.left;
+    const right = icons.length > 0 ? Math.max(...icons.map((icon) => icon.right)) : rowBox.right;
 
     return {
-      centerDelta: iconRow ? Math.abs((iconRow.left + iconRow.width / 2) - (rowBox.left + rowBox.width / 2)) : 0,
+      centerDelta: icons.length > 0 ? Math.abs((left + (right - left) / 2) - (rowBox.left + rowBox.width / 2)) : 0,
       count: icons.length,
       height: rowBox.height,
       icons,
@@ -2232,7 +2238,8 @@ async function runDynamicPassChecks(page) {
   assert((await page.locator('[data-weather-marker="caradhras-pass"]').getAttribute("href"))?.includes("pass-05.svg"), "Open Caradhras pass state renders the matching icon.");
   assert((await page.locator('[data-territory-fill="caradhras"][data-territory-fill-state="suggested"]').count()) === 1, "Open Caradhras pass keeps Rivendell to Caradhras as an active explore connection.");
   assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').getAttribute("href"))?.includes("ghost-head.png"), "Open Paths of the Dead state renders the ghost icon.");
-  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').getAttribute("opacity")) === "0.75", "Paths of the Dead state 4 renders at 75% opacity.");
+  const pathsStateFourOpacity = Number(await page.locator('[data-weather-marker="paths-of-the-dead"]').getAttribute("opacity"));
+  assert(Math.abs(pathsStateFourOpacity - 1 / 3) < 0.01, "Paths of the Dead state 4 renders at one-third opacity.");
   await clickTerritory(page, "edoras");
   assert((await page.locator('[data-territory-fill="lamedon"][data-territory-fill-state="suggested"]').count()) === 1, "Open Paths of the Dead keeps Edoras to Lamedon as an active explore connection.");
   await capture(page, "13ba-caradhras-pass-open-mobile.png");
@@ -2258,8 +2265,8 @@ async function runDynamicPassChecks(page) {
       openForward: graph.hasDirectedConnection("rivendell", "caradhras", openCaradhras),
       openReverse: graph.hasDirectedConnection("caradhras", "rivendell", openCaradhras),
       pathsClosedForward: graph.hasDirectedConnection("edoras", "lamedon", closedPaths),
-      pathsDriftFromFiveHigh: graph.driftPathsOfTheDeadState(5, () => 0.999),
-      pathsDriftFromFiveLow: graph.driftPathsOfTheDeadState(5, () => 0),
+      pathsDriftFromSixHigh: graph.driftPathsOfTheDeadState(6, () => 0.999),
+      pathsDriftFromSixLow: graph.driftPathsOfTheDeadState(6, () => 0),
       pathsInitialHigh: graph.createPathsOfTheDeadState(() => 0.999),
       pathsInitialLow: graph.createPathsOfTheDeadState(() => 0),
       pathsNullForward: graph.hasDirectedConnection("edoras", "lamedon", nullPaths),
@@ -2272,10 +2279,10 @@ async function runDynamicPassChecks(page) {
   assert(graphProbe.openForward && graphProbe.openReverse && graphProbe.openDistance === 1, "Open Caradhras pass keeps both generated directed edges active.");
   assert(!graphProbe.blockedForward && !graphProbe.blockedReverse && graphProbe.blockedDistance !== 1, "Blocked Caradhras pass removes both direct edges from active graph traversal.");
   assert(graphProbe.driftFromTenLow === 8 && graphProbe.driftFromTenThirty === 8 && graphProbe.driftFromTenHigh === 10, "Caradhras pass drift discards and normalizes out-of-range moves before sampling.");
-  assert(graphProbe.pathsInitialLow === 1 && graphProbe.pathsInitialHigh === 5, "Paths of the Dead initial state samples uniformly across 1-5.");
+  assert(graphProbe.pathsInitialLow === 1 && graphProbe.pathsInitialHigh === 6, "Paths of the Dead initial state samples uniformly across 1-6.");
   assert(!graphProbe.pathsNullForward && !graphProbe.pathsClosedForward, "Null and low Paths of the Dead states keep Edoras to Lamedon closed.");
   assert(graphProbe.pathsOpenForward && !graphProbe.pathsOpenReverse && graphProbe.pathsOpenDistance === 1, "Open Paths of the Dead activates only Edoras to Lamedon.");
-  assert(graphProbe.pathsDriftFromFiveLow === 4 && graphProbe.pathsDriftFromFiveHigh === 5, "Paths of the Dead drift discards and normalizes out-of-range moves before sampling.");
+  assert(graphProbe.pathsDriftFromSixLow === 5 && graphProbe.pathsDriftFromSixHigh === 6, "Paths of the Dead drift discards and normalizes out-of-range moves before sampling.");
 
   await loadLocalGameFixture(page, { ...openState, caradhrasPassState: 6 }, '.app-shell[data-app-phase="turn"]');
   await page.locator('[data-weather-marker="caradhras-pass"]').waitFor({ timeout: 15000 });
@@ -2284,15 +2291,16 @@ async function runDynamicPassChecks(page) {
   assert((await page.locator('[data-territory-fill="caradhras"][data-territory-fill-state="suggested"]').count()) === 0, "Blocked Caradhras pass removes Rivendell to Caradhras from explore connections.");
   await capture(page, "13bb-caradhras-pass-blocked-mobile.png");
 
-  await loadLocalGameFixture(page, { ...openState, pathsOfTheDeadState: 2 }, '.app-shell[data-app-phase="turn"]');
-  await page.locator('[data-weather-marker="paths-of-the-dead"]').waitFor({ timeout: 15000 });
+  await loadLocalGameFixture(page, { ...openState, pathsOfTheDeadState: 3 }, '.app-shell[data-app-phase="turn"]');
   await clickTerritory(page, "edoras");
-  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').getAttribute("opacity")) === "0.25", "Paths of the Dead state 2 renders at 25% opacity.");
+  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').count()) === 0, "Paths of the Dead state 3 renders no icon.");
   assert((await page.locator('[data-territory-fill="lamedon"][data-territory-fill-state="suggested"]').count()) === 0, "Closed Paths of the Dead removes Edoras to Lamedon from explore connections.");
   await capture(page, "13bc-paths-of-the-dead-closed-mobile.png");
 
-  await loadLocalGameFixture(page, { ...openState, pathsOfTheDeadState: 1 }, '.app-shell[data-app-phase="turn"]');
-  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').count()) === 0, "Paths of the Dead state 1 renders no icon.");
+  await loadLocalGameFixture(page, { ...openState, pathsOfTheDeadState: 6 }, '.app-shell[data-app-phase="turn"]');
+  await page.locator('[data-weather-marker="paths-of-the-dead"]').waitFor({ timeout: 15000 });
+  assert((await page.locator('[data-weather-marker="paths-of-the-dead"]').getAttribute("opacity")) === "1", "Paths of the Dead state 6 renders at full opacity.");
+  await capture(page, "13bd-paths-of-the-dead-open-full-mobile.png");
 }
 
 async function loadLocalGameFixture(page, state, selector) {
@@ -2463,7 +2471,8 @@ async function runTurnAttackChecks(browser) {
   await challenge.getByRole("dialog", { name: "Battle challenge" }).waitFor();
   await capture(challenge, "18f-challenge-battle-button-mobile.png");
   assert((await challenge.getByRole("dialog", { name: "Battle challenge" }).getByRole("button", { name: "Challenge" }).count()) === 1, "Challenge battle shows one challenge button.");
-  assert((await challenge.locator(".battle-troops, .battle-score").count()) === 0, "Challenge modal is not embedded in the regular battle layout.");
+  assert((await challenge.locator(".battle-challenge-modal .battle-troops").count()) === 1, "Challenge modal shows the challenged player's battle army row.");
+  assert((await challenge.locator(".battle-challenge-modal .battle-score, .battle-challenge-modal .battle-player-name").count()) === 0, "Challenge modal is not embedded in the regular mirrored battle layout.");
   assert((await challenge.locator(".battle-dice-button").count()) === 0, "Challenge modal does not show dice before score submission.");
   assert((await challenge.getByRole("button", { name: "Retreat" }).count()) === 0, "Challenge modal does not show retreat before score submission.");
   await challenge.getByRole("button", { name: "Challenge" }).click();
@@ -2472,6 +2481,44 @@ async function runTurnAttackChecks(browser) {
   await assertBattleLayoutSymmetric(challenge, "Challenge battle modal layout after score");
   await assertBattleTroopRows(challenge, "Challenge battle modal troop rows after score");
   assert((await challenge.locator(".battle-dice-button").count()) === 1, "Submitted challenge score switches to the dice battle layout.");
+
+  const pathsGhostBattle = await createPathsBattleState(challenge, {
+    attackStyle: "challenge",
+    committedTroops: { heavy: 3, cavalry: 0, elite: 0, leader: 0 },
+    randomValues: [0.999],
+  });
+  assert(pathsGhostBattle.turn.battle.pathsOfTheDeadSwing === 3, "Paths of the Dead can add the maximum ghost soldiers before battle.");
+  assert(pathsGhostBattle.turn.battle.attackingGhostTroops === 3, "Positive Paths swing stores battle-only ghost soldiers.");
+  assert(pathsGhostBattle.turn.battle.attackerScore === null, "Paths ghosts do not replace the attacker's challenge score.");
+  await loadLocalGameFixture(challenge, pathsGhostBattle, ".battle-challenge-modal");
+  await capture(challenge, "18ga-paths-ghost-challenge-mobile.png");
+  assert((await challenge.locator('.battle-challenge-modal [aria-label="Ghost soldiers: 3"]').count()) === 1, "Challenge modal shows Paths ghost soldiers in the attacker army.");
+  assert(((await challenge.locator('.battle-challenge-modal [aria-label="Ghost soldiers: 3"] img').getAttribute("src")) ?? "").includes("/troops/icons/ghost.png"), "Battle ghost soldiers use the ghost soldier icon.");
+  await challenge.getByRole("button", { name: "Challenge" }).click();
+  await challenge.getByRole("dialog", { name: "Battle" }).waitFor();
+  await capture(challenge, "18gb-paths-ghost-battle-mobile.png");
+  assert((await challenge.locator('.battle-modal [aria-label="Ghost soldiers: 3"]').count()) === 1, "Battle modal keeps Paths ghost soldiers after challenge submission.");
+
+  const pathsInstantLossBattle = await createPathsBattleState(challenge, {
+    attackStyle: "challenge",
+    committedTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+    randomValues: [0, 0],
+  });
+  assert(pathsInstantLossBattle.turn.battle.result?.type === "defenderWon", "Negative Paths swing can kill all committed attackers and skip the challenge.");
+  assert(pathsInstantLossBattle.turn.battle.attackerScore === 0, "Instant Paths defender win stores a completed attacker score placeholder.");
+  await loadLocalGameFixture(challenge, pathsInstantLossBattle, ".battle-result-modal");
+  await capture(challenge, "18gc-paths-instant-defender-win-mobile.png");
+  await assertBattleResultLayout(challenge, { dicePosition: "below", iconCount: 1, message: "Sauron defeated Frodo", spyCount: 0 });
+
+  const ghostFirstRollBattle = await rollBattleState(challenge, {
+    attackerScore: 0,
+    attackingGhostTroops: 2,
+    attackingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+    defenderScore: 10,
+    defendingTroops: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
+  }, [0, 0, 0, 0, 0, 0, 0, 0]);
+  assert(ghostFirstRollBattle.turn.battle.attackingGhostTroops === 0, "Battle casualties remove ghost soldiers before real attacking troops.");
+  assert(ghostFirstRollBattle.turn.battle.attackingTroops.heavy === 1, "Ghost-first casualties leave real attackers untouched until ghosts are gone.");
 
   await loadBattleStateFixture(challenge, {
     attackerScore: 7.3,
@@ -2514,6 +2561,7 @@ async function runTurnAttackChecks(browser) {
 
   await loadBattleStateFixture(challenge, {
     attackerScore: 7.3,
+    attackingGhostTroops: 2,
     attackingTroops: { heavy: 1, cavalry: 1, elite: 0, leader: 0 },
     defenderScore: 6.2,
     defendingTroops: { heavy: 0, cavalry: 0, elite: 0, leader: 0 },
@@ -2527,7 +2575,8 @@ async function runTurnAttackChecks(browser) {
     result: { type: "attackerWon" },
   });
   await capture(challenge, "18h-attacker-battle-result-mobile.png");
-  await assertBattleResultLayout(challenge, { dicePosition: "above", iconCount: 2, message: "Frodo defeated Sauron", spyCount: 2 });
+  await assertBattleResultLayout(challenge, { dicePosition: "above", iconCount: 3, message: "Frodo defeated Sauron", spyCount: 2 });
+  assert((await challenge.locator('.battle-result-modal [aria-label="Ghost soldiers: 2"]').count()) === 1, "Attacker victory result shows surviving Paths ghosts until dismissal.");
   const attackerResultSpySources = await challenge.locator(".battle-result-modal .captured-spy-icon img").evaluateAll((images) =>
     images.map((image) => image.getAttribute("src") ?? ""),
   );
@@ -2566,7 +2615,7 @@ async function runTurnAttackChecks(browser) {
   }, { capturedSpyCount: 5 });
   await capture(challenge, "18j-battle-result-wrapped-spies-mobile.png");
   await assertBattleResultLayout(challenge, { dicePosition: "below", iconCount: 1, message: "Sauron defeated Frodo", spyCount: 5 });
-  const wrappedResultBox = await challenge.locator(".battle-result-modal .troop-count-row").boundingBox();
+  const wrappedResultBox = await challenge.locator(".battle-result-modal .battle-troops").boundingBox();
   assert(wrappedResultBox && wrappedResultBox.height > 46, "Battle result unit row wraps when spies push it beyond five icons.");
 
   await loadResolutionFixture(challenge, "elimination");
@@ -3022,11 +3071,13 @@ async function loadBattleStateFixture(page, battleOverrides, options = {}) {
     committedAttackingTroops: { heavy: 1, cavalry: 1, elite: 0, leader: 0 },
     initialDefendingTroops: { heavy: 3, cavalry: 0, elite: 0, leader: 0 },
     attackingTroops: { heavy: 1, cavalry: 1, elite: 0, leader: 0 },
+    attackingGhostTroops: 0,
     defendingTroops: { heavy: 3, cavalry: 0, elite: 0, leader: 0 },
     attackerScore: 7.3,
     defenderScore: 6.2,
     latestRoll: null,
     hasRolled: false,
+    pathsOfTheDeadSwing: null,
     releasedAttackerSpy: false,
     result: null,
     ...battleOverrides,
@@ -3038,6 +3089,72 @@ async function loadBattleStateFixture(page, battleOverrides, options = {}) {
   }, state);
   await page.goto(baseUrl);
   await page.waitForSelector(".battle-modal");
+}
+
+async function createPathsBattleState(page, { attackStyle, committedTroops, randomValues }) {
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
+  const state = turnSpyGameState(territoryIds);
+
+  state.config.attackStyle = attackStyle;
+  state.pathsOfTheDeadState = 6;
+  state.turn.stage = "actions";
+  state.draft.ownership = Object.fromEntries(territoryIds.map((territoryId) => [
+    territoryId,
+    territoryId === "edoras" ? "viewer" : "opponent",
+  ]));
+  state.allocation.playerAllocations.viewer.territories = {
+    edoras: { heavy: 4, cavalry: 0, elite: 0, leader: 0 },
+  };
+  state.allocation.playerAllocations.opponent.territories = {
+    lamedon: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
+  };
+
+  await page.goto(baseUrl);
+  return page.evaluate(async ({ savedState, randomValues: values, troops }) => {
+    const game = await import("/src/game/gameState.ts");
+    let index = 0;
+    const random = () => values[Math.min(index++, values.length - 1)];
+
+    return game.commitAttack(savedState, "viewer", "edoras", "lamedon", troops, random);
+  }, { savedState: state, randomValues, troops: committedTroops });
+}
+
+async function rollBattleState(page, battleOverrides, randomValues) {
+  const mapDataSource = await readFile(new URL("../src/map/generated/mapData.ts", import.meta.url), "utf8");
+  const territoryIds = [...mapDataSource.matchAll(/^      id: "([^"]+)",$/gm)].map((match) => match[1]);
+  const state = turnSpyGameState(territoryIds);
+
+  state.turn.stage = "battle";
+  state.turn.battle = {
+    id: "battle-fixture",
+    attackerPlayerId: "viewer",
+    defenderPlayerId: "opponent",
+    sourceTerritoryId: "shire",
+    targetTerritoryId: "bree",
+    committedAttackingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+    initialDefendingTroops: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
+    attackingTroops: { heavy: 1, cavalry: 0, elite: 0, leader: 0 },
+    attackingGhostTroops: 0,
+    defendingTroops: { heavy: 2, cavalry: 0, elite: 0, leader: 0 },
+    attackerScore: 0,
+    defenderScore: 10,
+    latestRoll: null,
+    hasRolled: false,
+    pathsOfTheDeadSwing: null,
+    releasedAttackerSpy: false,
+    result: null,
+    ...battleOverrides,
+  };
+
+  await page.goto(baseUrl);
+  return page.evaluate(async ({ savedState, randomValues: values }) => {
+    const game = await import("/src/game/gameState.ts");
+    let index = 0;
+    const random = () => values[Math.min(index++, values.length - 1)];
+
+    return game.rollBattle(savedState, "viewer", savedState.turn.battle.id, random);
+  }, { savedState: state, randomValues });
 }
 
 async function loadResolutionFixture(page, type) {

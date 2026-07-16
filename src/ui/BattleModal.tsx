@@ -1,6 +1,7 @@
 import { Check, Flag } from "lucide-react";
 import type { BattleState, GamePlayer, TroopCounts, TroopType } from "../game/gameTypes";
 import type { CapturedSpyView } from "../game/gameView";
+import { ghostSoldierIconSrc, TroopIconImage } from "../game/troopIcons";
 import type { CapturedSpyToken } from "./TroopControls";
 import { TroopCountRow } from "./TroopControls";
 
@@ -21,6 +22,7 @@ export function BattleModal({
   battle,
   canChallenge,
   canControl,
+  challengePlayerId,
   defender,
   defenderSpies,
   defenderTerritoryName,
@@ -35,6 +37,7 @@ export function BattleModal({
   battle: BattleState;
   canChallenge: boolean;
   canControl: boolean;
+  challengePlayerId: string | null;
   defender: GamePlayer;
   defenderSpies: CapturedSpyView[];
   defenderTerritoryName: string;
@@ -53,12 +56,17 @@ export function BattleModal({
   const canRoll = canControl && scoresReady && !battle.result;
   const canRetreat = canControl && battle.hasRolled && !battle.result;
   const defenderDice = displayedDice(battle.latestRoll?.defenderDice, Math.min(2, troopTotal(battle.defendingTroops)));
-  const attackerDice = displayedDice(battle.latestRoll?.attackerDice, Math.min(3, troopTotal(battle.attackingTroops)));
+  const attackerDice = displayedDice(battle.latestRoll?.attackerDice, Math.min(3, attackingBattleTotal(battle)));
+  const challengePlayer = challengePlayerId === battle.defenderPlayerId ? defender : attacker;
+  const challengeTroops = challengePlayer.id === battle.defenderPlayerId ? battle.defendingTroops : battle.attackingTroops;
+  const challengeGhostTroops = challengePlayer.id === battle.attackerPlayerId ? battle.attackingGhostTroops : 0;
+  const challengeSpies = challengePlayer.id === battle.defenderPlayerId ? defenderSpies : [];
 
   if (canChallenge) {
     return (
       <div className="modal-scrim battle-scrim">
         <section className="modal-panel battle-modal battle-challenge-modal" role="dialog" aria-label="Battle challenge">
+          <BattleTroops ghostTroops={challengeGhostTroops} player={challengePlayer} players={players} spies={challengeSpies} troops={challengeTroops} />
           <button className="primary icon-text-button battle-challenge-button" type="button" onClick={onChallenge}>
             Challenge
           </button>
@@ -82,7 +90,13 @@ export function BattleModal({
           {battle.result.type === "attackerWon" ? (
             <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
           ) : null}
-          <BattleTroops player={winner} players={players} spies={resultSpies} troops={winningTroops} />
+          <BattleTroops
+            ghostTroops={battle.result.type === "attackerWon" ? battle.attackingGhostTroops : 0}
+            player={winner}
+            players={players}
+            spies={resultSpies}
+            troops={winningTroops}
+          />
           {battle.result.type === "defenderWon" ? (
             <BattleDiceRows attackerDice={attackerDice} defenderDice={defenderDice} />
           ) : null}
@@ -107,7 +121,7 @@ export function BattleModal({
           </button>
         </div>
         <BattleScore score={battle.attackerScore} />
-        <BattleTroops player={attacker} players={players} troops={battle.attackingTroops} />
+        <BattleTroops ghostTroops={battle.attackingGhostTroops} player={attacker} players={players} troops={battle.attackingTroops} />
         <strong className="battle-player-name">{attacker.name} at {attackerTerritoryName}</strong>
         {battle.result ? (
           <button className="primary icon-text-button wide-button" type="button" onClick={onDismiss} disabled={!canControl} aria-label="Dismiss battle">
@@ -124,13 +138,23 @@ export function BattleModal({
   );
 }
 
-function BattleTroops({ player, players, spies = [], troops }: { player: GamePlayer; players: GamePlayer[]; spies?: CapturedSpyToken[]; troops: TroopCounts }) {
+function BattleTroops({ ghostTroops = 0, player, players, spies = [], troops }: { ghostTroops?: number; player: GamePlayer; players: GamePlayer[]; spies?: CapturedSpyToken[]; troops: TroopCounts }) {
   const troopTypes = BATTLE_TROOP_TYPES.filter((troopType) => troops[troopType] > 0);
 
   return (
     <div className="battle-troops">
       <TroopCountRow counts={troops} player={player} players={players} spies={spies} troopTypes={troopTypes} />
+      {ghostTroops > 0 ? <GhostSoldierCount count={ghostTroops} player={player} /> : null}
     </div>
+  );
+}
+
+function GhostSoldierCount({ count, player }: { count: number; player: GamePlayer }) {
+  return (
+    <span className="troop-icon-count battle-ghost-count" aria-label={`Ghost soldiers: ${count}`}>
+      <TroopIconImage ownerColor={player.color} src={ghostSoldierIconSrc()} />
+      <span className="troop-count-bubble">{count}</span>
+    </span>
   );
 }
 
@@ -179,6 +203,10 @@ function emptyDice(count: number) {
 
 function troopTotal(troops: TroopCounts) {
   return troops.cavalry + troops.elite + troops.heavy + troops.leader;
+}
+
+function attackingBattleTotal(battle: Pick<BattleState, "attackingGhostTroops" | "attackingTroops">) {
+  return troopTotal(battle.attackingTroops) + battle.attackingGhostTroops;
 }
 
 function resultMessage(battle: BattleState, attacker: GamePlayer, defender: GamePlayer) {
