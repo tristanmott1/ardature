@@ -27,6 +27,24 @@ function outputPath(name) {
   return fileURLToPath(new URL(name, outputDir));
 }
 
+function gifStats(bytes) {
+  let totalDelay = 0;
+  let frameCount = 0;
+
+  for (let index = 0; index < bytes.length - 7; index += 1) {
+    if (bytes[index] === 0x21 && bytes[index + 1] === 0xf9 && bytes[index + 2] === 0x04) {
+      totalDelay += bytes.readUInt16LE(index + 4);
+      frameCount += 1;
+    }
+  }
+
+  return {
+    frameCount,
+    hasLoopExtension: bytes.toString("latin1").includes("NETSCAPE2.0"),
+    totalMs: totalDelay * 10,
+  };
+}
+
 async function capture(page, name) {
   await page.screenshot({ path: outputPath(name) });
 }
@@ -121,6 +139,7 @@ async function runSourceChecks() {
   const indexSource = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const manifestSource = await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8");
   const serviceWorkerSource = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
+  const balrogGifBytes = await readFile(new URL("../public/balrog/balrog.gif", import.meta.url));
   const localPauseRecoverySource = await readFile(new URL("../src/app/useLocalPauseRecovery.ts", import.meta.url), "utf8");
   const mapExtractorSource = await readFile(new URL("../scripts/extract-map.ps1", import.meta.url), "utf8");
   const stylesSource = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
@@ -392,7 +411,9 @@ async function runSourceChecks() {
   assert(battleModalSource.includes("function BattleModal") && battleModalSource.includes("Roll dice") && battleModalSource.includes("Retreat") && battleModalSource.includes("score.toFixed(1)") && battleModalSource.includes("/ 10") && battleModalSource.includes("defeated") && battleModalSource.includes("battle-pip"), "Battle modal renders pip dice, retreat, result text, and one-decimal scores out of ten.");
   assert(battleModalSource.includes("function BattleDiceRows") && battleModalSource.includes("latestDice ? [...latestDice].sort") && !battleModalSource.includes("BattleDieUnitIcon") && !stylesSource.includes(".battle-die-unit") && battleModalSource.includes('battle.result.type === "attackerWon"') && battleModalSource.includes('battle.result.type === "defenderWon"'), "Battle modal displays sorted dice without troop-icon badges and keeps final dice in victory layouts.");
   assert(gameStateSource.includes('const MORIA_ID = "moria"') && gameStateSource.includes("battle.targetTerritoryId === MORIA_ID") && gameStateSource.includes("(attackerDiceUnits.length + defenderDiceUnits.length) / 20") && gameStateSource.includes("function resolveBalrogRoll") && gameStateSource.includes("function resolveBalrogCasualties"), "Moria battle rolls check Balrog probability before rolling dice and resolve direct selected-unit casualties.");
+  const balrogGif = gifStats(balrogGifBytes);
   assert(battleModalSource.includes("BALROG_ANIMATION_MS = 1400") && battleModalSource.includes("balrog/balrog.gif") && battleModalSource.includes("battle-balrog-background") && battleModalSource.includes("battle.latestRoll.id") && battleModalSource.includes("function BattleModalFrame") && battleModalSource.includes("completedBalrogRollKey !== balrogRollKey") && stylesSource.includes("opacity: 0.5") && stylesSource.includes("object-fit: cover") && serviceWorkerSource.includes("./balrog/balrog.gif"), "Balrog modal UI uses one stable roll id and shared frame for the immediate 50% opacity cover background.");
+  assert(balrogGif.frameCount === 19 && balrogGif.totalMs === 1330 && !balrogGif.hasLoopExtension, "Balrog GIF keeps its original 1330ms timing and does not loop.");
   assert(gameTypesSource.includes("export type PendingResolution") && gameTypesSource.includes("export type HostTransferState") && gameStateSource.includes("function confirmPendingElimination") && gameStateSource.includes("function restartVictoryGameToSetup") && gameStateSource.includes("function transferHostAuthority"), "Game state has explicit pending elimination, victory restart, and host-transfer helpers.");
   assert(gameViewSource.includes('type: "elimination"') && gameViewSource.includes('type: "victory"') && overlaysSource.includes("function EliminationDialog") && overlaysSource.includes("function VictoryDialog"), "Elimination and victory render through explicit overlay types.");
   assert(!gameStateSource.includes("markDeadSpiesForEliminatedPlayers") && gameStateSource.includes("beginPostBattleResolution") && gameStateSource.includes("killPlayerSpy"), "Conquest does not silently kill eliminated spies before the elimination confirmation.");
