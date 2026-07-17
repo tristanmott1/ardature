@@ -62,21 +62,23 @@ The service worker owns installed-app caching. When a change must force already-
 
 The home page may expose a bottom-right target-icon button that opens a standalone challenge test page. This page is a sandbox for building future skill-challenge mechanics and is intentionally separate from the in-game battle challenge modal. It does not mutate `GameState`, does not enter setup/sync/draft/game phases, and does not affect battle challenge scoring yet.
 
-The challenge test page ports the OpenPigeon archery aiming loop into a flat 2D target stage:
+The challenge test page ports the OpenPigeon archery scene into a self-contained Three.js sandbox:
 
-- Pressing the stage starts aiming with the cursor at the center of the stage.
+- The page copies OpenPigeon archery runtime assets under `public/challenge/open-pigeon/` and does not depend on the source project at runtime.
+- The target, arrow asset, camera, floor, sky, wind UI, cursor, progress textures, arrow flight, and target scoring are derived from OpenPigeon's `archery.tscn`, `archery.gd`, `arrow.gd`, and `target.gd`.
+- Pressing the stage starts aiming with the cursor at the center of the stage and zooms the camera to FOV `41.5` over `500ms`.
 - Pointer movement sets cursor velocity to `(currentPointer - initialPointer) * 4.9`, capped at `1000` pixels per second.
 - The cursor moves by velocity every animation frame and clamps to the stage rectangle.
-- Releasing before `500ms` cancels the shot and does not increment attempts.
-- After `3000ms`, a circular progress ring appears around the cursor and fills linearly for `5000ms`.
+- Releasing before the draw zoom completes cancels the shot and does not increment attempts.
+- After `3000ms`, the OpenPigeon progress textures appear around the cursor and fill linearly for `5000ms`.
 - A full progress ring auto-fires.
-- Each ready shot samples wind uniformly with direction `0..2pi` and power `0..5`.
-- The fired hit location is the cursor plus wind displacement in target-ring units.
-- A shot line animates for `500ms`, then only the latest hit mark remains visible.
+- For the fixed-distance sandbox, wind follows OpenPigeon set-one ranges and color scaling.
+- The fired hit location is the cursor ray projected onto the target plane, plus wind displacement in target-ring units.
+- The arrow appears for a `500ms` travel animation, camera follow, target highlight, and stuck-arrow behavior.
 - `Attempts` counts fired shots only.
-- `Sigma` is the RMS distance from target center in ring units and displays with one decimal after the first shot.
+- `Sigma` is the RMS distance from the bullseye in ring units and displays with one decimal after the first shot.
 
-The restart button clears attempts, sigma, the active aim, the latest hit mark, any shot animation, and the current wind sample.
+The restart button clears attempts, sigma, stuck arrows, the active aim, any shot animation, camera state, and the current wind sample.
 
 ## Public Assets
 

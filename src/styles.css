@@ -291,125 +291,108 @@ button:focus-visible,
 
 .challenge-test-stage {
   position: relative;
-  display: grid;
-  place-items: center;
   min-height: 0;
-  padding: 16px;
   overflow: hidden;
+  background: #9fc8f2;
   touch-action: none;
   user-select: none;
 }
 
-.challenge-target {
+.challenge-scene-canvas {
+  position: absolute;
+  inset: 0;
   display: block;
-  width: min(86vw, 86dvh);
-  max-width: 100%;
-  max-height: 100%;
-  aspect-ratio: 1;
-  filter: drop-shadow(0 7px 16px rgba(24, 24, 27, 0.18));
-  pointer-events: none;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
 }
 
 .challenge-wind {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 18px;
+  right: 18px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  min-width: 54px;
-  justify-content: flex-end;
-  color: rgba(24, 24, 27, 0.74);
-  font-size: 0.86rem;
-  font-weight: 760;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(23, 25, 28, 0.28);
+  color: rgb(202, 202, 202);
+  font-size: 0.9rem;
+  font-weight: 820;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   pointer-events: none;
+  z-index: 2;
 }
 
+.challenge-wind-circle,
 .challenge-wind-arrow {
-  width: 24px;
-  height: 24px;
-  overflow: visible;
-}
-
-.challenge-wind-arrow path {
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2.6;
-}
-
-.challenge-aim-cursor,
-.challenge-hit-mark {
   position: absolute;
-  width: 18px;
-  height: 18px;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
-.challenge-aim-cursor span,
-.challenge-hit-mark span {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 18px;
-  height: 2px;
-  border-radius: 999px;
-  background: rgba(24, 24, 27, 0.9);
+  left: 10px;
+  width: 38px;
+  height: 38px;
+  background: currentColor;
   transform-origin: center;
 }
 
-.challenge-aim-cursor span:first-child,
-.challenge-hit-mark span:first-child {
-  transform: translate(-50%, -50%) rotate(45deg);
+.challenge-wind-circle {
+  opacity: 0.42;
+  mask: url("/challenge/open-pigeon/wind_arrow_circle.png") center / contain no-repeat;
 }
 
-.challenge-aim-cursor span:last-child,
-.challenge-hit-mark span:last-child {
-  transform: translate(-50%, -50%) rotate(-45deg);
+.challenge-wind-arrow {
+  opacity: 0.96;
+  mask: url("/challenge/open-pigeon/wind_arrow.png") center / contain no-repeat;
 }
 
-.challenge-hit-mark span {
-  background: #b72432;
+.challenge-wind-label {
+  display: block;
+  min-width: 78px;
+  margin-left: 42px;
+  text-align: center;
 }
 
-.challenge-progress-ring {
+.challenge-aim-cursor {
   position: absolute;
-  width: 80px;
-  height: 80px;
+  width: 44px;
+  height: 44px;
   pointer-events: none;
-  transform: translate(-50%, -50%) rotate(-90deg);
+  transform: translate(-50%, -50%);
+  z-index: 3;
 }
 
-.challenge-progress-track,
-.challenge-progress-fill {
-  fill: none;
-  stroke-linecap: round;
-  stroke-width: 5;
-}
-
-.challenge-progress-track {
-  stroke: rgba(24, 24, 27, 0.18);
-}
-
-.challenge-progress-fill {
-  stroke: #b72432;
-}
-
-.challenge-shot-layer {
+.challenge-aim-cursor-image {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  overflow: visible;
-  pointer-events: none;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 }
 
-.challenge-shot-layer line {
-  stroke: rgba(47, 29, 18, 0.82);
-  stroke-linecap: round;
-  stroke-width: 3;
+.challenge-progress-textures {
+  position: absolute;
+  inset: -22px;
+  display: block;
+}
+
+.challenge-progress-under,
+.challenge-progress-over {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.challenge-progress-over {
+  display: block;
+  background: url("/challenge/open-pigeon/progress_over.png") center / contain no-repeat;
+  mask: conic-gradient(#000 var(--challenge-progress), transparent 0);
+}
+
+.challenge-progress-under {
+  opacity: 0.78;
 }
 
 .challenge-test-scorebar {

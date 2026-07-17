@@ -114,6 +114,7 @@ async function launchBrowser() {
 async function runSourceChecks() {
   console.log("Checking sources");
   const appSource = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const packageJsonSource = await readFile(new URL("../package.json", import.meta.url), "utf8");
   const armyBuildModalSource = await readFile(new URL("../src/ui/ArmyBuildModal.tsx", import.meta.url), "utf8");
   const armyBuildSource = await readFile(new URL("../src/game/armyBuild.ts", import.meta.url), "utf8");
   const gameStateSource = await readFile(new URL("../src/game/gameState.ts", import.meta.url), "utf8");
@@ -164,6 +165,25 @@ async function runSourceChecks() {
   const playerChromeSource = await readFile(new URL("../src/ui/PlayerChrome.tsx", import.meta.url), "utf8");
   const setupPanelsSource = await readFile(new URL("../src/ui/SetupPanels.tsx", import.meta.url), "utf8");
   const challengeTestPageSource = await readFile(new URL("../src/ui/ChallengeTestPage.tsx", import.meta.url), "utf8");
+  await Promise.all([
+    "../public/challenge/open-pigeon/target_board_final.jpg",
+    "../public/challenge/open-pigeon/cursor.png",
+    "../public/challenge/open-pigeon/progress_under.png",
+    "../public/challenge/open-pigeon/progress_over.png",
+    "../public/challenge/open-pigeon/wind_arrow.png",
+    "../public/challenge/open-pigeon/wind_arrow_circle.png",
+    "../public/challenge/open-pigeon/sky1.png",
+    "../public/challenge/open-pigeon/grass12.png",
+    "../public/challenge/open-pigeon/grass14.png",
+    "../public/challenge/open-pigeon/background2.jpeg",
+    "../public/challenge/open-pigeon/arrow/scene.gltf",
+    "../public/challenge/open-pigeon/arrow/scene.bin",
+    "../public/challenge/open-pigeon/arrow/textures/blinn1_diffuse.png",
+    "../public/challenge/open-pigeon/arrow/textures/blinn2_diffuse.png",
+    "../public/challenge/open-pigeon/arrow/textures/blinn2_specularGlossiness.png",
+    "../public/challenge/open-pigeon/bow/bowready.fbx",
+    "../public/challenge/open-pigeon/bow/bow_diffuse.jpg",
+  ].map((assetPath) => readFile(new URL(assetPath, import.meta.url))));
   const syncSessionBlockerSource = await readFile(new URL("../src/ui/SyncSessionBlocker.tsx", import.meta.url), "utf8");
   const troopControlsSource = await readFile(new URL("../src/ui/TroopControls.tsx", import.meta.url), "utf8");
   const appArchitectureDocs = await readFile(new URL("../docs/app-architecture.md", import.meta.url), "utf8");
@@ -405,13 +425,22 @@ async function runSourceChecks() {
   assert(gameTypesSource.includes('export type AttackStyle = "challenge" | "regular"') && gameTypesSource.includes("attackStyle: AttackStyle"), "Game config has explicit attack style.");
   assert(gameStateSource.includes("export const ATTACK_STYLES") && setupPanelsSource.includes("Attack Style") && setupPanelsSource.includes("Challenge") && setupPanelsSource.includes("Regular"), "Setup UI exposes the attack style config section.");
   assert(
-    challengeTestPageSource.includes("const AIM_SENSITIVITY = 4.9")
+    packageJsonSource.includes('"three"')
+      && challengeTestPageSource.includes("new THREE.WebGLRenderer")
+      && challengeTestPageSource.includes("GLTFLoader")
+      && challengeTestPageSource.includes("FBXLoader")
+      && challengeTestPageSource.includes("const AIM_SENSITIVITY = 4.9")
       && challengeTestPageSource.includes("const AIM_MAX_SPEED = 1000")
-      && challengeTestPageSource.includes("const AIM_MIN_DRAW_MS = 500")
+      && challengeTestPageSource.includes("const AIM_ZOOM_FOV = 41.5")
       && challengeTestPageSource.includes("const AIM_PROGRESS_DELAY_MS = 3000")
       && challengeTestPageSource.includes("const AIM_PROGRESS_FILL_MS = 5000")
-      && challengeTestPageSource.includes("const WIND_POWER_MAX = 5"),
-    "Challenge test page keeps the OpenPigeon aiming constants explicit.",
+      && challengeTestPageSource.includes("const ARROW_TRAVEL_MS = 500")
+      && challengeTestPageSource.includes("const TARGET_BASE_RADIUS = 0.0808")
+      && challengeTestPageSource.includes("const RING_SPACING = TARGET_RADIUS / TARGET_SEGMENTS")
+      && challengeTestPageSource.includes("const CAMERA_DEFAULT_POS")
+      && !challengeTestPageSource.includes("function ChallengeTarget")
+      && !challengeTestPageSource.includes("challenge-shot-layer"),
+    "Challenge test page is a Three.js OpenPigeon-style scene instead of the old SVG target.",
   );
   assert(gameStateSource.includes("function commitAttack") && gameStateSource.includes("function rollBattle") && gameStateSource.includes("function retreatBattle") && gameStateSource.includes("completedAttacks"), "Attack state transitions live in game-state helpers.");
   assert(gameStateSource.includes("function canSelectAttackTargetTerritory") && appSource.includes("canSelectAttackTargetTerritory(game") && !appSource.includes("completedAttacks.includes(`${attackSetup.sourceTerritoryId}->${territoryId}`)"), "Attack target selection and hints use one completed-pair helper.");
@@ -1425,8 +1454,22 @@ async function runSetupPreferenceChecks(page) {
   await page.getByRole("button", { name: "Open challenge test page" }).click();
   await page.locator(".challenge-test-page").waitFor();
   assert((await page.locator(".map-shell").count()) === 0, "Challenge test page is separate from the map shell.");
-  assert((await page.getByRole("img", { name: "Challenge target" }).count()) === 1, "Challenge test page shows the target.");
-  assert((await page.locator(".challenge-wind").count()) === 1, "Challenge test page shows the current wind indicator.");
+  await page.locator(".challenge-scene-canvas").waitFor();
+  await page.waitForTimeout(1200);
+  assert((await page.locator(".challenge-scene-canvas").count()) === 1, "Challenge test page mounts one Three.js canvas.");
+  assert((await page.locator(".challenge-wind").count()) === 1 && await page.locator(".challenge-wind-label").isVisible(), "Challenge test page shows the OpenPigeon-style wind indicator.");
+  const sceneHasPixels = await page.locator(".challenge-scene-canvas").evaluate((canvas) => {
+    const webglCanvas = canvas;
+    const gl = webglCanvas.getContext("webgl2") || webglCanvas.getContext("webgl");
+    if (!gl) {
+      return false;
+    }
+
+    const pixels = new Uint8Array(4);
+    gl.readPixels(Math.floor(gl.drawingBufferWidth / 2), Math.floor(gl.drawingBufferHeight / 2), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    return pixels[0] + pixels[1] + pixels[2] > 0;
+  });
+  assert(sceneHasPixels, "Challenge Three.js canvas renders nonblank pixels.");
   assert(await page.getByText("Attempts").isVisible() && await page.getByText("Sigma").isVisible(), "Challenge test score labels are visible.");
   assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge test score values start at zero.");
   await capture(page, "01b-challenge-test-page-ready-mobile.png");
@@ -1443,19 +1486,19 @@ async function runSetupPreferenceChecks(page) {
 
   challengeStageBox = await challengeStage.boundingBox();
   assert(challengeStageBox, "Challenge test stage still has visible bounds after early cancel.");
-  const shotStart = {
+  const aimStart = {
     x: challengeStageBox.x + challengeStageBox.width * 0.5,
     y: challengeStageBox.y + challengeStageBox.height * 0.84,
   };
-  const shotPointer = {
-    x: shotStart.x + 72,
-    y: shotStart.y + 28,
+  const aimPointer = {
+    x: aimStart.x + 72,
+    y: aimStart.y + 28,
   };
-  await page.mouse.move(shotStart.x, shotStart.y);
+  await page.mouse.move(aimStart.x, aimStart.y);
   await page.mouse.down();
-  await page.waitForTimeout(650);
-  await page.mouse.move(shotPointer.x, shotPointer.y, { steps: 3 });
-  await page.waitForTimeout(180);
+  await page.waitForTimeout(100);
+  await page.mouse.move(aimPointer.x, aimPointer.y, { steps: 3 });
+  await page.waitForTimeout(120);
   const cursorBox = await page.locator(".challenge-aim-cursor").boundingBox();
   assert(cursorBox, "Challenge aim cursor is visible while aiming.");
   const cursorCenter = {
@@ -1463,24 +1506,35 @@ async function runSetupPreferenceChecks(page) {
     y: cursorBox.y + cursorBox.height / 2,
   };
   assert(
-    Math.abs(cursorCenter.x - shotPointer.x) > 8 || Math.abs(cursorCenter.y - shotPointer.y) > 8,
+    Math.abs(cursorCenter.x - aimPointer.x) > 8 || Math.abs(cursorCenter.y - aimPointer.y) > 8,
     "Challenge cursor moves by velocity instead of directly following the pointer.",
   );
   await page.mouse.up();
-  await page.waitForFunction(() => document.querySelectorAll(".challenge-score-item strong")[0]?.textContent === "1");
+  await page.waitForTimeout(200);
+  assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge velocity check can still cancel before draw completion.");
+
+  challengeStageBox = await challengeStage.boundingBox();
+  assert(challengeStageBox, "Challenge test stage still has visible bounds before valid shot.");
+  await page.mouse.move(challengeStageBox.x + challengeStageBox.width * 0.5, challengeStageBox.y + challengeStageBox.height * 0.84);
+  await page.mouse.down();
   await page.waitForTimeout(650);
-  assert((await page.locator(".challenge-hit-mark").count()) === 1, "Challenge shot leaves one latest hit mark after the shot animation.");
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelectorAll(".challenge-score-item strong")[0]?.textContent === "1");
+  await page.waitForFunction(() => document.querySelector(".challenge-test-stage")?.getAttribute("data-stuck-arrows") === "1");
   assert(/^\d+\.\d$/.test((await page.locator(".challenge-score-item strong").nth(1).textContent()) ?? ""), "Challenge sigma renders with one decimal after a shot.");
   await capture(page, "01c-challenge-test-page-post-shot-mobile.png");
 
   await page.getByRole("button", { name: "Restart challenge" }).click();
   assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge restart clears attempts and sigma.");
-  assert((await page.locator(".challenge-hit-mark").count()) === 0, "Challenge restart clears the latest hit mark.");
+  assert((await page.locator(".challenge-test-stage").getAttribute("data-stuck-arrows")) === "0", "Challenge restart clears stuck arrows.");
 
   challengeStageBox = await challengeStage.boundingBox();
   assert(challengeStageBox, "Challenge test stage still has visible bounds before auto-fire.");
   await page.mouse.move(challengeStageBox.x + challengeStageBox.width * 0.5, challengeStageBox.y + challengeStageBox.height * 0.8);
   await page.mouse.down();
+  await page.waitForTimeout(3300);
+  assert((await page.locator(".challenge-progress-textures").count()) === 1, "Challenge progress textures appear after holding the aim.");
+  await capture(page, "01d-challenge-test-page-aiming-mobile.png");
   await page.waitForFunction(() => document.querySelectorAll(".challenge-score-item strong")[0]?.textContent === "1", null, { timeout: 9000 });
   await page.mouse.up();
   await page.getByRole("button", { name: "Restart challenge" }).click();
@@ -1970,14 +2024,12 @@ async function runMobileMapInteractionChecks(page) {
   await page.waitForFunction(() => document.querySelector(".map-svg")?.getAttribute("data-map-animating") === "true");
   assert((await page.getByRole("button", { name: "Return to map view" }).count()) === 1, "Return-to-map control remains visible during camera animation.");
   assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Auto-focus control remains visible during camera animation.");
-  await page.waitForFunction(() => {
+  await page.evaluate(() => {
     if (document.querySelector(".map-svg")?.getAttribute("data-map-animating") !== "true") {
-      return false;
+      return;
     }
 
-    const button = document.querySelector('button[aria-label="Enable automatic focus"]');
-    button?.click();
-    return Boolean(button);
+    document.querySelector('button[aria-label="Enable automatic focus"]')?.click();
   });
   assert((await page.getByRole("button", { name: "Enable automatic focus" }).count()) === 1, "Auto-focus press is inert during camera animation.");
   await waitForViewBox(page, expectedHomeAperture);
@@ -3696,7 +3748,7 @@ async function finishAllocationTurn(page, skin, options = {}) {
       assert(troopType, "Expected enough troops to cover owned territories.");
       await page.getByRole("button", { name: `Add ${troopType}` }).click();
     } else {
-      await firstEnabledAddButton(page).click();
+      await clickFirstEnabledAddButton(page);
     }
   }
 
@@ -3706,8 +3758,8 @@ async function finishAllocationTurn(page, skin, options = {}) {
       await page.getByRole("button", { name: `Add ${troopType}` }).click();
     }
   } else {
-    for (let count = 0; count < 80 && (await firstEnabledAddButton(page).count()) > 0; count += 1) {
-      await firstEnabledAddButton(page).click();
+    for (let count = 0; count < 80 && (await hasEnabledAddButton(page)); count += 1) {
+      await clickFirstEnabledAddButton(page);
     }
   }
 
@@ -3716,6 +3768,30 @@ async function finishAllocationTurn(page, skin, options = {}) {
 
 function firstEnabledAddButton(page) {
   return page.locator(".troop-placement-controls .troop-action-row").nth(0).locator(".troop-icon-button:not(:disabled)").first();
+}
+
+async function hasEnabledAddButton(page) {
+  return (await firstEnabledAddButton(page).count()) > 0;
+}
+
+async function clickFirstEnabledAddButton(page) {
+  const clicked = await page
+    .locator(".troop-placement-controls .troop-action-row")
+    .nth(0)
+    .locator(".troop-icon-button")
+    .evaluateAll((buttons) => {
+      const button = buttons.find((node) => !node.disabled);
+
+      if (!button) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    });
+
+  assert(clicked, "Expected an enabled add button.");
+  await page.waitForTimeout(25);
 }
 
 async function finishReinforcementPlacement(page) {
