@@ -40,9 +40,18 @@ const ATTACK_STYLE_LABELS: Record<AttackStyle, string> = {
   regular: "Regular",
 };
 
-export function HomePanel({ onStartLocal, onStartSync }: { onStartLocal: () => void; onStartSync: () => void }) {
+export function HomePanel({
+  onOpenChallenge,
+  onStartLocal,
+  onStartSync,
+}: {
+  onOpenChallenge: () => void;
+  onStartLocal: () => void;
+  onStartSync: () => void;
+}) {
   return (
-    <section className="hud-panel home-panel">
+    <>
+      <section className="hud-panel home-panel">
       <div className="brand-row">
         <img src="./app-icons/icon-192.png" alt="" />
         <div>
@@ -59,7 +68,11 @@ export function HomePanel({ onStartLocal, onStartSync }: { onStartLocal: () => v
           Sync
         </button>
       </div>
-    </section>
+      </section>
+      <button className="challenge-test-launch" type="button" onClick={onOpenChallenge} aria-label="Open challenge test page">
+        <span className="challenge-dartboard" aria-hidden="true" />
+      </button>
+    </>
   );
 }
 

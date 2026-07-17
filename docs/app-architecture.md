@@ -58,6 +58,10 @@ The exact file list can evolve, but the boundaries should stay clear:
 
 The service worker owns installed-app caching. When a change must force already-installed devices onto fresh shell assets, bump `CACHE_NAME` in `public/sw.js` so old cached HTML, manifest, and bundles are discarded on activation. Troop, spy, Caradhras pass, and Paths of the Dead icons are core UI assets, not optional decorations, so the service worker should precache the committed icon files.
 
+## Challenge Test Page
+
+The home page may expose a bottom-right target-icon button that opens a standalone challenge test page. This page is a sandbox for building future skill-challenge mechanics and is intentionally separate from the in-game battle challenge modal. It does not mutate `GameState`, does not enter setup/sync/draft/game phases, and initially contains only a top bar, an empty test area, and a bottom score bar showing `Attempts 0` and `Sigma 0`.
+
 ## Public Assets
 
 The `public/` directory is organized by runtime asset purpose:

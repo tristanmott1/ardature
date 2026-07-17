@@ -1411,6 +1411,17 @@ async function runSetupPreferenceChecks(page) {
   assert(await page.title() === "Ardatúrë", "Browser title renders Ardatúrë with real Unicode characters.");
   assert(await page.locator(".brand-row h1").textContent() === "Ardatúrë", "Home title renders Ardatúrë with real Unicode characters.");
   await capture(page, "01-home-mobile.png");
+  assert((await page.getByRole("button", { name: "Open challenge test page" }).count()) === 1, "Home shows the challenge test launcher.");
+  await page.getByRole("button", { name: "Open challenge test page" }).click();
+  await page.locator(".challenge-test-page").waitFor();
+  assert((await page.locator(".map-shell").count()) === 0, "Challenge test page is separate from the map shell.");
+  assert(await page.getByText("Attempts").isVisible() && await page.getByText("Sigma").isVisible(), "Challenge test score labels are visible.");
+  assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge test score values start at zero.");
+  await page.getByRole("button", { name: "Restart challenge" }).click();
+  assert((await page.locator(".challenge-test-page").count()) === 1, "Challenge test restart is currently inert.");
+  await capture(page, "01b-challenge-test-page-mobile.png");
+  await page.getByRole("button", { name: "Return home" }).click();
+  await page.locator(".home-panel").waitFor();
   await assertNoMapCameraControls(page, "Home overlay hides map camera controls.");
 
   await page.getByRole("button", { name: "Local" }).click();

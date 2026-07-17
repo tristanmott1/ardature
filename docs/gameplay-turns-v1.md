@@ -352,6 +352,8 @@ In `Challenge` mode:
 
 The future skill challenge must produce or evaluate a score from the same beta distribution. The current placeholder button exists only to sample that distribution directly.
 
+The separate challenge test page opened from the home page is a development sandbox only. It is not used by battle resolution yet and should not change gameplay state.
+
 ### Attack Setup
 
 Pressing `Attack` begins local attack setup.

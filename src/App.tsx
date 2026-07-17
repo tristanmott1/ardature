@@ -151,6 +151,7 @@ import { formatQrHandshakeError } from "./sync/syncErrors";
 import { QrScanner } from "./sync/QrCodeUi";
 import { ArmyBuildModal } from "./ui/ArmyBuildModal";
 import { BattleModal } from "./ui/BattleModal";
+import { ChallengeTestPage } from "./ui/ChallengeTestPage";
 import { AllocationWaitingPanel, TroopSection, TurnActionPanel } from "./ui/GameSections";
 import { ConfirmSheet, DecisionDialog, EliminationDialog, HandoffPanel, NotificationDialog, VictoryDialog } from "./ui/Overlays";
 import { PausePanel } from "./ui/PausePanel";
@@ -661,6 +662,7 @@ function App() {
   const [mapSelections, setMapSelections] = useState<MapSelectionState>(EMPTY_MAP_SELECTIONS);
   const [attackSetup, setAttackSetup] = useState<AttackSetupState>(null);
   const [fortifySetup, setFortifySetup] = useState<FortifySetupState>(null);
+  const [challengeTestOpen, setChallengeTestOpen] = useState(false);
   const hostTransportRef = useRef<SyncHostTransport | null>(null);
   const joinTransportRef = useRef<SyncJoinTransport | null>(null);
   const localPlayerIdRef = useRef<string | null>(restoredSyncHost?.localPlayerId ?? null);
@@ -3044,6 +3046,14 @@ function App() {
   const actionSectionElement = renderActionSection();
   const activeOverlayElement = renderActiveOverlay();
 
+  if (challengeTestOpen) {
+    return (
+      <main className="app-shell">
+        <ChallengeTestPage onExit={() => setChallengeTestOpen(false)} />
+      </main>
+    );
+  }
+
   return (
     <main
       className={`app-shell${layout.showGameStageLayout ? " game-layout" : ""}`}
@@ -3092,7 +3102,7 @@ function App() {
       ) : null}
 
       {game.phase === "home" && !syncEntryOpen ? (
-        <HomePanel onStartLocal={startLocalSetup} onStartSync={openSyncEntry} />
+        <HomePanel onOpenChallenge={() => setChallengeTestOpen(true)} onStartLocal={startLocalSetup} onStartSync={openSyncEntry} />
       ) : null}
 
       {game.phase === "home" && syncEntryOpen ? (
