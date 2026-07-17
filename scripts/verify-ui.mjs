@@ -1415,6 +1415,7 @@ async function runSetupPreferenceChecks(page) {
   await page.getByRole("button", { name: "Open challenge test page" }).click();
   await page.locator(".challenge-test-page").waitFor();
   assert((await page.locator(".map-shell").count()) === 0, "Challenge test page is separate from the map shell.");
+  assert((await page.getByRole("img", { name: "Challenge target" }).count()) === 1, "Challenge test page shows the target.");
   assert(await page.getByText("Attempts").isVisible() && await page.getByText("Sigma").isVisible(), "Challenge test score labels are visible.");
   assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge test score values start at zero.");
   await page.getByRole("button", { name: "Restart challenge" }).click();

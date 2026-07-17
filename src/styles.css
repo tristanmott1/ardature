@@ -290,7 +290,19 @@ button:focus-visible,
 }
 
 .challenge-test-stage {
+  display: grid;
+  place-items: center;
   min-height: 0;
+  padding: 16px;
+}
+
+.challenge-target {
+  display: block;
+  width: min(86vw, 86dvh);
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+  filter: drop-shadow(0 7px 16px rgba(24, 24, 27, 0.18));
 }
 
 .challenge-test-scorebar {
