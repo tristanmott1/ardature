@@ -163,6 +163,7 @@ async function runSourceChecks() {
   const pausePanelSource = await readFile(new URL("../src/ui/PausePanel.tsx", import.meta.url), "utf8");
   const playerChromeSource = await readFile(new URL("../src/ui/PlayerChrome.tsx", import.meta.url), "utf8");
   const setupPanelsSource = await readFile(new URL("../src/ui/SetupPanels.tsx", import.meta.url), "utf8");
+  const challengeTestPageSource = await readFile(new URL("../src/ui/ChallengeTestPage.tsx", import.meta.url), "utf8");
   const syncSessionBlockerSource = await readFile(new URL("../src/ui/SyncSessionBlocker.tsx", import.meta.url), "utf8");
   const troopControlsSource = await readFile(new URL("../src/ui/TroopControls.tsx", import.meta.url), "utf8");
   const appArchitectureDocs = await readFile(new URL("../docs/app-architecture.md", import.meta.url), "utf8");
@@ -403,6 +404,15 @@ async function runSourceChecks() {
   assert(gameStateSource.includes("export const ALLOCATION_STYLES") && gameStateSource.includes("config.allocationStyle === \"random\"") && gameStateSource.includes("advanceAfterDraft"), "Game state routes post-draft flow through allocation style.");
   assert(gameTypesSource.includes('export type AttackStyle = "challenge" | "regular"') && gameTypesSource.includes("attackStyle: AttackStyle"), "Game config has explicit attack style.");
   assert(gameStateSource.includes("export const ATTACK_STYLES") && setupPanelsSource.includes("Attack Style") && setupPanelsSource.includes("Challenge") && setupPanelsSource.includes("Regular"), "Setup UI exposes the attack style config section.");
+  assert(
+    challengeTestPageSource.includes("const AIM_SENSITIVITY = 4.9")
+      && challengeTestPageSource.includes("const AIM_MAX_SPEED = 1000")
+      && challengeTestPageSource.includes("const AIM_MIN_DRAW_MS = 500")
+      && challengeTestPageSource.includes("const AIM_PROGRESS_DELAY_MS = 3000")
+      && challengeTestPageSource.includes("const AIM_PROGRESS_FILL_MS = 5000")
+      && challengeTestPageSource.includes("const WIND_POWER_MAX = 5"),
+    "Challenge test page keeps the OpenPigeon aiming constants explicit.",
+  );
   assert(gameStateSource.includes("function commitAttack") && gameStateSource.includes("function rollBattle") && gameStateSource.includes("function retreatBattle") && gameStateSource.includes("completedAttacks"), "Attack state transitions live in game-state helpers.");
   assert(gameStateSource.includes("function canSelectAttackTargetTerritory") && appSource.includes("canSelectAttackTargetTerritory(game") && !appSource.includes("completedAttacks.includes(`${attackSetup.sourceTerritoryId}->${territoryId}`)"), "Attack target selection and hints use one completed-pair helper.");
   assert(gameTypesSource.includes("BattleState") && gameTypesSource.includes('type: "commitAttack"') && gameTypesSource.includes('type: "submitBattleScore"') && gameTypesSource.includes('type: "rollBattle"'), "Turn commands include locked battle actions.");
@@ -1416,11 +1426,65 @@ async function runSetupPreferenceChecks(page) {
   await page.locator(".challenge-test-page").waitFor();
   assert((await page.locator(".map-shell").count()) === 0, "Challenge test page is separate from the map shell.");
   assert((await page.getByRole("img", { name: "Challenge target" }).count()) === 1, "Challenge test page shows the target.");
+  assert((await page.locator(".challenge-wind").count()) === 1, "Challenge test page shows the current wind indicator.");
   assert(await page.getByText("Attempts").isVisible() && await page.getByText("Sigma").isVisible(), "Challenge test score labels are visible.");
   assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge test score values start at zero.");
+  await capture(page, "01b-challenge-test-page-ready-mobile.png");
+
+  const challengeStage = page.locator(".challenge-test-stage");
+  let challengeStageBox = await challengeStage.boundingBox();
+  assert(challengeStageBox, "Challenge test stage has visible bounds.");
+  await page.mouse.move(challengeStageBox.x + challengeStageBox.width * 0.5, challengeStageBox.y + challengeStageBox.height * 0.86);
+  await page.mouse.down();
+  await page.waitForTimeout(120);
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+  assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge early release cancels without recording a shot.");
+
+  challengeStageBox = await challengeStage.boundingBox();
+  assert(challengeStageBox, "Challenge test stage still has visible bounds after early cancel.");
+  const shotStart = {
+    x: challengeStageBox.x + challengeStageBox.width * 0.5,
+    y: challengeStageBox.y + challengeStageBox.height * 0.84,
+  };
+  const shotPointer = {
+    x: shotStart.x + 72,
+    y: shotStart.y + 28,
+  };
+  await page.mouse.move(shotStart.x, shotStart.y);
+  await page.mouse.down();
+  await page.waitForTimeout(650);
+  await page.mouse.move(shotPointer.x, shotPointer.y, { steps: 3 });
+  await page.waitForTimeout(180);
+  const cursorBox = await page.locator(".challenge-aim-cursor").boundingBox();
+  assert(cursorBox, "Challenge aim cursor is visible while aiming.");
+  const cursorCenter = {
+    x: cursorBox.x + cursorBox.width / 2,
+    y: cursorBox.y + cursorBox.height / 2,
+  };
+  assert(
+    Math.abs(cursorCenter.x - shotPointer.x) > 8 || Math.abs(cursorCenter.y - shotPointer.y) > 8,
+    "Challenge cursor moves by velocity instead of directly following the pointer.",
+  );
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelectorAll(".challenge-score-item strong")[0]?.textContent === "1");
+  await page.waitForTimeout(650);
+  assert((await page.locator(".challenge-hit-mark").count()) === 1, "Challenge shot leaves one latest hit mark after the shot animation.");
+  assert(/^\d+\.\d$/.test((await page.locator(".challenge-score-item strong").nth(1).textContent()) ?? ""), "Challenge sigma renders with one decimal after a shot.");
+  await capture(page, "01c-challenge-test-page-post-shot-mobile.png");
+
   await page.getByRole("button", { name: "Restart challenge" }).click();
-  assert((await page.locator(".challenge-test-page").count()) === 1, "Challenge test restart is currently inert.");
-  await capture(page, "01b-challenge-test-page-mobile.png");
+  assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge restart clears attempts and sigma.");
+  assert((await page.locator(".challenge-hit-mark").count()) === 0, "Challenge restart clears the latest hit mark.");
+
+  challengeStageBox = await challengeStage.boundingBox();
+  assert(challengeStageBox, "Challenge test stage still has visible bounds before auto-fire.");
+  await page.mouse.move(challengeStageBox.x + challengeStageBox.width * 0.5, challengeStageBox.y + challengeStageBox.height * 0.8);
+  await page.mouse.down();
+  await page.waitForFunction(() => document.querySelectorAll(".challenge-score-item strong")[0]?.textContent === "1", null, { timeout: 9000 });
+  await page.mouse.up();
+  await page.getByRole("button", { name: "Restart challenge" }).click();
+  assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge restart clears an auto-fired shot.");
   await page.getByRole("button", { name: "Return home" }).click();
   await page.locator(".home-panel").waitFor();
   await assertNoMapCameraControls(page, "Home overlay hides map camera controls.");

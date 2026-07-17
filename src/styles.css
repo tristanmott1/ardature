@@ -290,10 +290,14 @@ button:focus-visible,
 }
 
 .challenge-test-stage {
+  position: relative;
   display: grid;
   place-items: center;
   min-height: 0;
   padding: 16px;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
 }
 
 .challenge-target {
@@ -303,6 +307,109 @@ button:focus-visible,
   max-height: 100%;
   aspect-ratio: 1;
   filter: drop-shadow(0 7px 16px rgba(24, 24, 27, 0.18));
+  pointer-events: none;
+}
+
+.challenge-wind {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 54px;
+  justify-content: flex-end;
+  color: rgba(24, 24, 27, 0.74);
+  font-size: 0.86rem;
+  font-weight: 760;
+  pointer-events: none;
+}
+
+.challenge-wind-arrow {
+  width: 24px;
+  height: 24px;
+  overflow: visible;
+}
+
+.challenge-wind-arrow path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.6;
+}
+
+.challenge-aim-cursor,
+.challenge-hit-mark {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.challenge-aim-cursor span,
+.challenge-hit-mark span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(24, 24, 27, 0.9);
+  transform-origin: center;
+}
+
+.challenge-aim-cursor span:first-child,
+.challenge-hit-mark span:first-child {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.challenge-aim-cursor span:last-child,
+.challenge-hit-mark span:last-child {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.challenge-hit-mark span {
+  background: #b72432;
+}
+
+.challenge-progress-ring {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+.challenge-progress-track,
+.challenge-progress-fill {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 5;
+}
+
+.challenge-progress-track {
+  stroke: rgba(24, 24, 27, 0.18);
+}
+
+.challenge-progress-fill {
+  stroke: #b72432;
+}
+
+.challenge-shot-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.challenge-shot-layer line {
+  stroke: rgba(47, 29, 18, 0.82);
+  stroke-linecap: round;
+  stroke-width: 3;
 }
 
 .challenge-test-scorebar {

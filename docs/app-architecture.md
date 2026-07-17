@@ -60,7 +60,23 @@ The service worker owns installed-app caching. When a change must force already-
 
 ## Challenge Test Page
 
-The home page may expose a bottom-right target-icon button that opens a standalone challenge test page. This page is a sandbox for building future skill-challenge mechanics and is intentionally separate from the in-game battle challenge modal. It does not mutate `GameState`, does not enter setup/sync/draft/game phases, and initially contains only a top bar, an empty test area, and a bottom score bar showing `Attempts 0` and `Sigma 0`.
+The home page may expose a bottom-right target-icon button that opens a standalone challenge test page. This page is a sandbox for building future skill-challenge mechanics and is intentionally separate from the in-game battle challenge modal. It does not mutate `GameState`, does not enter setup/sync/draft/game phases, and does not affect battle challenge scoring yet.
+
+The challenge test page ports the OpenPigeon archery aiming loop into a flat 2D target stage:
+
+- Pressing the stage starts aiming with the cursor at the center of the stage.
+- Pointer movement sets cursor velocity to `(currentPointer - initialPointer) * 4.9`, capped at `1000` pixels per second.
+- The cursor moves by velocity every animation frame and clamps to the stage rectangle.
+- Releasing before `500ms` cancels the shot and does not increment attempts.
+- After `3000ms`, a circular progress ring appears around the cursor and fills linearly for `5000ms`.
+- A full progress ring auto-fires.
+- Each ready shot samples wind uniformly with direction `0..2pi` and power `0..5`.
+- The fired hit location is the cursor plus wind displacement in target-ring units.
+- A shot line animates for `500ms`, then only the latest hit mark remains visible.
+- `Attempts` counts fired shots only.
+- `Sigma` is the RMS distance from target center in ring units and displays with one decimal after the first shot.
+
+The restart button clears attempts, sigma, the active aim, the latest hit mark, any shot animation, and the current wind sample.
 
 ## Public Assets
 
