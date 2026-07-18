@@ -11,7 +11,7 @@ const AIM_ZOOM_FOV = 41.5;
 const AIM_PROGRESS_DELAY_MS = 3000;
 const AIM_PROGRESS_FILL_MS = 5000;
 const ARROW_TRAVEL_MS = 500;
-const TARGET_Z = -14.433;
+const TARGET_Z = -26.398;
 const TARGET_POSITION = new THREE.Vector3(0, 1.362, TARGET_Z);
 const TARGET_RADIUS = 0.75;
 const TARGET_BASE_RADIUS = 0.0808;
@@ -429,14 +429,7 @@ class ChallengeArcheryScene {
 
   private sampleWind(): Wind {
     const angle = Math.random() * Math.PI * 2;
-    const shotIndex = this.metrics.attempts;
-    let power = 0.5 + Math.random() * 0.3;
-
-    if (shotIndex === 1) {
-      power = 1 + Math.random() * 0.5;
-    } else if (shotIndex >= 2) {
-      power = 1.5 + Math.random() * 1.5;
-    }
+    const power = 2.5 + Math.random() * 2.5;
 
     return {
       angle,

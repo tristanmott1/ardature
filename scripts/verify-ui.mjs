@@ -435,10 +435,12 @@ async function runSourceChecks() {
       && challengeTestPageSource.includes("const AIM_PROGRESS_DELAY_MS = 3000")
       && challengeTestPageSource.includes("const AIM_PROGRESS_FILL_MS = 5000")
       && challengeTestPageSource.includes("const ARROW_TRAVEL_MS = 500")
+      && challengeTestPageSource.includes("const TARGET_Z = -26.398")
       && challengeTestPageSource.includes("const TARGET_BASE_RADIUS = 0.0808")
       && challengeTestPageSource.includes("const RING_SPACING = TARGET_RADIUS / TARGET_SEGMENTS")
       && challengeTestPageSource.includes("const CAMERA_DEFAULT_POS")
       && challengeTestPageSource.includes("function createTargetTexture")
+      && challengeTestPageSource.includes("const power = 2.5 + Math.random() * 2.5")
       && !challengeTestPageSource.includes("target_board_final.jpg")
       && !challengeTestPageSource.includes("function ChallengeTarget")
       && !challengeTestPageSource.includes("challenge-shot-layer"),

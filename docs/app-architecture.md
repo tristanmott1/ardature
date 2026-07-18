@@ -73,7 +73,7 @@ The challenge test page ports the OpenPigeon archery scene into a self-contained
 - Releasing before the draw zoom completes cancels the shot and does not increment attempts.
 - After `3000ms`, the OpenPigeon progress textures appear around the cursor and fill linearly for `5000ms`.
 - A full progress ring auto-fires.
-- For the fixed-distance sandbox, wind follows OpenPigeon set-one ranges and color scaling.
+- For the fixed-distance sandbox, the target uses OpenPigeon's far target distance and wind is sampled from a harder `2.5..5.0` ring-unit range.
 - The fired hit location is the cursor ray projected onto the target plane, plus wind displacement in target-ring units.
 - The arrow appears for a `500ms` travel animation, camera follow, target highlight, and stuck-arrow behavior.
 - `Attempts` counts fired shots only.

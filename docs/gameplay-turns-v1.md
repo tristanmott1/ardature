@@ -352,7 +352,7 @@ In `Challenge` mode:
 
 The future skill challenge must produce or evaluate a score from the same beta distribution. The current placeholder button exists only to sample that distribution directly.
 
-The separate challenge test page opened from the home page is a development sandbox only. It is not used by battle resolution yet and should not change gameplay state. It currently ports OpenPigeon archery as a self-contained Three.js scene with copied local assets. It keeps OpenPigeon's `4.9` pointer sensitivity, `1000` maximum cursor speed, camera draw zoom to FOV `41.5`, `3000ms` progress delay, `5000ms` auto-fire fill, `500ms` arrow flight, set-one wind ranges/color scaling, target ring math, and stuck-arrow behavior. The sandbox target is generated as no-number colored rings. `Sigma` is measured as RMS distance from the bullseye in ring units.
+The separate challenge test page opened from the home page is a development sandbox only. It is not used by battle resolution yet and should not change gameplay state. It currently ports OpenPigeon archery as a self-contained Three.js scene with copied local assets. It keeps OpenPigeon's `4.9` pointer sensitivity, `1000` maximum cursor speed, camera draw zoom to FOV `41.5`, `3000ms` progress delay, `5000ms` auto-fire fill, `500ms` arrow flight, target ring math, and stuck-arrow behavior. The sandbox target is generated as no-number colored rings, placed at the far OpenPigeon distance, and paired with harder `2.5..5.0` ring-unit wind. `Sigma` is measured as RMS distance from the bullseye in ring units.
 
 ### Attack Setup
 
