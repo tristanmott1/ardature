@@ -265,7 +265,7 @@ async function runSourceChecks() {
       gameSpecDocs.includes("| Rhûn | 4 heavy |"),
     "User-facing names preserve required special characters.",
   );
-  assert(serviceWorkerSource.includes('const CACHE_NAME = "ardature-v7"'), "Service worker cache version is bumped for refreshed shell assets.");
+  assert(serviceWorkerSource.includes('const CACHE_NAME = "ardature-v8"'), "Service worker cache version is bumped for refreshed shell assets.");
   assert(caradhrasPassIconFiles.filter((fileName) => /^pass-\d\d\.svg$/.test(fileName)).length === 9, "Caradhras pass has nine simplified top-level SVG icons.");
   assert(caradhrasPassIconSources.every((source) => !source.includes('stroke="#ffffff"') && !source.includes('fill="none"')), "Caradhras pass icons do not render an outer circle outline.");
   assert(caradhrasPassIconSources.every((source) => !source.includes("#ffd45a")), "Caradhras pass simplified icons do not render suns.");
@@ -428,7 +428,7 @@ async function runSourceChecks() {
     packageJsonSource.includes('"three"')
       && challengeTestPageSource.includes("new THREE.WebGLRenderer")
       && challengeTestPageSource.includes("GLTFLoader")
-      && challengeTestPageSource.includes("FBXLoader")
+      && challengeTestPageSource.includes("import.meta.env.BASE_URL")
       && challengeTestPageSource.includes("const AIM_SENSITIVITY = 4.9")
       && challengeTestPageSource.includes("const AIM_MAX_SPEED = 1000")
       && challengeTestPageSource.includes("const AIM_ZOOM_FOV = 41.5")

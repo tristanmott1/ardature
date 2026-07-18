@@ -1,10 +1,9 @@
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { RotateCcw, X } from "lucide-react";
 import * as THREE from "three";
-import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-const ASSET_ROOT = "/challenge/open-pigeon";
+const ASSET_ROOT = `${import.meta.env.BASE_URL}challenge/open-pigeon`;
 
 const AIM_SENSITIVITY = 4.9;
 const AIM_MAX_SPEED = 1000;
@@ -133,7 +132,6 @@ class ChallengeArcheryScene {
   private aimProgressStartedAt: number | null = null;
   private arrowFlight: ArrowFlight | null = null;
   private arrowTemplate: THREE.Object3D | null = null;
-  private bow: THREE.Object3D | null = null;
   private bowFullyDrawn = false;
   private camera: THREE.PerspectiveCamera;
   private cameraTween: CameraTween | null = null;
@@ -261,15 +259,13 @@ class ChallengeArcheryScene {
   private async load() {
     const textureLoader = new THREE.TextureLoader();
     const gltfLoader = new GLTFLoader();
-    const fbxLoader = new FBXLoader();
-    const [targetTexture, grass12, grass14, sky, woodTexture, arrowGltf, bowFbx] = await Promise.all([
+    const [targetTexture, grass12, grass14, sky, woodTexture, arrowGltf] = await Promise.all([
       textureLoader.loadAsync(`${ASSET_ROOT}/target_board_final.jpg`),
       textureLoader.loadAsync(`${ASSET_ROOT}/grass12.png`),
       textureLoader.loadAsync(`${ASSET_ROOT}/grass14.png`),
       textureLoader.loadAsync(`${ASSET_ROOT}/sky1.png`),
       textureLoader.loadAsync(`${ASSET_ROOT}/background2.jpeg`),
       gltfLoader.loadAsync(`${ASSET_ROOT}/arrow/scene.gltf`),
-      fbxLoader.loadAsync(`${ASSET_ROOT}/bow/bowready.fbx`),
     ]);
 
     if (this.disposed) {
@@ -290,7 +286,6 @@ class ChallengeArcheryScene {
     this.buildTarget(targetTexture, woodTexture);
     this.arrowTemplate = arrowGltf.scene;
     this.prepareArrowTemplate();
-    this.bow = this.prepareBow(bowFbx, woodTexture);
     this.spawnReadyArrow();
   }
 
@@ -370,27 +365,6 @@ class ChallengeArcheryScene {
         child.receiveShadow = true;
       }
     });
-  }
-
-  private prepareBow(bow: THREE.Object3D, woodTexture: THREE.Texture) {
-    const wrapper = new THREE.Group();
-    const box = new THREE.Box3().setFromObject(bow);
-    const size = box.getSize(new THREE.Vector3());
-    const scale = size.y > 0 ? (1.25 / size.y) * 0.18 : 0.01;
-    const material = new THREE.MeshStandardMaterial({ map: woodTexture, roughness: 0.72 });
-
-    bow.scale.setScalar(scale);
-    bow.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.material = material;
-      }
-    });
-    wrapper.add(bow);
-    wrapper.position.set(0.82, 0.74, 0.44);
-    wrapper.rotation.y = -Math.PI / 2;
-
-    return wrapper;
   }
 
   private spawnReadyArrow() {
@@ -764,8 +738,8 @@ export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
 function WindIndicator({ wind }: { wind: Wind }) {
   return (
     <div className="challenge-wind" style={{ color: wind.color }} aria-label={`Wind power ${wind.power.toFixed(1)}`}>
-      <span className="challenge-wind-circle" aria-hidden="true" />
-      <span className="challenge-wind-arrow" style={{ transform: `rotate(${wind.angle}rad)` }} aria-hidden="true" />
+      <img className="challenge-wind-circle" src={`${ASSET_ROOT}/wind_arrow_circle.png`} alt="" aria-hidden="true" />
+      <img className="challenge-wind-arrow" src={`${ASSET_ROOT}/wind_arrow.png`} style={{ transform: `rotate(${wind.angle}rad)` }} alt="" aria-hidden="true" />
       <span className="challenge-wind-label">Wind {wind.power.toFixed(1)}</span>
     </div>
   );
@@ -778,7 +752,7 @@ function AimCursor({ aimView }: { aimView: AimView }) {
       {aimView.progressVisible ? (
         <span className="challenge-progress-textures" style={{ "--challenge-progress": `${aimView.progress * 100}%` } as CSSProperties}>
           <img className="challenge-progress-under" src={`${ASSET_ROOT}/progress_under.png`} alt="" />
-          <span className="challenge-progress-over" />
+          <span className="challenge-progress-over" style={{ backgroundImage: `url(${ASSET_ROOT}/progress_over.png)` }} />
         </span>
       ) : null}
     </div>

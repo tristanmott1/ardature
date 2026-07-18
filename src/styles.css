@@ -331,18 +331,15 @@ button:focus-visible,
   left: 10px;
   width: 38px;
   height: 38px;
-  background: currentColor;
   transform-origin: center;
 }
 
 .challenge-wind-circle {
   opacity: 0.42;
-  mask: url("/challenge/open-pigeon/wind_arrow_circle.png") center / contain no-repeat;
 }
 
 .challenge-wind-arrow {
   opacity: 0.96;
-  mask: url("/challenge/open-pigeon/wind_arrow.png") center / contain no-repeat;
 }
 
 .challenge-wind-label {
@@ -387,7 +384,9 @@ button:focus-visible,
 
 .challenge-progress-over {
   display: block;
-  background: url("/challenge/open-pigeon/progress_over.png") center / contain no-repeat;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
   mask: conic-gradient(#000 var(--challenge-progress), transparent 0);
 }
 
