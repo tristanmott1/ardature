@@ -7,6 +7,8 @@ const ASSET_ROOT = `${import.meta.env.BASE_URL}challenge/open-pigeon`;
 
 const AIM_SENSITIVITY = 6.2;
 const AIM_MAX_SPEED = 1000;
+const AIM_SPAWN_MIN_RADIUS_PX = 55;
+const AIM_SPAWN_MAX_RADIUS_PX = 105;
 const AIM_DRIFT_X_PX = 12;
 const AIM_DRIFT_Y_PX = 7;
 const AIM_DRIFT_X_PERIOD_MS = 1800;
@@ -179,6 +181,8 @@ function createTargetTexture() {
 class ChallengeArcheryScene {
   private aimBaseCursor: Point = { x: 0, y: 0 };
   private aimCursor: Point = { x: 0, y: 0 };
+  private aimDriftPhaseX = 0;
+  private aimDriftPhaseY = 0;
   private aimProgressStartedAt: number | null = null;
   private aimStartedAt: number | null = null;
   private arrowFlight: ArrowFlight | null = null;
@@ -249,11 +253,15 @@ class ChallengeArcheryScene {
 
     this.isAiming = true;
     this.bowFullyDrawn = false;
-    this.aimBaseCursor = this.stageCenter();
-    this.aimCursor = this.aimBaseCursor;
+    const rect = this.container.getBoundingClientRect();
+    const now = performance.now();
+    this.aimDriftPhaseX = Math.random() * Math.PI * 2;
+    this.aimDriftPhaseY = Math.random() * Math.PI * 2;
+    this.aimBaseCursor = this.randomAimSpawn(rect);
+    this.aimStartedAt = now;
+    this.aimCursor = this.driftedAimCursor(now, rect);
     this.initialPointer = point;
     this.velocity = { x: 0, y: 0 };
-    this.aimStartedAt = performance.now();
     this.aimProgressStartedAt = this.aimStartedAt + AIM_PROGRESS_DELAY_MS;
     this.renderAimCursor(0, false);
     this.tweenCamera(this.camera.position, AIM_ZOOM_FOV, 500, () => {
@@ -706,20 +714,25 @@ class ChallengeArcheryScene {
     this.camera.updateProjectionMatrix();
   }
 
-  private stageCenter() {
-    const rect = this.container.getBoundingClientRect();
-
-    return {
+  private randomAimSpawn(rect: DOMRect) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = AIM_SPAWN_MIN_RADIUS_PX + Math.random() * (AIM_SPAWN_MAX_RADIUS_PX - AIM_SPAWN_MIN_RADIUS_PX);
+    const center = {
       x: rect.width / 2,
       y: rect.height / 2,
+    };
+
+    return {
+      x: clamp(center.x + Math.cos(angle) * radius, 0, rect.width),
+      y: clamp(center.y + Math.sin(angle) * radius, 0, rect.height),
     };
   }
 
   private driftedAimCursor(now: number, rect: DOMRect) {
     const elapsedMs = this.aimStartedAt === null ? 0 : now - this.aimStartedAt;
     const drift = {
-      x: Math.sin((elapsedMs / AIM_DRIFT_X_PERIOD_MS) * Math.PI * 2) * AIM_DRIFT_X_PX,
-      y: Math.sin((elapsedMs / AIM_DRIFT_Y_PERIOD_MS) * Math.PI * 2) * AIM_DRIFT_Y_PX,
+      x: Math.sin((elapsedMs / AIM_DRIFT_X_PERIOD_MS) * Math.PI * 2 + this.aimDriftPhaseX) * AIM_DRIFT_X_PX,
+      y: Math.sin((elapsedMs / AIM_DRIFT_Y_PERIOD_MS) * Math.PI * 2 + this.aimDriftPhaseY) * AIM_DRIFT_Y_PX,
     };
 
     return {

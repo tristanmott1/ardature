@@ -431,8 +431,13 @@ async function runSourceChecks() {
       && challengeTestPageSource.includes("import.meta.env.BASE_URL")
       && challengeTestPageSource.includes("const AIM_SENSITIVITY = 6.2")
       && challengeTestPageSource.includes("const AIM_MAX_SPEED = 1000")
+      && challengeTestPageSource.includes("const AIM_SPAWN_MIN_RADIUS_PX = 55")
+      && challengeTestPageSource.includes("const AIM_SPAWN_MAX_RADIUS_PX = 105")
       && challengeTestPageSource.includes("const AIM_DRIFT_X_PX = 12")
       && challengeTestPageSource.includes("const AIM_DRIFT_Y_PX = 7")
+      && challengeTestPageSource.includes("this.aimDriftPhaseX = Math.random()")
+      && challengeTestPageSource.includes("this.aimDriftPhaseY = Math.random()")
+      && challengeTestPageSource.includes("randomAimSpawn")
       && challengeTestPageSource.includes("driftedAimCursor")
       && challengeTestPageSource.includes("const AIM_ZOOM_FOV = 41.5")
       && challengeTestPageSource.includes("const AIM_PROGRESS_DELAY_MS = 500")
@@ -1506,6 +1511,10 @@ async function runSetupPreferenceChecks(page) {
     x: Number(stage.getAttribute("data-aim-x")),
     y: Number(stage.getAttribute("data-aim-y")),
   }));
+  assert(
+    Math.hypot(driftStart.x - challengeStageBox.width / 2, driftStart.y - challengeStageBox.height / 2) > 35,
+    "Challenge cursor starts away from the stage-center bullseye area.",
+  );
   await page.waitForTimeout(250);
   const driftLater = await challengeStage.evaluate((stage) => ({
     x: Number(stage.getAttribute("data-aim-x")),
@@ -1563,7 +1572,7 @@ async function runSetupPreferenceChecks(page) {
   await page.waitForTimeout(650);
   await page.mouse.up();
   await page.waitForFunction(() => document.querySelectorAll(".challenge-score-item strong")[0]?.textContent === "1");
-  await page.waitForFunction(() => document.querySelector(".challenge-test-stage")?.getAttribute("data-stuck-arrows") === "1");
+  await page.waitForFunction(() => document.querySelector(".challenge-test-stage")?.getAttribute("data-last-arrow-tip-x") !== null);
   const shotDebug = await challengeStage.evaluate((stage) => ({
     arrowTipX: Number(stage.getAttribute("data-last-arrow-tip-x")),
     arrowTipY: Number(stage.getAttribute("data-last-arrow-tip-y")),
