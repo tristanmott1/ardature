@@ -7,12 +7,10 @@ const ASSET_ROOT = `${import.meta.env.BASE_URL}challenge/open-pigeon`;
 
 const AIM_SENSITIVITY = 6.2;
 const AIM_MAX_SPEED = 1000;
-const AIM_SPAWN_MIN_RADIUS_PX = 55;
-const AIM_SPAWN_MAX_RADIUS_PX = 105;
 const AIM_DRIFT_X_PX = 12;
 const AIM_DRIFT_Y_PX = 7;
-const AIM_DRIFT_X_PERIOD_MS = 1800;
-const AIM_DRIFT_Y_PERIOD_MS = 1200;
+const AIM_DRIFT_X_PERIOD_MS = 1500;
+const AIM_DRIFT_Y_PERIOD_MS = 1000;
 const AIM_ZOOM_FOV = 41.5;
 const AIM_PROGRESS_DELAY_MS = 500;
 const AIM_PROGRESS_FILL_MS = 2500;
@@ -257,7 +255,7 @@ class ChallengeArcheryScene {
     const now = performance.now();
     this.aimDriftPhaseX = Math.random() * Math.PI * 2;
     this.aimDriftPhaseY = Math.random() * Math.PI * 2;
-    this.aimBaseCursor = this.randomAimSpawn(rect);
+    this.aimBaseCursor = this.stageCenter(rect);
     this.aimStartedAt = now;
     this.aimCursor = this.driftedAimCursor(now, rect);
     this.initialPointer = point;
@@ -714,17 +712,10 @@ class ChallengeArcheryScene {
     this.camera.updateProjectionMatrix();
   }
 
-  private randomAimSpawn(rect: DOMRect) {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = AIM_SPAWN_MIN_RADIUS_PX + Math.random() * (AIM_SPAWN_MAX_RADIUS_PX - AIM_SPAWN_MIN_RADIUS_PX);
-    const center = {
+  private stageCenter(rect: DOMRect) {
+    return {
       x: rect.width / 2,
       y: rect.height / 2,
-    };
-
-    return {
-      x: clamp(center.x + Math.cos(angle) * radius, 0, rect.width),
-      y: clamp(center.y + Math.sin(angle) * radius, 0, rect.height),
     };
   }
 

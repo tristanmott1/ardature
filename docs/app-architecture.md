@@ -68,10 +68,9 @@ The challenge test page ports the OpenPigeon archery scene into a self-contained
 - The target is a generated no-number ring texture: only colored concentric circles are shown.
 - The arrow asset, camera, floor, sky, wind UI, cursor, progress textures, arrow flight, and target scoring are derived from OpenPigeon's `archery.tscn`, `archery.gd`, `arrow.gd`, and `target.gd`.
 - Pressing the stage starts aiming with the cursor at the center of the stage and zooms the camera to FOV `41.5` over `500ms`.
-- Each aim starts from a random point in a simple screen-space annulus around the stage center, using `55px` to `105px` radius so the cursor does not always begin on the bullseye.
 - Pointer movement sets cursor velocity to `(currentPointer - initialPointer) * 6.2`, capped at `1000` pixels per second.
 - The cursor moves by velocity plus a predictable breathing drift every animation frame and clamps to the stage rectangle.
-- Breathing drift is sine-based: `12px` horizontal over `1800ms` and `7px` vertical over `1200ms`.
+- Breathing drift is sine-based: `12px` horizontal over `1500ms` and `7px` vertical over `1000ms`.
 - The horizontal and vertical drift phases are randomized independently for each aim.
 - The cursor and progress textures are rendered by the same animation loop that owns aim physics, so the displayed crosshair is the released aim point.
 - Releasing before the `500ms` draw zoom completes cancels the shot and does not increment attempts.
