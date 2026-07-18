@@ -27,11 +27,6 @@ const CAMERA_FOLLOW_Y_OFFSET = 0.5;
 const CAMERA_LOOK_AT_Y_OFFSET = 0.55;
 const CAMERA_FOLLOW_FOV = 50;
 const CAMERA_FOLLOW_LERP_MS = 700;
-const OPEN_PIGEON_ARROW_ROTATION = new THREE.Matrix4().makeBasis(
-  new THREE.Vector3(0, -1, 0),
-  new THREE.Vector3(0, 0, 1),
-  new THREE.Vector3(-1, 0, 0),
-);
 
 type Point = {
   x: number;
@@ -120,8 +115,9 @@ function cloneObject(source: THREE.Object3D) {
   return clone;
 }
 
-function applyOpenPigeonArrowRotation(arrow: THREE.Object3D) {
-  arrow.quaternion.setFromRotationMatrix(OPEN_PIGEON_ARROW_ROTATION);
+function orientArrow(arrow: THREE.Object3D, from: THREE.Vector3, to: THREE.Vector3) {
+  const direction = to.clone().sub(from).normalize();
+  arrow.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction);
 }
 
 function windScreenRotation(wind: Wind) {
@@ -437,7 +433,7 @@ class ChallengeArcheryScene {
 
     const arrow = this.createArrow();
     arrow.position.copy(ARROW_SPAWN);
-    applyOpenPigeonArrowRotation(arrow);
+    orientArrow(arrow, ARROW_SPAWN, TARGET_POSITION);
     arrow.visible = false;
     this.currentArrow = arrow;
     this.scene.add(arrow);
@@ -501,6 +497,7 @@ class ChallengeArcheryScene {
       startedAt: performance.now(),
       to: shotPosition,
     };
+    orientArrow(arrow, this.arrowFlight.from, shotPosition);
     this.followArrow();
   }
 

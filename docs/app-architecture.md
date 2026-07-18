@@ -77,7 +77,7 @@ The challenge test page ports the OpenPigeon archery scene into a self-contained
 - For the fixed-distance sandbox, the target uses OpenPigeon's far target distance and wind is sampled from a harder `2.5..5.0` ring-unit range.
 - The wind indicator points in the same screen-space direction that wind will displace the hit on the rendered target.
 - The fired hit location is the cursor ray projected onto the target plane, plus wind displacement in target-ring units.
-- The camera matrix is refreshed before shot projection, and the imported arrow keeps OpenPigeon's fixed scene rotation while being wrapped so the visual arrow tip lands at the computed hit location.
+- The camera matrix is refreshed before shot projection, and the imported arrow is wrapped so the visual arrow tip lands at the computed hit location.
 - The arrow appears for a `500ms` travel animation, camera follow, target highlight, and stuck-arrow behavior.
 - `Attempts` counts fired shots only.
 - `Sigma` is the RMS distance from the bullseye in ring units and displays with one decimal after the first shot.

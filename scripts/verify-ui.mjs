@@ -442,13 +442,11 @@ async function runSourceChecks() {
       && challengeTestPageSource.includes("function createTargetTexture")
       && challengeTestPageSource.includes("createAimCursorElement")
       && challengeTestPageSource.includes("arrowTipOffset")
-      && challengeTestPageSource.includes("OPEN_PIGEON_ARROW_ROTATION")
       && challengeTestPageSource.includes("camera.updateMatrixWorld(true)")
       && challengeTestPageSource.includes("function windScreenRotation")
       && challengeTestPageSource.includes("recordShotDebug")
       && challengeTestPageSource.includes("const power = 2.5 + Math.random() * 2.5")
       && !challengeTestPageSource.includes("onAim")
-      && !challengeTestPageSource.includes("orientArrow")
       && !challengeTestPageSource.includes("target_board_final.jpg")
       && !challengeTestPageSource.includes("function ChallengeTarget")
       && !challengeTestPageSource.includes("challenge-shot-layer"),
