@@ -16,11 +16,11 @@ const AIM_PROGRESS_DELAY_MS = 500;
 const AIM_PROGRESS_FILL_MS = 2500;
 const ARROW_TRAVEL_MS = 500;
 const TARGET_Z = -26.398;
-const TARGET_POSITION = new THREE.Vector3(0, 1.362, TARGET_Z);
+export const TARGET_POSITION = new THREE.Vector3(0, 1.362, TARGET_Z);
 const TARGET_RADIUS = 0.75;
 const TARGET_BASE_RADIUS = 0.0808;
 const TARGET_SEGMENTS = 10;
-const RING_SPACING = TARGET_RADIUS / TARGET_SEGMENTS;
+export const RING_SPACING = TARGET_RADIUS / TARGET_SEGMENTS;
 const ARROW_SPAWN = new THREE.Vector3(0.086, 1.586, 1.373);
 const MISS_Z_OFFSET = -10;
 
@@ -204,7 +204,7 @@ class ChallengeArcheryScene {
   private renderer: THREE.WebGLRenderer;
   private resizeObserver: ResizeObserver;
   private scene = new THREE.Scene();
-  private squaredDistanceSum = 0;
+  private squaredRingErrorSum = 0;
   private stuckArrows: THREE.Object3D[] = [];
   private velocity: Point = { x: 0, y: 0 };
 
@@ -314,7 +314,7 @@ class ChallengeArcheryScene {
 
     this.stuckArrows.forEach((arrow) => this.scene.remove(arrow));
     this.stuckArrows = [];
-    this.squaredDistanceSum = 0;
+    this.squaredRingErrorSum = 0;
     this.metrics = { attempts: 0, sigma: "0", stuckArrows: 0 };
     this.callbacks.onMetrics(this.metrics);
     this.currentWind = this.sampleWind();
@@ -542,11 +542,14 @@ class ChallengeArcheryScene {
     this.container.dataset.lastArrowTipY = flight.arrow.position.y.toFixed(5);
     this.container.dataset.lastArrowTipZ = flight.arrow.position.z.toFixed(5);
 
+    const hitOffsetRings = {
+      x: (flight.to.x - TARGET_POSITION.x) / RING_SPACING,
+      y: (flight.to.y - TARGET_POSITION.y) / RING_SPACING,
+    };
     const distance = Math.hypot(flight.to.x - TARGET_POSITION.x, flight.to.y - TARGET_POSITION.y);
-    const distanceRings = distance / RING_SPACING;
     this.metrics.attempts += 1;
-    this.squaredDistanceSum += distanceRings * distanceRings;
-    this.metrics.sigma = Math.sqrt(this.squaredDistanceSum / this.metrics.attempts).toFixed(1);
+    this.squaredRingErrorSum += hitOffsetRings.x * hitOffsetRings.x + hitOffsetRings.y * hitOffsetRings.y;
+    this.metrics.sigma = Math.sqrt(this.squaredRingErrorSum / (2 * this.metrics.attempts)).toFixed(1);
 
     if (flight.missedTarget) {
       this.scene.remove(flight.arrow);

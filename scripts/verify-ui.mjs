@@ -1598,7 +1598,14 @@ async function runSetupPreferenceChecks(page) {
       && Math.abs(shotDebug.arrowTipZ - shotDebug.hitZ) < 0.001,
     "Challenge arrow is tip-anchored at the computed hit point.",
   );
-  assert(/^\d+\.\d$/.test((await page.locator(".challenge-score-item strong").nth(1).textContent()) ?? ""), "Challenge sigma renders with one decimal after a shot.");
+  const sigmaText = (await page.locator(".challenge-score-item strong").nth(1).textContent()) ?? "";
+  assert(/^\d+\.\d$/.test(sigmaText), "Challenge sigma renders with one decimal after a shot.");
+  const sigmaCheck = await page.evaluate(async ({ hitX, hitY }) => {
+    const { TARGET_POSITION, RING_SPACING } = await import("/src/ui/ChallengeTestPage.tsx");
+
+    return Math.sqrt((((hitX - TARGET_POSITION.x) / RING_SPACING) ** 2 + ((hitY - TARGET_POSITION.y) / RING_SPACING) ** 2) / 2).toFixed(1);
+  }, { hitX: shotDebug.hitX, hitY: shotDebug.hitY });
+  assert(sigmaText === sigmaCheck, "Challenge sigma is the no-covariance two-dimensional Gaussian standard deviation.");
   await capture(page, "01c-challenge-test-page-post-shot-mobile.png");
 
   await page.getByRole("button", { name: "Restart challenge" }).click();
