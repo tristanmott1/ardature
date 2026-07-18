@@ -440,7 +440,15 @@ async function runSourceChecks() {
       && challengeTestPageSource.includes("const RING_SPACING = TARGET_RADIUS / TARGET_SEGMENTS")
       && challengeTestPageSource.includes("const CAMERA_DEFAULT_POS")
       && challengeTestPageSource.includes("function createTargetTexture")
+      && challengeTestPageSource.includes("createAimCursorElement")
+      && challengeTestPageSource.includes("arrowTipOffset")
+      && challengeTestPageSource.includes("OPEN_PIGEON_ARROW_ROTATION")
+      && challengeTestPageSource.includes("camera.updateMatrixWorld(true)")
+      && challengeTestPageSource.includes("function windScreenRotation")
+      && challengeTestPageSource.includes("recordShotDebug")
       && challengeTestPageSource.includes("const power = 2.5 + Math.random() * 2.5")
+      && !challengeTestPageSource.includes("onAim")
+      && !challengeTestPageSource.includes("orientArrow")
       && !challengeTestPageSource.includes("target_board_final.jpg")
       && !challengeTestPageSource.includes("function ChallengeTarget")
       && !challengeTestPageSource.includes("challenge-shot-layer"),
@@ -1505,6 +1513,17 @@ async function runSetupPreferenceChecks(page) {
   await page.waitForTimeout(120);
   const cursorBox = await page.locator(".challenge-aim-cursor").boundingBox();
   assert(cursorBox, "Challenge aim cursor is visible while aiming.");
+  const renderedAim = await challengeStage.evaluate((stage) => ({
+    x: Number(stage.getAttribute("data-aim-x")),
+    y: Number(stage.getAttribute("data-aim-y")),
+    left: Number.parseFloat(getComputedStyle(stage.querySelector(".challenge-aim-cursor")).left),
+    top: Number.parseFloat(getComputedStyle(stage.querySelector(".challenge-aim-cursor")).top),
+  }));
+  assert(
+    Math.abs(renderedAim.left - renderedAim.x) < 1
+      && Math.abs(renderedAim.top - renderedAim.y) < 1,
+    "Challenge cursor DOM is driven by the same frame-owned aim state as shot math.",
+  );
   const cursorCenter = {
     x: cursorBox.x + cursorBox.width / 2,
     y: cursorBox.y + cursorBox.height / 2,
@@ -1525,6 +1544,36 @@ async function runSetupPreferenceChecks(page) {
   await page.mouse.up();
   await page.waitForFunction(() => document.querySelectorAll(".challenge-score-item strong")[0]?.textContent === "1");
   await page.waitForFunction(() => document.querySelector(".challenge-test-stage")?.getAttribute("data-stuck-arrows") === "1");
+  const shotDebug = await challengeStage.evaluate((stage) => ({
+    arrowTipX: Number(stage.getAttribute("data-last-arrow-tip-x")),
+    arrowTipY: Number(stage.getAttribute("data-last-arrow-tip-y")),
+    arrowTipZ: Number(stage.getAttribute("data-last-arrow-tip-z")),
+    baseX: Number(stage.getAttribute("data-last-base-x")),
+    baseY: Number(stage.getAttribute("data-last-base-y")),
+    baseScreenX: Number(stage.getAttribute("data-last-base-screen-x")),
+    baseScreenY: Number(stage.getAttribute("data-last-base-screen-y")),
+    hitX: Number(stage.getAttribute("data-last-hit-x")),
+    hitY: Number(stage.getAttribute("data-last-hit-y")),
+    hitZ: Number(stage.getAttribute("data-last-hit-z")),
+    windX: Number(stage.getAttribute("data-last-wind-x")),
+    windY: Number(stage.getAttribute("data-last-wind-y")),
+  }));
+  assert(
+    Math.abs(shotDebug.hitX - shotDebug.baseX - shotDebug.windX) < 0.001
+      && Math.abs(shotDebug.hitY - shotDebug.baseY - shotDebug.windY) < 0.001,
+    "Challenge shot resolves from the released aim point plus wind.",
+  );
+  assert(
+    Math.abs(shotDebug.baseScreenX - Number(await challengeStage.getAttribute("data-last-aim-x"))) < 1
+      && Math.abs(shotDebug.baseScreenY - Number(await challengeStage.getAttribute("data-last-aim-y"))) < 1,
+    "Challenge released crosshair projects to the un-winded target hit.",
+  );
+  assert(
+    Math.abs(shotDebug.arrowTipX - shotDebug.hitX) < 0.001
+      && Math.abs(shotDebug.arrowTipY - shotDebug.hitY) < 0.001
+      && Math.abs(shotDebug.arrowTipZ - shotDebug.hitZ) < 0.001,
+    "Challenge arrow is tip-anchored at the computed hit point.",
+  );
   assert(/^\d+\.\d$/.test((await page.locator(".challenge-score-item strong").nth(1).textContent()) ?? ""), "Challenge sigma renders with one decimal after a shot.");
   await capture(page, "01c-challenge-test-page-post-shot-mobile.png");
 
@@ -1537,7 +1586,7 @@ async function runSetupPreferenceChecks(page) {
   await page.mouse.move(challengeStageBox.x + challengeStageBox.width * 0.5, challengeStageBox.y + challengeStageBox.height * 0.8);
   await page.mouse.down();
   await page.waitForTimeout(3300);
-  assert((await page.locator(".challenge-progress-textures").count()) === 1, "Challenge progress textures appear after holding the aim.");
+  assert(await page.locator(".challenge-progress-textures").isVisible(), "Challenge progress textures appear after holding the aim.");
   await capture(page, "01d-challenge-test-page-aiming-mobile.png");
   await page.waitForFunction(() => document.querySelectorAll(".challenge-score-item strong")[0]?.textContent === "1", null, { timeout: 9000 });
   await page.mouse.up();

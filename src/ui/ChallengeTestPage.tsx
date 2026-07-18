@@ -1,4 +1,4 @@
-import { type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { RotateCcw, X } from "lucide-react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -27,6 +27,11 @@ const CAMERA_FOLLOW_Y_OFFSET = 0.5;
 const CAMERA_LOOK_AT_Y_OFFSET = 0.55;
 const CAMERA_FOLLOW_FOV = 50;
 const CAMERA_FOLLOW_LERP_MS = 700;
+const OPEN_PIGEON_ARROW_ROTATION = new THREE.Matrix4().makeBasis(
+  new THREE.Vector3(0, -1, 0),
+  new THREE.Vector3(0, 0, 1),
+  new THREE.Vector3(-1, 0, 0),
+);
 
 type Point = {
   x: number;
@@ -39,12 +44,6 @@ type Wind = {
   color: string;
 };
 
-type AimView = {
-  cursor: Point;
-  progress: number;
-  progressVisible: boolean;
-};
-
 type ChallengeMetrics = {
   attempts: number;
   sigma: string;
@@ -52,7 +51,6 @@ type ChallengeMetrics = {
 };
 
 type ChallengeCallbacks = {
-  onAim: (aim: AimView | null) => void;
   onMetrics: (metrics: ChallengeMetrics) => void;
   onWind: (wind: Wind) => void;
 };
@@ -109,11 +107,6 @@ function capVector(point: Point, maxMagnitude: number): Point {
   };
 }
 
-function orientArrow(arrow: THREE.Object3D, from: THREE.Vector3, to: THREE.Vector3) {
-  const direction = to.clone().sub(from).normalize();
-  arrow.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction);
-}
-
 function cloneObject(source: THREE.Object3D) {
   const clone = source.clone(true);
 
@@ -125,6 +118,14 @@ function cloneObject(source: THREE.Object3D) {
   });
 
   return clone;
+}
+
+function applyOpenPigeonArrowRotation(arrow: THREE.Object3D) {
+  arrow.quaternion.setFromRotationMatrix(OPEN_PIGEON_ARROW_ROTATION);
+}
+
+function windScreenRotation(wind: Wind) {
+  return Math.PI - wind.angle;
 }
 
 function createTargetTexture() {
@@ -180,6 +181,7 @@ class ChallengeArcheryScene {
   private aimProgressStartedAt: number | null = null;
   private arrowFlight: ArrowFlight | null = null;
   private arrowTemplate: THREE.Object3D | null = null;
+  private arrowTipOffset = new THREE.Vector3();
   private bowFullyDrawn = false;
   private camera: THREE.PerspectiveCamera;
   private cameraTween: CameraTween | null = null;
@@ -192,6 +194,8 @@ class ChallengeArcheryScene {
   private isAiming = false;
   private lastFrameAt = performance.now();
   private metrics: ChallengeMetrics = { attempts: 0, sigma: "0", stuckArrows: 0 };
+  private aimCursorElement: HTMLDivElement;
+  private aimProgressElement: HTMLSpanElement;
   private raycaster = new THREE.Raycaster();
   private renderer: THREE.WebGLRenderer;
   private resizeObserver: ResizeObserver;
@@ -208,6 +212,9 @@ class ChallengeArcheryScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
     this.container.appendChild(this.renderer.domElement);
+    const aimElements = this.createAimCursorElement();
+    this.aimCursorElement = aimElements.cursor;
+    this.aimProgressElement = aimElements.progress;
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.container);
@@ -230,6 +237,7 @@ class ChallengeArcheryScene {
 
     this.renderer.dispose();
     this.renderer.domElement.remove();
+    this.aimCursorElement.remove();
   }
 
   pointerDown(point: Point) {
@@ -243,7 +251,7 @@ class ChallengeArcheryScene {
     this.initialPointer = point;
     this.velocity = { x: 0, y: 0 };
     this.aimProgressStartedAt = performance.now() + AIM_PROGRESS_DELAY_MS;
-    this.callbacks.onAim({ cursor: this.aimCursor, progress: 0, progressVisible: false });
+    this.renderAimCursor(0, false);
     this.tweenCamera(this.camera.position, AIM_ZOOM_FOV, 500, () => {
       if (this.isAiming) {
         this.bowFullyDrawn = true;
@@ -285,7 +293,8 @@ class ChallengeArcheryScene {
     this.arrowFlight = null;
     this.cameraTween = null;
     this.aimProgressStartedAt = null;
-    this.callbacks.onAim(null);
+    this.hideAimCursor();
+    this.clearShotDebug();
 
     if (this.currentArrow) {
       this.scene.remove(this.currentArrow);
@@ -412,6 +421,13 @@ class ChallengeArcheryScene {
         child.receiveShadow = true;
       }
     });
+    this.arrowTemplate.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(this.arrowTemplate);
+    const center = bounds.getCenter(new THREE.Vector3());
+
+    // The imported arrow points along local +X. Anchor clones at the visual tip,
+    // so the computed target hit is the arrow tip instead of the asset origin.
+    this.arrowTipOffset.set(bounds.max.x, center.y, center.z);
   }
 
   private spawnReadyArrow() {
@@ -419,12 +435,21 @@ class ChallengeArcheryScene {
       return;
     }
 
-    const arrow = cloneObject(this.arrowTemplate);
+    const arrow = this.createArrow();
     arrow.position.copy(ARROW_SPAWN);
-    orientArrow(arrow, ARROW_SPAWN, TARGET_POSITION);
+    applyOpenPigeonArrowRotation(arrow);
     arrow.visible = false;
     this.currentArrow = arrow;
     this.scene.add(arrow);
+  }
+
+  private createArrow() {
+    const arrow = new THREE.Group();
+    const visual = cloneObject(this.arrowTemplate!);
+    visual.position.copy(this.arrowTipOffset).multiplyScalar(-1);
+    arrow.add(visual);
+
+    return arrow;
   }
 
   private sampleWind(): Wind {
@@ -443,7 +468,7 @@ class ChallengeArcheryScene {
     this.bowFullyDrawn = false;
     this.velocity = { x: 0, y: 0 };
     this.aimProgressStartedAt = null;
-    this.callbacks.onAim(null);
+    this.hideAimCursor();
     this.tweenCamera(CAMERA_DEFAULT_POS, CAMERA_DEFAULT_FOV, 500);
   }
 
@@ -467,7 +492,8 @@ class ChallengeArcheryScene {
     this.isAiming = false;
     this.bowFullyDrawn = false;
     this.velocity = { x: 0, y: 0 };
-    this.callbacks.onAim(null);
+    this.recordShotDebug(baseShot, windVector, shotPosition);
+    this.hideAimCursor();
     this.arrowFlight = {
       arrow,
       from: arrow.position.clone(),
@@ -475,13 +501,13 @@ class ChallengeArcheryScene {
       startedAt: performance.now(),
       to: shotPosition,
     };
-    orientArrow(arrow, this.arrowFlight.from, shotPosition);
     this.followArrow();
   }
 
   private projectCursorToTarget() {
     const rect = this.container.getBoundingClientRect();
     const pointer = new THREE.Vector2((this.aimCursor.x / rect.width) * 2 - 1, -(this.aimCursor.y / rect.height) * 2 + 1);
+    this.camera.updateMatrixWorld(true);
     this.raycaster.setFromCamera(pointer, this.camera);
     const origin = this.raycaster.ray.origin;
     const direction = this.raycaster.ray.direction;
@@ -498,6 +524,10 @@ class ChallengeArcheryScene {
   }
 
   private completeShot(flight: ArrowFlight) {
+    this.container.dataset.lastArrowTipX = flight.arrow.position.x.toFixed(5);
+    this.container.dataset.lastArrowTipY = flight.arrow.position.y.toFixed(5);
+    this.container.dataset.lastArrowTipZ = flight.arrow.position.z.toFixed(5);
+
     const distance = Math.hypot(flight.to.x - TARGET_POSITION.x, flight.to.y - TARGET_POSITION.y);
     const distanceRings = distance / RING_SPACING;
     this.metrics.attempts += 1;
@@ -636,11 +666,7 @@ class ChallengeArcheryScene {
 
     const progressElapsed = this.aimProgressStartedAt === null ? -1 : now - this.aimProgressStartedAt;
     const progress = clamp(progressElapsed / AIM_PROGRESS_FILL_MS, 0, 1);
-    this.callbacks.onAim({
-      cursor: this.aimCursor,
-      progress,
-      progressVisible: progressElapsed >= 0,
-    });
+    this.renderAimCursor(progress, progressElapsed >= 0);
 
     if (progress >= 1) {
       this.shoot();
@@ -679,12 +705,105 @@ class ChallengeArcheryScene {
       y: rect.height / 2,
     };
   }
+
+  private createAimCursorElement() {
+    const cursor = document.createElement("div");
+    cursor.className = "challenge-aim-cursor";
+    cursor.setAttribute("aria-hidden", "true");
+    cursor.hidden = true;
+
+    const image = document.createElement("img");
+    image.className = "challenge-aim-cursor-image";
+    image.src = `${ASSET_ROOT}/cursor.png`;
+    image.alt = "";
+    image.draggable = false;
+    cursor.appendChild(image);
+
+    const progress = document.createElement("span");
+    progress.className = "challenge-progress-textures";
+    progress.hidden = true;
+
+    const progressUnder = document.createElement("img");
+    progressUnder.className = "challenge-progress-under";
+    progressUnder.src = `${ASSET_ROOT}/progress_under.png`;
+    progressUnder.alt = "";
+    progressUnder.draggable = false;
+    progress.appendChild(progressUnder);
+
+    const progressOver = document.createElement("span");
+    progressOver.className = "challenge-progress-over";
+    progressOver.style.backgroundImage = `url(${ASSET_ROOT}/progress_over.png)`;
+    progress.appendChild(progressOver);
+
+    cursor.appendChild(progress);
+    this.container.appendChild(cursor);
+
+    return { cursor, progress };
+  }
+
+  private renderAimCursor(progress: number, progressVisible: boolean) {
+    this.aimCursorElement.hidden = false;
+    this.aimCursorElement.style.left = `${this.aimCursor.x}px`;
+    this.aimCursorElement.style.top = `${this.aimCursor.y}px`;
+    this.aimProgressElement.hidden = !progressVisible;
+    this.aimProgressElement.style.setProperty("--challenge-progress", `${progress * 100}%`);
+    this.container.dataset.aimX = this.aimCursor.x.toFixed(3);
+    this.container.dataset.aimY = this.aimCursor.y.toFixed(3);
+  }
+
+  private hideAimCursor() {
+    this.aimCursorElement.hidden = true;
+    this.aimProgressElement.hidden = true;
+    delete this.container.dataset.aimX;
+    delete this.container.dataset.aimY;
+  }
+
+  private recordShotDebug(baseShot: THREE.Vector3, windVector: Point, shotPosition: THREE.Vector3) {
+    const baseScreen = this.screenPointForWorld(baseShot);
+    this.container.dataset.lastAimX = this.aimCursor.x.toFixed(3);
+    this.container.dataset.lastAimY = this.aimCursor.y.toFixed(3);
+    this.container.dataset.lastBaseX = baseShot.x.toFixed(5);
+    this.container.dataset.lastBaseY = baseShot.y.toFixed(5);
+    this.container.dataset.lastBaseScreenX = baseScreen.x.toFixed(3);
+    this.container.dataset.lastBaseScreenY = baseScreen.y.toFixed(3);
+    this.container.dataset.lastWindX = windVector.x.toFixed(5);
+    this.container.dataset.lastWindY = windVector.y.toFixed(5);
+    this.container.dataset.lastHitX = shotPosition.x.toFixed(5);
+    this.container.dataset.lastHitY = shotPosition.y.toFixed(5);
+    this.container.dataset.lastHitZ = shotPosition.z.toFixed(5);
+  }
+
+  private clearShotDebug() {
+    delete this.container.dataset.lastAimX;
+    delete this.container.dataset.lastAimY;
+    delete this.container.dataset.lastBaseX;
+    delete this.container.dataset.lastBaseY;
+    delete this.container.dataset.lastBaseScreenX;
+    delete this.container.dataset.lastBaseScreenY;
+    delete this.container.dataset.lastWindX;
+    delete this.container.dataset.lastWindY;
+    delete this.container.dataset.lastHitX;
+    delete this.container.dataset.lastHitY;
+    delete this.container.dataset.lastHitZ;
+    delete this.container.dataset.lastArrowTipX;
+    delete this.container.dataset.lastArrowTipY;
+    delete this.container.dataset.lastArrowTipZ;
+  }
+
+  private screenPointForWorld(point: THREE.Vector3) {
+    const rect = this.container.getBoundingClientRect();
+    const projected = point.clone().project(this.camera);
+
+    return {
+      x: ((projected.x + 1) / 2) * rect.width,
+      y: ((1 - projected.y) / 2) * rect.height,
+    };
+  }
 }
 
 export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
   const sceneControllerRef = useRef<ChallengeArcheryScene | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const [aimView, setAimView] = useState<AimView | null>(null);
   const [metrics, setMetrics] = useState<ChallengeMetrics>({ attempts: 0, sigma: "0", stuckArrows: 0 });
   const [wind, setWind] = useState<Wind>({ angle: 0, color: colorForWind(0), power: 0 });
 
@@ -694,7 +813,6 @@ export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
     }
 
     const controller = new ChallengeArcheryScene(stageRef.current, {
-      onAim: setAimView,
       onMetrics: setMetrics,
       onWind: setWind,
     });
@@ -759,7 +877,6 @@ export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
         onPointerCancel={handlePointerUp}
       >
         <WindIndicator wind={wind} />
-        {aimView ? <AimCursor aimView={aimView} /> : null}
       </div>
       <footer className="challenge-test-scorebar">
         <div className="challenge-score-item">
@@ -779,22 +896,8 @@ function WindIndicator({ wind }: { wind: Wind }) {
   return (
     <div className="challenge-wind" style={{ color: wind.color }} aria-label={`Wind power ${wind.power.toFixed(1)}`}>
       <img className="challenge-wind-circle" src={`${ASSET_ROOT}/wind_arrow_circle.png`} alt="" aria-hidden="true" />
-      <img className="challenge-wind-arrow" src={`${ASSET_ROOT}/wind_arrow.png`} style={{ transform: `rotate(${wind.angle}rad)` }} alt="" aria-hidden="true" />
+      <img className="challenge-wind-arrow" src={`${ASSET_ROOT}/wind_arrow.png`} style={{ transform: `rotate(${windScreenRotation(wind)}rad)` }} alt="" aria-hidden="true" />
       <span className="challenge-wind-label">Wind {wind.power.toFixed(1)}</span>
-    </div>
-  );
-}
-
-function AimCursor({ aimView }: { aimView: AimView }) {
-  return (
-    <div className="challenge-aim-cursor" style={{ left: aimView.cursor.x, top: aimView.cursor.y }} aria-hidden="true">
-      <img className="challenge-aim-cursor-image" src={`${ASSET_ROOT}/cursor.png`} alt="" />
-      {aimView.progressVisible ? (
-        <span className="challenge-progress-textures" style={{ "--challenge-progress": `${aimView.progress * 100}%` } as CSSProperties}>
-          <img className="challenge-progress-under" src={`${ASSET_ROOT}/progress_under.png`} alt="" />
-          <span className="challenge-progress-over" style={{ backgroundImage: `url(${ASSET_ROOT}/progress_over.png)` }} />
-        </span>
-      ) : null}
     </div>
   );
 }

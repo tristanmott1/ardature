@@ -70,11 +70,14 @@ The challenge test page ports the OpenPigeon archery scene into a self-contained
 - Pressing the stage starts aiming with the cursor at the center of the stage and zooms the camera to FOV `41.5` over `500ms`.
 - Pointer movement sets cursor velocity to `(currentPointer - initialPointer) * 4.9`, capped at `1000` pixels per second.
 - The cursor moves by velocity every animation frame and clamps to the stage rectangle.
+- The cursor and progress textures are rendered by the same animation loop that owns aim physics, so the displayed crosshair is the released aim point.
 - Releasing before the draw zoom completes cancels the shot and does not increment attempts.
 - After `3000ms`, the OpenPigeon progress textures appear around the cursor and fill linearly for `5000ms`.
 - A full progress ring auto-fires.
 - For the fixed-distance sandbox, the target uses OpenPigeon's far target distance and wind is sampled from a harder `2.5..5.0` ring-unit range.
+- The wind indicator points in the same screen-space direction that wind will displace the hit on the rendered target.
 - The fired hit location is the cursor ray projected onto the target plane, plus wind displacement in target-ring units.
+- The camera matrix is refreshed before shot projection, and the imported arrow keeps OpenPigeon's fixed scene rotation while being wrapped so the visual arrow tip lands at the computed hit location.
 - The arrow appears for a `500ms` travel animation, camera follow, target highlight, and stuck-arrow behavior.
 - `Attempts` counts fired shots only.
 - `Sigma` is the RMS distance from the bullseye in ring units and displays with one decimal after the first shot.
