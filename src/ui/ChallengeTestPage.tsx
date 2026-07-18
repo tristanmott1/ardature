@@ -127,6 +127,54 @@ function cloneObject(source: THREE.Object3D) {
   return clone;
 }
 
+function createTargetTexture() {
+  const canvas = document.createElement("canvas");
+  const size = 1024;
+  const center = size / 2;
+  const radius = 440;
+  const context = canvas.getContext("2d");
+
+  canvas.width = size;
+  canvas.height = size;
+
+  if (!context) {
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  context.fillStyle = "#b6b6b6";
+  context.fillRect(0, 0, size, size);
+
+  const rings = [
+    "#c9c9c9",
+    "#bdbdbd",
+    "#ededed",
+    "#111111",
+    "#0c8db8",
+    "#0c8db8",
+    "#c6131b",
+    "#c6131b",
+    "#c7b400",
+    "#c7b400",
+  ];
+
+  rings.forEach((color, index) => {
+    const ringRadius = radius * ((rings.length - index) / rings.length);
+
+    context.beginPath();
+    context.arc(center, center, ringRadius, 0, Math.PI * 2);
+    context.fillStyle = color;
+    context.fill();
+    context.lineWidth = 4;
+    context.strokeStyle = "#151515";
+    context.stroke();
+  });
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  return texture;
+}
+
 class ChallengeArcheryScene {
   private aimCursor: Point = { x: 0, y: 0 };
   private aimProgressStartedAt: number | null = null;
@@ -259,8 +307,7 @@ class ChallengeArcheryScene {
   private async load() {
     const textureLoader = new THREE.TextureLoader();
     const gltfLoader = new GLTFLoader();
-    const [targetTexture, grass12, grass14, sky, woodTexture, arrowGltf] = await Promise.all([
-      textureLoader.loadAsync(`${ASSET_ROOT}/target_board_final.jpg`),
+    const [grass12, grass14, sky, woodTexture, arrowGltf] = await Promise.all([
       textureLoader.loadAsync(`${ASSET_ROOT}/grass12.png`),
       textureLoader.loadAsync(`${ASSET_ROOT}/grass14.png`),
       textureLoader.loadAsync(`${ASSET_ROOT}/sky1.png`),
@@ -272,7 +319,7 @@ class ChallengeArcheryScene {
       return;
     }
 
-    [targetTexture, grass12, grass14, sky, woodTexture].forEach((texture) => {
+    [grass12, grass14, sky, woodTexture].forEach((texture) => {
       texture.colorSpace = THREE.SRGBColorSpace;
     });
     grass12.wrapS = THREE.RepeatWrapping;
@@ -283,7 +330,7 @@ class ChallengeArcheryScene {
     grass14.repeat.set(66.66, 0.667);
 
     this.buildEnvironment(grass12, grass14, sky);
-    this.buildTarget(targetTexture, woodTexture);
+    this.buildTarget(createTargetTexture(), woodTexture);
     this.arrowTemplate = arrowGltf.scene;
     this.prepareArrowTemplate();
     this.spawnReadyArrow();
@@ -381,8 +428,8 @@ class ChallengeArcheryScene {
   }
 
   private sampleWind(): Wind {
-    const shotIndex = this.metrics.attempts;
     const angle = Math.random() * Math.PI * 2;
+    const shotIndex = this.metrics.attempts;
     let power = 0.5 + Math.random() * 0.3;
 
     if (shotIndex === 1) {

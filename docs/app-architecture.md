@@ -65,7 +65,8 @@ The home page may expose a bottom-right target-icon button that opens a standalo
 The challenge test page ports the OpenPigeon archery scene into a self-contained Three.js sandbox:
 
 - The page copies OpenPigeon archery runtime assets under `public/challenge/open-pigeon/` and does not depend on the source project at runtime.
-- The target, arrow asset, camera, floor, sky, wind UI, cursor, progress textures, arrow flight, and target scoring are derived from OpenPigeon's `archery.tscn`, `archery.gd`, `arrow.gd`, and `target.gd`.
+- The target is a generated no-number ring texture: only colored concentric circles are shown.
+- The arrow asset, camera, floor, sky, wind UI, cursor, progress textures, arrow flight, and target scoring are derived from OpenPigeon's `archery.tscn`, `archery.gd`, `arrow.gd`, and `target.gd`.
 - Pressing the stage starts aiming with the cursor at the center of the stage and zooms the camera to FOV `41.5` over `500ms`.
 - Pointer movement sets cursor velocity to `(currentPointer - initialPointer) * 4.9`, capped at `1000` pixels per second.
 - The cursor moves by velocity every animation frame and clamps to the stage rectangle.

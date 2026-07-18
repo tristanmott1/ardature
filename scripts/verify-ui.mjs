@@ -438,6 +438,8 @@ async function runSourceChecks() {
       && challengeTestPageSource.includes("const TARGET_BASE_RADIUS = 0.0808")
       && challengeTestPageSource.includes("const RING_SPACING = TARGET_RADIUS / TARGET_SEGMENTS")
       && challengeTestPageSource.includes("const CAMERA_DEFAULT_POS")
+      && challengeTestPageSource.includes("function createTargetTexture")
+      && !challengeTestPageSource.includes("target_board_final.jpg")
       && !challengeTestPageSource.includes("function ChallengeTarget")
       && !challengeTestPageSource.includes("challenge-shot-layer"),
     "Challenge test page is a Three.js OpenPigeon-style scene instead of the old SVG target.",
