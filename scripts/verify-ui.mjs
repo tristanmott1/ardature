@@ -432,8 +432,8 @@ async function runSourceChecks() {
       && challengeTestPageSource.includes("const AIM_SENSITIVITY = 4.9")
       && challengeTestPageSource.includes("const AIM_MAX_SPEED = 1000")
       && challengeTestPageSource.includes("const AIM_ZOOM_FOV = 41.5")
-      && challengeTestPageSource.includes("const AIM_PROGRESS_DELAY_MS = 3000")
-      && challengeTestPageSource.includes("const AIM_PROGRESS_FILL_MS = 5000")
+      && challengeTestPageSource.includes("const AIM_PROGRESS_DELAY_MS = 500")
+      && challengeTestPageSource.includes("const AIM_PROGRESS_FILL_MS = 2500")
       && challengeTestPageSource.includes("const ARROW_TRAVEL_MS = 500")
       && challengeTestPageSource.includes("const TARGET_Z = -26.398")
       && challengeTestPageSource.includes("const TARGET_BASE_RADIUS = 0.0808")
@@ -1583,10 +1583,10 @@ async function runSetupPreferenceChecks(page) {
   assert(challengeStageBox, "Challenge test stage still has visible bounds before auto-fire.");
   await page.mouse.move(challengeStageBox.x + challengeStageBox.width * 0.5, challengeStageBox.y + challengeStageBox.height * 0.8);
   await page.mouse.down();
-  await page.waitForTimeout(3300);
+  await page.waitForTimeout(800);
   assert(await page.locator(".challenge-progress-textures").isVisible(), "Challenge progress textures appear after holding the aim.");
   await capture(page, "01d-challenge-test-page-aiming-mobile.png");
-  await page.waitForFunction(() => document.querySelectorAll(".challenge-score-item strong")[0]?.textContent === "1", null, { timeout: 9000 });
+  await page.waitForFunction(() => document.querySelectorAll(".challenge-score-item strong")[0]?.textContent === "1", null, { timeout: 4500 });
   await page.mouse.up();
   await page.getByRole("button", { name: "Restart challenge" }).click();
   assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge restart clears an auto-fired shot.");
