@@ -5,8 +5,12 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const ASSET_ROOT = `${import.meta.env.BASE_URL}challenge/open-pigeon`;
 
-const AIM_SENSITIVITY = 4.9;
+const AIM_SENSITIVITY = 6.2;
 const AIM_MAX_SPEED = 1000;
+const AIM_DRIFT_X_PX = 12;
+const AIM_DRIFT_Y_PX = 7;
+const AIM_DRIFT_X_PERIOD_MS = 1800;
+const AIM_DRIFT_Y_PERIOD_MS = 1200;
 const AIM_ZOOM_FOV = 41.5;
 const AIM_PROGRESS_DELAY_MS = 500;
 const AIM_PROGRESS_FILL_MS = 2500;
@@ -173,8 +177,10 @@ function createTargetTexture() {
 }
 
 class ChallengeArcheryScene {
+  private aimBaseCursor: Point = { x: 0, y: 0 };
   private aimCursor: Point = { x: 0, y: 0 };
   private aimProgressStartedAt: number | null = null;
+  private aimStartedAt: number | null = null;
   private arrowFlight: ArrowFlight | null = null;
   private arrowTemplate: THREE.Object3D | null = null;
   private arrowTipOffset = new THREE.Vector3();
@@ -243,10 +249,12 @@ class ChallengeArcheryScene {
 
     this.isAiming = true;
     this.bowFullyDrawn = false;
-    this.aimCursor = this.stageCenter();
+    this.aimBaseCursor = this.stageCenter();
+    this.aimCursor = this.aimBaseCursor;
     this.initialPointer = point;
     this.velocity = { x: 0, y: 0 };
-    this.aimProgressStartedAt = performance.now() + AIM_PROGRESS_DELAY_MS;
+    this.aimStartedAt = performance.now();
+    this.aimProgressStartedAt = this.aimStartedAt + AIM_PROGRESS_DELAY_MS;
     this.renderAimCursor(0, false);
     this.tweenCamera(this.camera.position, AIM_ZOOM_FOV, 500, () => {
       if (this.isAiming) {
@@ -289,6 +297,7 @@ class ChallengeArcheryScene {
     this.arrowFlight = null;
     this.cameraTween = null;
     this.aimProgressStartedAt = null;
+    this.aimStartedAt = null;
     this.hideAimCursor();
     this.clearShotDebug();
 
@@ -464,6 +473,7 @@ class ChallengeArcheryScene {
     this.bowFullyDrawn = false;
     this.velocity = { x: 0, y: 0 };
     this.aimProgressStartedAt = null;
+    this.aimStartedAt = null;
     this.hideAimCursor();
     this.tweenCamera(CAMERA_DEFAULT_POS, CAMERA_DEFAULT_FOV, 500);
   }
@@ -488,6 +498,7 @@ class ChallengeArcheryScene {
     this.isAiming = false;
     this.bowFullyDrawn = false;
     this.velocity = { x: 0, y: 0 };
+    this.aimStartedAt = null;
     this.recordShotDebug(baseShot, windVector, shotPosition);
     this.hideAimCursor();
     this.arrowFlight = {
@@ -656,10 +667,11 @@ class ChallengeArcheryScene {
     }
 
     const rect = this.container.getBoundingClientRect();
-    this.aimCursor = {
-      x: clamp(this.aimCursor.x + this.velocity.x * dtSeconds, 0, rect.width),
-      y: clamp(this.aimCursor.y + this.velocity.y * dtSeconds, 0, rect.height),
+    this.aimBaseCursor = {
+      x: clamp(this.aimBaseCursor.x + this.velocity.x * dtSeconds, 0, rect.width),
+      y: clamp(this.aimBaseCursor.y + this.velocity.y * dtSeconds, 0, rect.height),
     };
+    this.aimCursor = this.driftedAimCursor(now, rect);
 
     const progressElapsed = this.aimProgressStartedAt === null ? -1 : now - this.aimProgressStartedAt;
     const progress = clamp(progressElapsed / AIM_PROGRESS_FILL_MS, 0, 1);
@@ -700,6 +712,19 @@ class ChallengeArcheryScene {
     return {
       x: rect.width / 2,
       y: rect.height / 2,
+    };
+  }
+
+  private driftedAimCursor(now: number, rect: DOMRect) {
+    const elapsedMs = this.aimStartedAt === null ? 0 : now - this.aimStartedAt;
+    const drift = {
+      x: Math.sin((elapsedMs / AIM_DRIFT_X_PERIOD_MS) * Math.PI * 2) * AIM_DRIFT_X_PX,
+      y: Math.sin((elapsedMs / AIM_DRIFT_Y_PERIOD_MS) * Math.PI * 2) * AIM_DRIFT_Y_PX,
+    };
+
+    return {
+      x: clamp(this.aimBaseCursor.x + drift.x, 0, rect.width),
+      y: clamp(this.aimBaseCursor.y + drift.y, 0, rect.height),
     };
   }
 

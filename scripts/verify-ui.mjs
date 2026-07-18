@@ -429,8 +429,11 @@ async function runSourceChecks() {
       && challengeTestPageSource.includes("new THREE.WebGLRenderer")
       && challengeTestPageSource.includes("GLTFLoader")
       && challengeTestPageSource.includes("import.meta.env.BASE_URL")
-      && challengeTestPageSource.includes("const AIM_SENSITIVITY = 4.9")
+      && challengeTestPageSource.includes("const AIM_SENSITIVITY = 6.2")
       && challengeTestPageSource.includes("const AIM_MAX_SPEED = 1000")
+      && challengeTestPageSource.includes("const AIM_DRIFT_X_PX = 12")
+      && challengeTestPageSource.includes("const AIM_DRIFT_Y_PX = 7")
+      && challengeTestPageSource.includes("driftedAimCursor")
       && challengeTestPageSource.includes("const AIM_ZOOM_FOV = 41.5")
       && challengeTestPageSource.includes("const AIM_PROGRESS_DELAY_MS = 500")
       && challengeTestPageSource.includes("const AIM_PROGRESS_FILL_MS = 2500")
@@ -1493,6 +1496,25 @@ async function runSetupPreferenceChecks(page) {
   await page.mouse.up();
   await page.waitForTimeout(150);
   assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge early release cancels without recording a shot.");
+
+  challengeStageBox = await challengeStage.boundingBox();
+  assert(challengeStageBox, "Challenge test stage still has visible bounds before stationary drift.");
+  await page.mouse.move(challengeStageBox.x + challengeStageBox.width * 0.5, challengeStageBox.y + challengeStageBox.height * 0.84);
+  await page.mouse.down();
+  await page.waitForTimeout(80);
+  const driftStart = await challengeStage.evaluate((stage) => ({
+    x: Number(stage.getAttribute("data-aim-x")),
+    y: Number(stage.getAttribute("data-aim-y")),
+  }));
+  await page.waitForTimeout(250);
+  const driftLater = await challengeStage.evaluate((stage) => ({
+    x: Number(stage.getAttribute("data-aim-x")),
+    y: Number(stage.getAttribute("data-aim-y")),
+  }));
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+  assert(Math.hypot(driftLater.x - driftStart.x, driftLater.y - driftStart.y) > 1.5, "Challenge cursor has predictable breathing drift while the pointer is held still.");
+  assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge drift check still cancels before draw completion.");
 
   challengeStageBox = await challengeStage.boundingBox();
   assert(challengeStageBox, "Challenge test stage still has visible bounds after early cancel.");
