@@ -1,5 +1,5 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
-import { RotateCcw, X } from "lucide-react";
+import { BarChart3, RotateCcw, X } from "lucide-react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
@@ -46,8 +46,15 @@ type Wind = {
 type ChallengeMetrics = {
   attempts: number;
   sigma: string;
+  shotDistribution: ShotDistribution;
   stuckArrows: number;
 };
+
+const SHOT_DISTRIBUTION_LABELS = ["<1", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] as const;
+
+type ShotDistributionLabel = typeof SHOT_DISTRIBUTION_LABELS[number];
+
+type ShotDistribution = Record<ShotDistributionLabel, number>;
 
 type ChallengeCallbacks = {
   onMetrics: (metrics: ChallengeMetrics) => void;
@@ -74,6 +81,33 @@ type ArrowFlight = {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function createShotDistribution(): ShotDistribution {
+  return SHOT_DISTRIBUTION_LABELS.reduce((distribution, label) => {
+    distribution[label] = 0;
+
+    return distribution;
+  }, {} as ShotDistribution);
+}
+
+function createChallengeMetrics(): ChallengeMetrics {
+  return {
+    attempts: 0,
+    sigma: "0",
+    shotDistribution: createShotDistribution(),
+    stuckArrows: 0,
+  };
+}
+
+function shotDistributionBucket(distanceRings: number): ShotDistributionLabel {
+  for (let ring = 1; ring <= TARGET_SEGMENTS; ring += 1) {
+    if (distanceRings <= ring) {
+      return `${TARGET_SEGMENTS - ring + 1}` as ShotDistributionLabel;
+    }
+  }
+
+  return "<1";
 }
 
 function easeOutSine(value: number) {
@@ -197,7 +231,7 @@ class ChallengeArcheryScene {
   private initialPointer: Point = { x: 0, y: 0 };
   private isAiming = false;
   private lastFrameAt = performance.now();
-  private metrics: ChallengeMetrics = { attempts: 0, sigma: "0", stuckArrows: 0 };
+  private metrics: ChallengeMetrics = createChallengeMetrics();
   private aimCursorElement: HTMLDivElement;
   private aimProgressElement: HTMLSpanElement;
   private raycaster = new THREE.Raycaster();
@@ -226,7 +260,7 @@ class ChallengeArcheryScene {
     this.resetCameraImmediately();
     this.currentWind = this.sampleWind();
     this.callbacks.onWind(this.currentWind);
-    this.callbacks.onMetrics(this.metrics);
+    this.callbacks.onMetrics(this.metricsSnapshot());
     void this.load();
     this.start();
   }
@@ -315,8 +349,8 @@ class ChallengeArcheryScene {
     this.stuckArrows.forEach((arrow) => this.scene.remove(arrow));
     this.stuckArrows = [];
     this.squaredRingErrorSum = 0;
-    this.metrics = { attempts: 0, sigma: "0", stuckArrows: 0 };
-    this.callbacks.onMetrics(this.metrics);
+    this.metrics = createChallengeMetrics();
+    this.callbacks.onMetrics(this.metricsSnapshot());
     this.currentWind = this.sampleWind();
     this.callbacks.onWind(this.currentWind);
     this.hideHighlight();
@@ -546,10 +580,16 @@ class ChallengeArcheryScene {
       x: (flight.to.x - TARGET_POSITION.x) / RING_SPACING,
       y: (flight.to.y - TARGET_POSITION.y) / RING_SPACING,
     };
+    const distanceRings = Math.hypot(hitOffsetRings.x, hitOffsetRings.y);
+    const distributionBucket = shotDistributionBucket(distanceRings);
     const distance = Math.hypot(flight.to.x - TARGET_POSITION.x, flight.to.y - TARGET_POSITION.y);
     this.metrics.attempts += 1;
     this.squaredRingErrorSum += hitOffsetRings.x * hitOffsetRings.x + hitOffsetRings.y * hitOffsetRings.y;
     this.metrics.sigma = Math.sqrt(this.squaredRingErrorSum / (2 * this.metrics.attempts)).toFixed(1);
+    this.metrics.shotDistribution = {
+      ...this.metrics.shotDistribution,
+      [distributionBucket]: this.metrics.shotDistribution[distributionBucket] + 1,
+    };
 
     if (flight.missedTarget) {
       this.scene.remove(flight.arrow);
@@ -560,7 +600,7 @@ class ChallengeArcheryScene {
       this.showHighlight(distance);
     }
 
-    this.callbacks.onMetrics({ ...this.metrics });
+    this.callbacks.onMetrics(this.metricsSnapshot());
     this.currentWind = this.sampleWind();
     this.callbacks.onWind(this.currentWind);
     window.setTimeout(() => {
@@ -604,6 +644,13 @@ class ChallengeArcheryScene {
     const center = TARGET_POSITION;
     const cameraPosition = new THREE.Vector3(center.x, center.y + CAMERA_FOLLOW_Y_OFFSET, TARGET_Z + CAMERA_FOLLOW_DISTANCE_Z);
     this.tweenCamera(cameraPosition, CAMERA_FOLLOW_FOV, CAMERA_FOLLOW_LERP_MS);
+  }
+
+  private metricsSnapshot(): ChallengeMetrics {
+    return {
+      ...this.metrics,
+      shotDistribution: { ...this.metrics.shotDistribution },
+    };
   }
 
   private resetCamera(onComplete?: () => void) {
@@ -833,7 +880,8 @@ class ChallengeArcheryScene {
 export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
   const sceneControllerRef = useRef<ChallengeArcheryScene | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const [metrics, setMetrics] = useState<ChallengeMetrics>({ attempts: 0, sigma: "0", stuckArrows: 0 });
+  const [metrics, setMetrics] = useState<ChallengeMetrics>(() => createChallengeMetrics());
+  const [plotOpen, setPlotOpen] = useState(false);
   const [wind, setWind] = useState<Wind>({ angle: 0, color: colorForWind(0), power: 0 });
 
   useEffect(() => {
@@ -916,8 +964,56 @@ export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
           <span>Sigma</span>
           <strong>{metrics.sigma}</strong>
         </div>
+        <button className="icon-button challenge-plot-button" type="button" onClick={() => setPlotOpen(true)} aria-label="Show shot distribution">
+          <BarChart3 size={20} />
+        </button>
       </footer>
+      {plotOpen ? (
+        <ShotDistributionDialog metrics={metrics} onClose={() => setPlotOpen(false)} />
+      ) : null}
     </section>
+  );
+}
+
+function ShotDistributionDialog({ metrics, onClose }: { metrics: ChallengeMetrics; onClose: () => void }) {
+  const percentages = SHOT_DISTRIBUTION_LABELS.map((label) => {
+    const percent = metrics.attempts === 0 ? 0 : Math.round((metrics.shotDistribution[label] / metrics.attempts) * 100);
+
+    return { label, percent };
+  });
+
+  return (
+    <div className="challenge-chart-overlay">
+      <section className="modal-panel challenge-chart-modal" role="dialog" aria-label="Shot distribution">
+        <button className="icon-button challenge-chart-close" type="button" onClick={onClose} aria-label="Close shot distribution">
+          <X size={20} />
+        </button>
+        <div className="challenge-chart">
+          <div className="challenge-chart-values">
+            {percentages.map(({ label, percent }) => (
+              <strong key={label}>{percent}</strong>
+            ))}
+          </div>
+          <div className="challenge-chart-y-axis" aria-hidden="true">
+            <span>100%</span>
+            <span>50%</span>
+            <span>0%</span>
+          </div>
+          <div className="challenge-chart-bars">
+            {percentages.map(({ label, percent }) => (
+              <div className="challenge-chart-column" data-shot-bucket={label} data-shot-percent={percent} key={label}>
+                <span className="challenge-chart-bar" style={{ height: `${percent}%` }} />
+              </div>
+            ))}
+          </div>
+          <div className="challenge-chart-x-axis" aria-hidden="true">
+            {percentages.map(({ label }) => (
+              <span key={label}>{label}</span>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 

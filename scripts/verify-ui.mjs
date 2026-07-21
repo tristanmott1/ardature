@@ -452,6 +452,9 @@ async function runSourceChecks() {
       && challengeTestPageSource.includes("camera.updateMatrixWorld(true)")
       && challengeTestPageSource.includes("function windScreenRotation")
       && challengeTestPageSource.includes("recordShotDebug")
+      && challengeTestPageSource.includes("SHOT_DISTRIBUTION_LABELS")
+      && challengeTestPageSource.includes("shotDistributionBucket")
+      && challengeTestPageSource.includes("Show shot distribution")
       && challengeTestPageSource.includes("const power = 2.5 + Math.random() * 2.5")
       && !challengeTestPageSource.includes("onAim")
       && !challengeTestPageSource.includes("target_board_final.jpg")
@@ -1489,7 +1492,29 @@ async function runSetupPreferenceChecks(page) {
   assert(sceneHasPixels, "Challenge Three.js canvas renders nonblank pixels.");
   assert(await page.getByText("Attempts").isVisible() && await page.getByText("Sigma").isVisible(), "Challenge test score labels are visible.");
   assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge test score values start at zero.");
+  assert((await page.getByRole("button", { name: "Show shot distribution" }).count()) === 1, "Challenge score bar shows the distribution plot button.");
+  const scorebarLayout = await page.locator(".challenge-test-scorebar").evaluate((scorebar) => {
+    const scoreItems = Array.from(scorebar.querySelectorAll(".challenge-score-item")).map((item) => item.getBoundingClientRect());
+    const plotButton = scorebar.querySelector(".challenge-plot-button")?.getBoundingClientRect();
+    const scorebarBox = scorebar.getBoundingClientRect();
+
+    return {
+      metricCenter: (scoreItems[0].left + scoreItems[0].right + scoreItems[1].left + scoreItems[1].right) / 4,
+      plotLeft: plotButton?.left ?? 0,
+      scorebarCenter: scorebarBox.left + scorebarBox.width / 2,
+      sigmaRight: scoreItems[1].right,
+    };
+  });
+  assert(Math.abs(scorebarLayout.metricCenter - scorebarLayout.scorebarCenter) < 1, "Challenge plot button does not move Attempts/Sigma from the centered scorebar position.");
+  assert(scorebarLayout.plotLeft > scorebarLayout.sigmaRight, "Challenge plot button sits to the right of the centered score values.");
   await capture(page, "01b-challenge-test-page-ready-mobile.png");
+  await page.getByRole("button", { name: "Show shot distribution" }).click();
+  await page.getByRole("dialog", { name: "Shot distribution" }).waitFor();
+  assert((await page.locator(".challenge-chart-column").count()) === 11, "Challenge distribution chart renders all shot buckets.");
+  assert((await page.locator(".challenge-chart-column").evaluateAll((columns) => columns.every((column) => column.getAttribute("data-shot-percent") === "0"))), "Challenge empty distribution starts with all buckets at zero percent.");
+  await capture(page, "01c-challenge-test-page-distribution-empty-mobile.png");
+  await page.getByRole("button", { name: "Close shot distribution" }).click();
+  assert((await page.getByRole("dialog", { name: "Shot distribution" }).count()) === 0, "Challenge distribution modal closes from the X button.");
 
   const challengeStage = page.locator(".challenge-test-stage");
   let challengeStageBox = await challengeStage.boundingBox();
@@ -1606,11 +1631,19 @@ async function runSetupPreferenceChecks(page) {
     return Math.sqrt((((hitX - TARGET_POSITION.x) / RING_SPACING) ** 2 + ((hitY - TARGET_POSITION.y) / RING_SPACING) ** 2) / 2).toFixed(1);
   }, { hitX: shotDebug.hitX, hitY: shotDebug.hitY });
   assert(sigmaText === sigmaCheck, "Challenge sigma is the no-covariance two-dimensional Gaussian standard deviation.");
-  await capture(page, "01c-challenge-test-page-post-shot-mobile.png");
+  await capture(page, "01d-challenge-test-page-post-shot-mobile.png");
+  await page.getByRole("button", { name: "Show shot distribution" }).click();
+  const shotPercentages = await page.locator(".challenge-chart-column").evaluateAll((columns) => columns.map((column) => Number(column.getAttribute("data-shot-percent"))));
+  assert(shotPercentages.filter((percent) => percent === 100).length === 1 && shotPercentages.filter((percent) => percent === 0).length === 10, "Challenge distribution records one fired shot in exactly one bucket.");
+  await capture(page, "01e-challenge-test-page-distribution-post-shot-mobile.png");
+  await page.getByRole("button", { name: "Close shot distribution" }).click();
 
   await page.getByRole("button", { name: "Restart challenge" }).click();
   assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge restart clears attempts and sigma.");
   assert((await page.locator(".challenge-test-stage").getAttribute("data-stuck-arrows")) === "0", "Challenge restart clears stuck arrows.");
+  await page.getByRole("button", { name: "Show shot distribution" }).click();
+  assert((await page.locator(".challenge-chart-column").evaluateAll((columns) => columns.every((column) => column.getAttribute("data-shot-percent") === "0"))), "Challenge restart clears shot distribution buckets.");
+  await page.getByRole("button", { name: "Close shot distribution" }).click();
 
   challengeStageBox = await challengeStage.boundingBox();
   assert(challengeStageBox, "Challenge test stage still has visible bounds before auto-fire.");
@@ -1618,7 +1651,7 @@ async function runSetupPreferenceChecks(page) {
   await page.mouse.down();
   await page.waitForTimeout(800);
   assert(await page.locator(".challenge-progress-textures").isVisible(), "Challenge progress textures appear after holding the aim.");
-  await capture(page, "01d-challenge-test-page-aiming-mobile.png");
+  await capture(page, "01f-challenge-test-page-aiming-mobile.png");
   await page.waitForFunction(() => document.querySelectorAll(".challenge-score-item strong")[0]?.textContent === "1", null, { timeout: 4500 });
   await page.mouse.up();
   await page.getByRole("button", { name: "Restart challenge" }).click();

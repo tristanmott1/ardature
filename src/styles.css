@@ -395,6 +395,7 @@ button:focus-visible,
 }
 
 .challenge-test-scorebar {
+  position: relative;
   justify-content: center;
   gap: 28px;
   padding:
@@ -422,6 +423,109 @@ button:focus-visible,
 
 .challenge-score-item strong {
   font-size: 1.08rem;
+}
+
+.challenge-plot-button {
+  position: absolute;
+  top: 50%;
+  right: max(10px, env(safe-area-inset-right));
+  transform: translateY(-50%);
+}
+
+.challenge-chart-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(24, 24, 27, 0.24);
+}
+
+.modal-panel.challenge-chart-modal {
+  position: relative;
+  width: min(560px, calc(100vw - 36px));
+  padding: 68px 18px 18px;
+}
+
+.challenge-chart-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.challenge-chart {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-rows: 24px 220px 24px;
+}
+
+.challenge-chart-values,
+.challenge-chart-bars,
+.challenge-chart-x-axis {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.challenge-chart-values {
+  grid-column: 2;
+  grid-row: 1;
+  align-items: end;
+  justify-items: center;
+}
+
+.challenge-chart-values strong {
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 560;
+}
+
+.challenge-chart-y-axis {
+  grid-column: 1;
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  align-items: center;
+  padding-right: 8px;
+  color: rgba(24, 24, 27, 0.62);
+  font-size: 0.74rem;
+  font-weight: 820;
+  text-align: right;
+}
+
+.challenge-chart-bars {
+  grid-column: 2;
+  grid-row: 2;
+  align-items: end;
+  border-bottom: 1px solid rgba(24, 24, 27, 0.46);
+  border-left: 1px solid rgba(24, 24, 27, 0.28);
+}
+
+.challenge-chart-column {
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  min-width: 0;
+  height: 100%;
+}
+
+.challenge-chart-bar {
+  display: block;
+  width: min(100%, 24px);
+  min-height: 0;
+  border-radius: 4px 4px 0 0;
+  background: #18181b;
+}
+
+.challenge-chart-x-axis {
+  grid-column: 2;
+  grid-row: 3;
+  align-items: start;
+  justify-items: center;
+  color: rgba(24, 24, 27, 0.72);
+  font-size: 0.74rem;
+  font-weight: 820;
 }
 
 .sync-entry-panel,

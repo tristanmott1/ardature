@@ -83,8 +83,9 @@ The challenge test page ports the OpenPigeon archery scene into a self-contained
 - The arrow appears for a `500ms` travel animation, camera follow, target highlight, and stuck-arrow behavior.
 - `Attempts` counts fired shots only.
 - `Sigma` assumes a centered two-dimensional Gaussian with no covariance and equal axis variance. It displays the single per-axis standard deviation in ring units, `sqrt(sum(x^2 + y^2) / (2 * attempts))`, with one decimal after the first shot.
+- A bottom-right plot button opens an empirical shot-distribution modal. Each fired shot is bucketed by radial distance in target-ring units: `10` is inside the smallest ring, `9` is outside the smallest ring but inside the second smallest ring, continuing down to `1` inside the largest ring, and `<1` outside the largest ring. The modal shows bucket percentages rounded to whole percentages.
 
-The restart button clears attempts, sigma, stuck arrows, the active aim, any shot animation, camera state, and the current wind sample.
+The restart button clears attempts, sigma, the shot-distribution buckets, stuck arrows, the active aim, any shot animation, camera state, and the current wind sample.
 
 ## Public Assets
 
