@@ -443,8 +443,12 @@ async function runSourceChecks() {
       && challengeTestPageSource.includes("const AIM_PROGRESS_FILL_MS = 2500")
       && challengeTestPageSource.includes("const ARROW_TRAVEL_MS = 500")
       && challengeTestPageSource.includes("const TARGET_Z = -26.398")
-      && challengeTestPageSource.includes("const TARGET_BASE_RADIUS = 0.0808")
-      && challengeTestPageSource.includes("const RING_SPACING = TARGET_RADIUS / TARGET_SEGMENTS")
+      && challengeTestPageSource.includes("export const SCORE_RING_RADII")
+      && challengeTestPageSource.includes("0.150095")
+      && challengeTestPageSource.includes("9.406288")
+      && challengeTestPageSource.includes("export const RING_SPACING = TARGET_RADIUS / TARGET_SEGMENTS")
+      && challengeTestPageSource.includes("scoreForDistance")
+      && challengeTestPageSource.includes("meanScore")
       && challengeTestPageSource.includes("const CAMERA_DEFAULT_POS")
       && challengeTestPageSource.includes("function createTargetTexture")
       && challengeTestPageSource.includes("createAimCursorElement")
@@ -1490,7 +1494,7 @@ async function runSetupPreferenceChecks(page) {
     return pixels[0] + pixels[1] + pixels[2] > 0;
   });
   assert(sceneHasPixels, "Challenge Three.js canvas renders nonblank pixels.");
-  assert(await page.getByText("Attempts").isVisible() && await page.getByText("Sigma").isVisible(), "Challenge test score labels are visible.");
+  assert(await page.getByText("Attempts").isVisible() && await page.getByText("Mean Score").isVisible(), "Challenge test score labels are visible.");
   assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge test score values start at zero.");
   assert((await page.getByRole("button", { name: "Show shot distribution" }).count()) === 1, "Challenge score bar shows the distribution plot button.");
   const scorebarLayout = await page.locator(".challenge-test-scorebar").evaluate((scorebar) => {
@@ -1502,11 +1506,11 @@ async function runSetupPreferenceChecks(page) {
       metricCenter: (scoreItems[0].left + scoreItems[0].right + scoreItems[1].left + scoreItems[1].right) / 4,
       plotLeft: plotButton?.left ?? 0,
       scorebarCenter: scorebarBox.left + scorebarBox.width / 2,
-      sigmaRight: scoreItems[1].right,
+      meanScoreRight: scoreItems[1].right,
     };
   });
-  assert(Math.abs(scorebarLayout.metricCenter - scorebarLayout.scorebarCenter) < 1, "Challenge plot button does not move Attempts/Sigma from the centered scorebar position.");
-  assert(scorebarLayout.plotLeft > scorebarLayout.sigmaRight, "Challenge plot button sits to the right of the centered score values.");
+  assert(Math.abs(scorebarLayout.metricCenter - scorebarLayout.scorebarCenter) < 1, "Challenge plot button does not move Attempts/Mean Score from the centered scorebar position.");
+  assert(scorebarLayout.plotLeft > scorebarLayout.meanScoreRight, "Challenge plot button sits to the right of the centered score values.");
   await capture(page, "01b-challenge-test-page-ready-mobile.png");
   await page.getByRole("button", { name: "Show shot distribution" }).click();
   await page.getByRole("dialog", { name: "Shot distribution" }).waitFor();
@@ -1623,23 +1627,25 @@ async function runSetupPreferenceChecks(page) {
       && Math.abs(shotDebug.arrowTipZ - shotDebug.hitZ) < 0.001,
     "Challenge arrow is tip-anchored at the computed hit point.",
   );
-  const sigmaText = (await page.locator(".challenge-score-item strong").nth(1).textContent()) ?? "";
-  assert(/^\d+\.\d$/.test(sigmaText), "Challenge sigma renders with one decimal after a shot.");
-  const sigmaCheck = await page.evaluate(async ({ hitX, hitY }) => {
-    const { TARGET_POSITION, RING_SPACING } = await import("/src/ui/ChallengeTestPage.tsx");
+  const meanScoreText = (await page.locator(".challenge-score-item strong").nth(1).textContent()) ?? "";
+  assert(/^\d+\.\d$/.test(meanScoreText), "Challenge mean score renders with one decimal after a shot.");
+  const meanScoreCheck = await page.evaluate(async ({ hitX, hitY }) => {
+    const { RING_SPACING, TARGET_POSITION, scoreForDistance } = await import("/src/ui/ChallengeTestPage.tsx");
 
-    return Math.sqrt((((hitX - TARGET_POSITION.x) / RING_SPACING) ** 2 + ((hitY - TARGET_POSITION.y) / RING_SPACING) ** 2) / 2).toFixed(1);
+    return scoreForDistance(Math.hypot((hitX - TARGET_POSITION.x) / RING_SPACING, (hitY - TARGET_POSITION.y) / RING_SPACING)).toFixed(1);
   }, { hitX: shotDebug.hitX, hitY: shotDebug.hitY });
-  assert(sigmaText === sigmaCheck, "Challenge sigma is the no-covariance two-dimensional Gaussian standard deviation.");
+  assert(meanScoreText === meanScoreCheck, "Challenge mean score is the continuous gamma-to-beta mapped score.");
   await capture(page, "01d-challenge-test-page-post-shot-mobile.png");
   await page.getByRole("button", { name: "Show shot distribution" }).click();
   const shotPercentages = await page.locator(".challenge-chart-column").evaluateAll((columns) => columns.map((column) => Number(column.getAttribute("data-shot-percent"))));
+  const shotCounts = await page.locator(".challenge-chart-column").evaluateAll((columns) => columns.map((column) => Number(column.getAttribute("data-shot-count"))));
   assert(shotPercentages.filter((percent) => percent === 100).length === 1 && shotPercentages.filter((percent) => percent === 0).length === 10, "Challenge distribution records one fired shot in exactly one bucket.");
+  assert(shotCounts.filter((count) => count === 1).length === 1 && shotCounts.filter((count) => count === 0).length === 10, "Challenge distribution values above bars are raw shot counts.");
   await capture(page, "01e-challenge-test-page-distribution-post-shot-mobile.png");
   await page.getByRole("button", { name: "Close shot distribution" }).click();
 
   await page.getByRole("button", { name: "Restart challenge" }).click();
-  assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge restart clears attempts and sigma.");
+  assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge restart clears attempts and mean score.");
   assert((await page.locator(".challenge-test-stage").getAttribute("data-stuck-arrows")) === "0", "Challenge restart clears stuck arrows.");
   await page.getByRole("button", { name: "Show shot distribution" }).click();
   assert((await page.locator(".challenge-chart-column").evaluateAll((columns) => columns.every((column) => column.getAttribute("data-shot-percent") === "0"))), "Challenge restart clears shot distribution buckets.");

@@ -65,7 +65,7 @@ The home page may expose a bottom-right target-icon button that opens a standalo
 The challenge test page ports the OpenPigeon archery scene into a self-contained Three.js sandbox:
 
 - The page copies OpenPigeon archery runtime assets under `public/challenge/open-pigeon/` and does not depend on the source project at runtime.
-- The target is a generated no-number ring texture: only colored concentric circles are shown.
+- The target is a generated no-number ring texture: only colored concentric circles are shown. Its ten ring boundaries are calibrated from the empirical gamma radius model into `Beta(3,3)` score thresholds at `9.5`, `8.5`, `7.5`, `6.5`, `5.5`, `4.5`, `3.5`, `2.5`, `1.5`, and `0.5`.
 - The arrow asset, camera, floor, sky, wind UI, cursor, progress textures, arrow flight, and target scoring are derived from OpenPigeon's `archery.tscn`, `archery.gd`, `arrow.gd`, and `target.gd`.
 - Pressing the stage starts aiming with the cursor at the center of the stage and zooms the camera to FOV `41.5` over `500ms`.
 - Pointer movement sets cursor velocity to `(currentPointer - initialPointer) * 6.2`, capped at `1000` pixels per second.
@@ -82,10 +82,12 @@ The challenge test page ports the OpenPigeon archery scene into a self-contained
 - The camera matrix is refreshed before shot projection, and the imported arrow is wrapped so the visual arrow tip lands at the computed hit location.
 - The arrow appears for a `500ms` travel animation, camera follow, target highlight, and stuck-arrow behavior.
 - `Attempts` counts fired shots only.
-- `Sigma` assumes a centered two-dimensional Gaussian with no covariance and equal axis variance. It displays the single per-axis standard deviation in ring units, `sqrt(sum(x^2 + y^2) / (2 * attempts))`, with one decimal after the first shot.
-- A bottom-right plot button opens an empirical shot-distribution modal. Each fired shot is bucketed by radial distance in target-ring units: `10` is inside the smallest ring, `9` is outside the smallest ring but inside the second smallest ring, continuing down to `1` inside the largest ring, and `<1` outside the largest ring. The modal shows bucket percentages rounded to whole percentages.
+- `Mean Score` displays the running average of each shot's continuous score, with one decimal after the first shot.
+- The current empirical average-player radius model is a gamma distribution over target-ring-unit radius with shape `2.8533` and scale `0.8730`. This was fit from the observed bucket percentages `<1,1,2,3,4,5,6,7,8,9,10 = 0,0.4,0.4,0.8,1.2,4,8,15,25,34,12` after reversing those score buckets into radius intervals. The fitted distribution has mean radius `2.4909`, standard deviation `1.4747`, and mode `1.6177`.
+- Each shot maps radius to score as `score = 10 * Beta(3,3).inverseCDF(1 - GammaCDF(radius))`, so smaller radius is better. The current score-boundary radii are `0.1501`, `0.4983`, `0.8986`, `1.3598`, `1.8992`, `2.5462`, `3.3530`, `4.4249`, `6.0320`, and `9.4063` target-ring units.
+- A bottom-right plot button opens an empirical shot-distribution modal. Each fired shot is bucketed by score: `10` means score at least `9.5`, `9` means score at least `8.5`, continuing down to `1` for score at least `0.5`, and `<1` for score below `0.5`. Bars use rounded percentages for height and the y-axis, while the value above each bar is the raw shot count.
 
-The restart button clears attempts, sigma, the shot-distribution buckets, stuck arrows, the active aim, any shot animation, camera state, and the current wind sample.
+The restart button clears attempts, mean score, the shot-distribution buckets, stuck arrows, the active aim, any shot animation, camera state, and the current wind sample.
 
 ## Public Assets
 

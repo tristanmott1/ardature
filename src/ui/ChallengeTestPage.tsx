@@ -15,11 +15,15 @@ const AIM_ZOOM_FOV = 41.5;
 const AIM_PROGRESS_DELAY_MS = 500;
 const AIM_PROGRESS_FILL_MS = 2500;
 const ARROW_TRAVEL_MS = 500;
+const TARGET_PLANE_SIZE = 1.8;
 const TARGET_Z = -26.398;
 export const TARGET_POSITION = new THREE.Vector3(0, 1.362, TARGET_Z);
 const TARGET_RADIUS = 0.75;
-const TARGET_BASE_RADIUS = 0.0808;
 const TARGET_SEGMENTS = 10;
+const GAMMA_SHAPE = 2.853271181004797;
+const GAMMA_SCALE = 0.8730078708610999;
+const GAMMA_FPMIN = 1e-300;
+export const SCORE_RING_RADII = [0.150095, 0.498321, 0.898647, 1.359791, 1.899206, 2.546235, 3.353015, 4.424919, 6.031962, 9.406288] as const;
 export const RING_SPACING = TARGET_RADIUS / TARGET_SEGMENTS;
 const ARROW_SPAWN = new THREE.Vector3(0.086, 1.586, 1.373);
 const MISS_Z_OFFSET = -10;
@@ -45,7 +49,7 @@ type Wind = {
 
 type ChallengeMetrics = {
   attempts: number;
-  sigma: string;
+  meanScore: string;
   shotDistribution: ShotDistribution;
   stuckArrows: number;
 };
@@ -94,20 +98,136 @@ function createShotDistribution(): ShotDistribution {
 function createChallengeMetrics(): ChallengeMetrics {
   return {
     attempts: 0,
-    sigma: "0",
+    meanScore: "0",
     shotDistribution: createShotDistribution(),
     stuckArrows: 0,
   };
 }
 
-function shotDistributionBucket(distanceRings: number): ShotDistributionLabel {
-  for (let ring = 1; ring <= TARGET_SEGMENTS; ring += 1) {
-    if (distanceRings <= ring) {
-      return `${TARGET_SEGMENTS - ring + 1}` as ShotDistributionLabel;
+function gammaCdf(radius: number) {
+  return regularizedLowerGamma(GAMMA_SHAPE, radius / GAMMA_SCALE);
+}
+
+export function scoreForDistance(distanceRings: number) {
+  const accuracyPercentile = 1 - gammaCdf(distanceRings);
+
+  return 10 * inverseBeta33Cdf(accuracyPercentile);
+}
+
+function shotDistributionBucket(score: number): ShotDistributionLabel {
+  for (let bucket = 10; bucket >= 1; bucket -= 1) {
+    if (score >= bucket - 0.5) {
+      return `${bucket}` as ShotDistributionLabel;
     }
   }
 
   return "<1";
+}
+
+function regularizedLowerGamma(shape: number, value: number) {
+  if (value <= 0) {
+    return 0;
+  }
+
+  const logGamma = logGammaLanczos(shape);
+
+  if (value < shape + 1) {
+    let term = 1 / shape;
+    let sum = term;
+    let ap = shape;
+
+    for (let index = 0; index < 1000; index += 1) {
+      ap += 1;
+      term *= value / ap;
+      sum += term;
+
+      if (Math.abs(term) < Math.abs(sum) * 3e-14) {
+        break;
+      }
+    }
+
+    return clamp(sum * Math.exp(-value + shape * Math.log(value) - logGamma), 0, 1);
+  }
+
+  let b = value + 1 - shape;
+  let c = 1 / GAMMA_FPMIN;
+  let d = 1 / b;
+  let h = d;
+
+  for (let index = 1; index <= 1000; index += 1) {
+    const an = -index * (index - shape);
+    b += 2;
+    d = an * d + b;
+
+    if (Math.abs(d) < GAMMA_FPMIN) {
+      d = GAMMA_FPMIN;
+    }
+
+    c = b + an / c;
+
+    if (Math.abs(c) < GAMMA_FPMIN) {
+      c = GAMMA_FPMIN;
+    }
+
+    d = 1 / d;
+    const delta = d * c;
+    h *= delta;
+
+    if (Math.abs(delta - 1) < 3e-14) {
+      break;
+    }
+  }
+
+  return clamp(1 - Math.exp(-value + shape * Math.log(value) - logGamma) * h, 0, 1);
+}
+
+function logGammaLanczos(value: number): number {
+  const coefficients = [
+    676.5203681218851,
+    -1259.1392167224028,
+    771.3234287776531,
+    -176.6150291621406,
+    12.507343278686905,
+    -0.13857109526572012,
+    9.984369578019572e-6,
+    1.5056327351493116e-7,
+  ];
+
+  if (value < 0.5) {
+    return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * value)) - logGammaLanczos(1 - value);
+  }
+
+  let adjustedValue = value - 1;
+  let x = 0.9999999999998099;
+
+  coefficients.forEach((coefficient, index) => {
+    x += coefficient / (adjustedValue + index + 1);
+  });
+
+  const t = adjustedValue + coefficients.length - 0.5;
+
+  return 0.5 * Math.log(2 * Math.PI) + (adjustedValue + 0.5) * Math.log(t) - t + Math.log(x);
+}
+
+function beta33Cdf(scorePercentile: number) {
+  return 10 * scorePercentile ** 3 - 15 * scorePercentile ** 4 + 6 * scorePercentile ** 5;
+}
+
+function inverseBeta33Cdf(percentile: number) {
+  let low = 0;
+  let high = 1;
+
+  for (let index = 0; index < 80; index += 1) {
+    const midpoint = (low + high) / 2;
+
+    if (beta33Cdf(midpoint) < percentile) {
+      low = midpoint;
+    } else {
+      high = midpoint;
+    }
+  }
+
+  return (low + high) / 2;
 }
 
 function easeOutSine(value: number) {
@@ -166,7 +286,7 @@ function createTargetTexture() {
   const canvas = document.createElement("canvas");
   const size = 1024;
   const center = size / 2;
-  const radius = 440;
+  const pixelsPerWorldUnit = size / TARGET_PLANE_SIZE;
   const context = canvas.getContext("2d");
 
   canvas.width = size;
@@ -193,7 +313,8 @@ function createTargetTexture() {
   ];
 
   rings.forEach((color, index) => {
-    const ringRadius = radius * ((rings.length - index) / rings.length);
+    const scoreRadius = SCORE_RING_RADII[rings.length - index - 1];
+    const ringRadius = scoreRadius * RING_SPACING * pixelsPerWorldUnit;
 
     context.beginPath();
     context.arc(center, center, ringRadius, 0, Math.PI * 2);
@@ -238,7 +359,7 @@ class ChallengeArcheryScene {
   private renderer: THREE.WebGLRenderer;
   private resizeObserver: ResizeObserver;
   private scene = new THREE.Scene();
-  private squaredRingErrorSum = 0;
+  private scoreSum = 0;
   private stuckArrows: THREE.Object3D[] = [];
   private velocity: Point = { x: 0, y: 0 };
 
@@ -348,7 +469,7 @@ class ChallengeArcheryScene {
 
     this.stuckArrows.forEach((arrow) => this.scene.remove(arrow));
     this.stuckArrows = [];
-    this.squaredRingErrorSum = 0;
+    this.scoreSum = 0;
     this.metrics = createChallengeMetrics();
     this.callbacks.onMetrics(this.metricsSnapshot());
     this.currentWind = this.sampleWind();
@@ -427,7 +548,7 @@ class ChallengeArcheryScene {
 
   private buildTarget(targetTexture: THREE.Texture, woodTexture: THREE.Texture) {
     const targetMaterial = new THREE.MeshStandardMaterial({ map: targetTexture, roughness: 0.75, side: THREE.DoubleSide });
-    const target = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.8), targetMaterial);
+    const target = new THREE.Mesh(new THREE.PlaneGeometry(TARGET_PLANE_SIZE, TARGET_PLANE_SIZE), targetMaterial);
     target.name = "OpenPigeon target";
     target.position.copy(TARGET_POSITION);
     target.receiveShadow = true;
@@ -441,7 +562,7 @@ class ChallengeArcheryScene {
     rightLeg.position.set(0.811327, TARGET_POSITION.y - 1.11989, TARGET_POSITION.z - 0.0496893);
     this.scene.add(leftLeg, rightLeg);
 
-    const ringGeometry = new THREE.RingGeometry(0.001, TARGET_BASE_RADIUS, 72);
+    const ringGeometry = new THREE.RingGeometry(0.001, SCORE_RING_RADII[0] * RING_SPACING, 72);
     const ringMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       opacity: 0.62,
@@ -581,11 +702,12 @@ class ChallengeArcheryScene {
       y: (flight.to.y - TARGET_POSITION.y) / RING_SPACING,
     };
     const distanceRings = Math.hypot(hitOffsetRings.x, hitOffsetRings.y);
-    const distributionBucket = shotDistributionBucket(distanceRings);
+    const score = scoreForDistance(distanceRings);
+    const distributionBucket = shotDistributionBucket(score);
     const distance = Math.hypot(flight.to.x - TARGET_POSITION.x, flight.to.y - TARGET_POSITION.y);
     this.metrics.attempts += 1;
-    this.squaredRingErrorSum += hitOffsetRings.x * hitOffsetRings.x + hitOffsetRings.y * hitOffsetRings.y;
-    this.metrics.sigma = Math.sqrt(this.squaredRingErrorSum / (2 * this.metrics.attempts)).toFixed(1);
+    this.scoreSum += score;
+    this.metrics.meanScore = (this.scoreSum / this.metrics.attempts).toFixed(1);
     this.metrics.shotDistribution = {
       ...this.metrics.shotDistribution,
       [distributionBucket]: this.metrics.shotDistribution[distributionBucket] + 1,
@@ -617,7 +739,8 @@ class ChallengeArcheryScene {
       return;
     }
 
-    const segment = distance === 0 ? 1 : Math.ceil(distance / TARGET_BASE_RADIUS);
+    const distanceRings = distance / RING_SPACING;
+    const segment = SCORE_RING_RADII.findIndex((radius) => distanceRings <= radius) + 1;
 
     if (segment < 1 || segment > TARGET_SEGMENTS) {
       this.hideHighlight();
@@ -625,8 +748,8 @@ class ChallengeArcheryScene {
     }
 
     this.scene.remove(this.highlightRing);
-    const innerRadius = Math.max((segment - 1) * 0.079, 0.001);
-    const outerRadius = segment * 0.079;
+    const innerRadius = Math.max(segment === 1 ? 0 : SCORE_RING_RADII[segment - 2] * RING_SPACING, 0.001);
+    const outerRadius = SCORE_RING_RADII[segment - 1] * RING_SPACING;
     this.highlightRing.geometry.dispose();
     this.highlightRing.geometry = new THREE.RingGeometry(innerRadius, outerRadius, 72);
     this.highlightRing.position.set(TARGET_POSITION.x, TARGET_POSITION.y, TARGET_POSITION.z + 0.006);
@@ -961,8 +1084,8 @@ export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
           <strong>{metrics.attempts}</strong>
         </div>
         <div className="challenge-score-item">
-          <span>Sigma</span>
-          <strong>{metrics.sigma}</strong>
+          <span>Mean Score</span>
+          <strong>{metrics.meanScore}</strong>
         </div>
         <button className="icon-button challenge-plot-button" type="button" onClick={() => setPlotOpen(true)} aria-label="Show shot distribution">
           <BarChart3 size={20} />
@@ -976,10 +1099,11 @@ export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
 }
 
 function ShotDistributionDialog({ metrics, onClose }: { metrics: ChallengeMetrics; onClose: () => void }) {
-  const percentages = SHOT_DISTRIBUTION_LABELS.map((label) => {
+  const buckets = SHOT_DISTRIBUTION_LABELS.map((label) => {
+    const count = metrics.shotDistribution[label];
     const percent = metrics.attempts === 0 ? 0 : Math.round((metrics.shotDistribution[label] / metrics.attempts) * 100);
 
-    return { label, percent };
+    return { count, label, percent };
   });
 
   return (
@@ -990,8 +1114,8 @@ function ShotDistributionDialog({ metrics, onClose }: { metrics: ChallengeMetric
         </button>
         <div className="challenge-chart">
           <div className="challenge-chart-values">
-            {percentages.map(({ label, percent }) => (
-              <strong key={label}>{percent}</strong>
+            {buckets.map(({ count, label }) => (
+              <strong key={label}>{count}</strong>
             ))}
           </div>
           <div className="challenge-chart-y-axis" aria-hidden="true">
@@ -1000,14 +1124,14 @@ function ShotDistributionDialog({ metrics, onClose }: { metrics: ChallengeMetric
             <span>0%</span>
           </div>
           <div className="challenge-chart-bars">
-            {percentages.map(({ label, percent }) => (
-              <div className="challenge-chart-column" data-shot-bucket={label} data-shot-percent={percent} key={label}>
+            {buckets.map(({ count, label, percent }) => (
+              <div className="challenge-chart-column" data-shot-bucket={label} data-shot-count={count} data-shot-percent={percent} key={label}>
                 <span className="challenge-chart-bar" style={{ height: `${percent}%` }} />
               </div>
             ))}
           </div>
           <div className="challenge-chart-x-axis" aria-hidden="true">
-            {percentages.map(({ label }) => (
+            {buckets.map(({ label }) => (
               <span key={label}>{label}</span>
             ))}
           </div>
