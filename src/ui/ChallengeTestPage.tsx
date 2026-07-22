@@ -20,10 +20,10 @@ const TARGET_Z = -26.398;
 export const TARGET_POSITION = new THREE.Vector3(0, 1.362, TARGET_Z);
 const TARGET_RADIUS = 0.75;
 const TARGET_SEGMENTS = 10;
-const GAMMA_SHAPE = 2.853271181004797;
-const GAMMA_SCALE = 0.8730078708610999;
+const GAMMA_SHAPE = 3.25;
+const GAMMA_SCALE = 0.76;
 const GAMMA_FPMIN = 1e-300;
-export const SCORE_RING_RADII = [0.150095, 0.498321, 0.898647, 1.359791, 1.899206, 2.546235, 3.353015, 4.424919, 6.031962, 9.406288] as const;
+export const SCORE_RING_RADII = [0.356837, 0.778374, 1.164103, 1.559683, 1.988104, 2.473344, 3.051195, 3.789511, 4.857925, 7.021092] as const;
 export const RING_SPACING = TARGET_RADIUS / TARGET_SEGMENTS;
 const ARROW_SPAWN = new THREE.Vector3(0.086, 1.586, 1.373);
 const MISS_Z_OFFSET = -10;
@@ -111,7 +111,7 @@ function gammaCdf(radius: number) {
 export function scoreForDistance(distanceRings: number) {
   const accuracyPercentile = 1 - gammaCdf(distanceRings);
 
-  return 10 * inverseBeta33Cdf(accuracyPercentile);
+  return 10 * inverseBeta22Cdf(accuracyPercentile);
 }
 
 function shotDistributionBucket(score: number): ShotDistributionLabel {
@@ -209,18 +209,18 @@ function logGammaLanczos(value: number): number {
   return 0.5 * Math.log(2 * Math.PI) + (adjustedValue + 0.5) * Math.log(t) - t + Math.log(x);
 }
 
-function beta33Cdf(scorePercentile: number) {
-  return 10 * scorePercentile ** 3 - 15 * scorePercentile ** 4 + 6 * scorePercentile ** 5;
+function beta22Cdf(scorePercentile: number) {
+  return 3 * scorePercentile ** 2 - 2 * scorePercentile ** 3;
 }
 
-function inverseBeta33Cdf(percentile: number) {
+function inverseBeta22Cdf(percentile: number) {
   let low = 0;
   let high = 1;
 
   for (let index = 0; index < 80; index += 1) {
     const midpoint = (low + high) / 2;
 
-    if (beta33Cdf(midpoint) < percentile) {
+    if (beta22Cdf(midpoint) < percentile) {
       low = midpoint;
     } else {
       high = midpoint;
@@ -299,21 +299,21 @@ function createTargetTexture() {
   context.fillStyle = "#b6b6b6";
   context.fillRect(0, 0, size, size);
 
-  const rings = [
-    "#c9c9c9",
-    "#bdbdbd",
+  const ringColorsOuterToInner = [
+    "#0c8db8",
+    "#0c8db8",
+    "#0c8db8",
     "#ededed",
-    "#111111",
-    "#0c8db8",
-    "#0c8db8",
-    "#c6131b",
-    "#c6131b",
+    "#ededed",
     "#c7b400",
     "#c7b400",
+    "#c7b400",
+    "#c6131b",
+    "#c6131b",
   ];
 
-  rings.forEach((color, index) => {
-    const scoreRadius = SCORE_RING_RADII[rings.length - index - 1];
+  ringColorsOuterToInner.forEach((color, index) => {
+    const scoreRadius = SCORE_RING_RADII[ringColorsOuterToInner.length - index - 1];
     const ringRadius = scoreRadius * RING_SPACING * pixelsPerWorldUnit;
 
     context.beginPath();
