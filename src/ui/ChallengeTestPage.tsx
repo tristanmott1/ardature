@@ -302,14 +302,14 @@ function createTargetTexture() {
   const ringColorsOuterToInner = [
     "#0c8db8",
     "#0c8db8",
-    "#0c8db8",
     "#ededed",
     "#ededed",
-    "#c7b400",
-    "#c7b400",
-    "#c7b400",
     "#c6131b",
     "#c6131b",
+    "#c6131b",
+    "#c7b400",
+    "#c7b400",
+    "#c7b400",
   ];
 
   ringColorsOuterToInner.forEach((color, index) => {
