@@ -82,7 +82,7 @@ The challenge test page ports the OpenPigeon archery scene into a self-contained
 - Wind remains constant relative to the screen as target distance changes, so farther targets make the same wind/player error cover more target-ring units.
 - The fired hit location is the cursor ray projected onto the target plane, plus wind displacement in target-ring units.
 - The camera matrix is refreshed before shot projection, and the imported arrow is wrapped so the visual arrow tip lands at the computed hit location.
-- The arrow appears for a `500ms` travel animation, camera follow, target highlight, and stuck-arrow behavior.
+- At `1x`, the arrow appears for a `500ms` travel animation, camera follow, target highlight, and stuck-arrow behavior. At other distances, arrow travel keeps the same world speed: closer targets arrive faster and farther targets take longer.
 - `Attempts` counts fired shots only.
 - `Mean Score` displays the running average of each shot's continuous score, with one decimal after the first shot.
 - The current average-player radius model is a tuned gamma distribution over target-ring-unit radius with shape `3.25` and scale `0.76`. It starts from the observed bucket percentages `<1,1,2,3,4,5,6,7,8,9,10 = 0,0.4,0.4,0.8,1.2,4,8,15,25,34,12`, but intentionally uses a steeper shape inside the smallest ring while keeping the `10` bucket just above `11%`. The tuned distribution has mean radius `2.47`, standard deviation `1.3701`, and mode `1.71`.

@@ -14,7 +14,7 @@ const AIM_DRIFT_Y_PERIOD_MS = 1000;
 const AIM_ZOOM_FOV = 41.5;
 const AIM_PROGRESS_DELAY_MS = 500;
 const AIM_PROGRESS_FILL_MS = 2500;
-const ARROW_TRAVEL_MS = 500;
+export const STANDARD_ARROW_TRAVEL_MS = 500;
 const TARGET_PLANE_SIZE = 1.8;
 const TARGET_Z = -26.398;
 export const TARGET_POSITION = new THREE.Vector3(0, 1.362, TARGET_Z);
@@ -80,6 +80,7 @@ type CameraTween = {
 
 type ArrowFlight = {
   arrow: THREE.Object3D;
+  durationMs: number;
   from: THREE.Vector3;
   missedTarget: boolean;
   startedAt: number;
@@ -94,6 +95,13 @@ function targetPositionForDistance(distanceMultiplier: number) {
     TARGET_POSITION.y,
     CAMERA_DEFAULT_POS.z + (TARGET_POSITION.z - CAMERA_DEFAULT_POS.z) * multiplier,
   );
+}
+
+function arrowTravelDuration(from: THREE.Vector3, to: THREE.Vector3) {
+  const standardDistance = ARROW_SPAWN.distanceTo(TARGET_POSITION);
+  const shotDistance = from.distanceTo(to);
+
+  return STANDARD_ARROW_TRAVEL_MS * (shotDistance / standardDistance);
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -728,6 +736,7 @@ class ChallengeArcheryScene {
     this.hideAimCursor();
     this.arrowFlight = {
       arrow,
+      durationMs: arrowTravelDuration(arrow.position, shotPosition),
       from: arrow.position.clone(),
       missedTarget,
       startedAt: performance.now(),
@@ -941,7 +950,7 @@ class ChallengeArcheryScene {
     }
 
     const flight = this.arrowFlight;
-    const t = clamp((now - flight.startedAt) / ARROW_TRAVEL_MS, 0, 1);
+    const t = clamp((now - flight.startedAt) / flight.durationMs, 0, 1);
     flight.arrow.position.lerpVectors(flight.from, flight.to, t);
 
     if (t >= 1) {
