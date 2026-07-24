@@ -611,6 +611,18 @@ In `Challenge` mode:
 
 Future challenge mechanics should make player skill naturally produce a sample from the same beta score distribution. The placeholder button exists only to sample that distribution directly.
 
+Future battle challenge calibration should assume both sides use the challenge; regular-mode mean/median sampling is separate later work. The adjustable pipeline is army mixture to target distance, overall challenge score to individual troop scores, score to attacker/defender dice tilt, and tilt to die distribution. The distance-to-score distribution is fixed by the tuned challenge gamma model, and score `5` must map to zero tilt so dice are fair/uniform.
+
+The army-mixture distance function depends only on mixture, not army size or attacker/defender role. Any all-cavalry battle force maps to the current target distance. A half-heavy/half-elite mixture should match an all-cavalry mixture of the same proportions. Wind should remain constant relative to screen size, not target size, as target distance changes.
+
+After a player receives one overall challenge score, that score is converted into fixed individual troop scores before dice are rolled. The troop base scores are heavy `2.5`, cavalry `5`, elite `7.5`, and leader `9`. Leaders are excluded from the first calibration fit, but the mapping still reserves their base score for future use. Let `armyMean` be the average base score across the battle units that took the challenge. If the overall score equals `armyMean`, every troop receives its base score. If the overall score is below `armyMean`, every troop receives a score below its base score. If the overall score is above `armyMean`, every troop receives a score above its base score. Troops of the same type receive the same score, every individual score stays within `0..10` without clamping, and the average of the individual scores must exactly equal the overall challenge score.
+
+Let `p` be the true battle win probability for a `10` cavalry attacker with score `5` against a `10` cavalry defender with score `5`, using the final score-to-tilt and die-distribution functions. The score-to-tilt calibration must make attacker score `0` against defender score `5` win with probability `p / 2`, and attacker score `10` against defender score `5` win with probability `(1 + p) / 2`.
+
+The challenge-distance calibration should make `10` cavalry vs `10` cavalry define the baseline challenge matchup. With both sides sampling one challenge score before battle, `12` heavy should beat `10` cavalry by about `3` percentage points more than the `10` cavalry baseline, and `8` elite should beat `10` cavalry by about `3` percentage points more than the `10` cavalry baseline.
+
+Calibration should happen in `scripts/calibrate-challenge.mjs` before formulas are promoted into game code. Run `node scripts/calibrate-challenge.mjs --quick` for a smoke report, `node scripts/calibrate-challenge.mjs` for the exploratory search, and `node scripts/calibrate-challenge.mjs --accurate` to rerank candidates with higher simulation counts. The first fit uses normal battles only: no leaders, no Paths of the Dead ghosts, no Balrog events, and no other special-territory rules. Other than those exclusions, the script should match the game's per-unit dice sampling, score averaging, casualty, and attacker-win result rules. The script prints ranked candidate functions for review; it does not update runtime constants or app behavior.
+
 ### Authoritative Battle State
 
 Confirmed battle state is authoritative game state.

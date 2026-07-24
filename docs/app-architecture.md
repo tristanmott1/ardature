@@ -87,6 +87,8 @@ The challenge test page ports the OpenPigeon archery scene into a self-contained
 - Each shot maps radius to score as `score = 10 * Beta(2,2).inverseCDF(1 - GammaCDF(radius))`, so smaller radius is better. The current score-boundary radii are `0.3568`, `0.7784`, `1.1641`, `1.5597`, `1.9881`, `2.4733`, `3.0512`, `3.7895`, `4.8579`, and `7.0211` target-ring units.
 - A bottom-right plot button opens an empirical shot-distribution modal. Each fired shot is bucketed by score: `10` means score at least `9.5`, `9` means score at least `8.5`, continuing down to `1` for score at least `0.5`, and `<1` for score below `0.5`. Bars use rounded percentages for height and the y-axis, while the value above each bar is the raw shot count.
 
+Future battle challenge integration should keep target distance role-independent. Army mixture, not army size or attacker/defender role, chooses distance. Any all-cavalry battle force uses the current target distance, a half-heavy/half-elite mixture should match all cavalry, and role-specific battle effects belong in score-to-dice tilt rather than in target distance. Overall challenge scores are converted into fixed per-unit scores before dice rolls; same-type troops share a score, individual scores stay in `0..10`, and the starting unit-score average equals the overall challenge score. Score `5` must map to zero tilt and fair dice. Calibration lives in `scripts/calibrate-challenge.mjs` as a deterministic lab tool; it prints candidate functions for review and does not change app runtime constants.
+
 The restart button clears attempts, mean score, the shot-distribution buckets, stuck arrows, the active aim, any shot animation, camera state, and the current wind sample.
 
 ## Public Assets

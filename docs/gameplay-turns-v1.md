@@ -354,6 +354,35 @@ The future skill challenge must produce or evaluate a score from the same beta d
 
 The separate challenge test page opened from the home page is a development sandbox only. It is not used by battle resolution yet and should not change gameplay state. It currently ports OpenPigeon archery as a self-contained Three.js scene with copied local assets. It uses `6.2` pointer sensitivity, `1000` maximum cursor speed, sine-based breathing drift of `12px` horizontal over `1500ms` and `7px` vertical over `1000ms`, randomized drift phases per aim, camera draw zoom to FOV `41.5`, `500ms` early-release cancel threshold, `2500ms` visible auto-fire fill, `500ms` arrow flight, target ring math, and stuck-arrow behavior. The progress ring appears when the draw completes and auto-fires at `3000ms` total hold time. The visible cursor is drawn from the same animation-loop state used for shot projection, the camera matrix is refreshed before projection, the wind indicator points in the same screen-space direction that wind pushes the hit, and the imported arrow is tip-anchored so the visual tip lands at the computed hit point. The sandbox target is generated as no-number colored rings, placed at the far OpenPigeon distance, and paired with harder `2.5..5.0` ring-unit wind. Each shot maps radius to continuous score as `score = 10 * Beta(2,2).inverseCDF(1 - GammaCDF(radius))`, using the tuned average-player radius model `Gamma(shape = 3.25, scale = 0.76)`. The target rings are the score-boundary radii `0.3568`, `0.7784`, `1.1641`, `1.5597`, `1.9881`, `2.4733`, `3.0512`, `3.7895`, `4.8579`, and `7.0211`. `Mean Score` is the running average of continuous shot scores. The bottom score bar has a plot button that opens a simple empirical distribution chart. Shots are bucketed by score: `10` is score at least `9.5`, `1` is score at least `0.5`, and `<1` is below `0.5`. Bars use percentages on the y-axis, while labels above bars show raw counts. Restart clears the chart counts with the rest of the sandbox metrics.
 
+Future battle challenge calibration should treat both sides as using the challenge for now; regular-mode mean/median sampling is separate later work. The adjustable pipeline is:
+
+- army mixture to target distance
+- overall challenge score to individual troop scores
+- score to attacker/defender dice tilt
+- tilt to die distribution
+
+The fixed pipeline is:
+
+- distance to score distribution, using the tuned gamma model above
+- score `5` maps to zero tilt, so dice are fair/uniform
+
+The army-mixture distance function depends only on mixture, not army size or attacker/defender role. A half-heavy/half-elite mixture should match an all-cavalry mixture of the same proportions. Any all-cavalry battle force maps to the current target distance. Wind should remain constant relative to screen size, not target size, as distance changes.
+
+After a player receives one overall challenge score, that score is converted into fixed individual troop scores before dice are rolled. The troop base scores are heavy `2.5`, cavalry `5`, elite `7.5`, and leader `9`. Leaders are excluded from the first calibration fit, but the mapping still reserves their base score for future use. Let `armyMean` be the average base score across the battle units that took the challenge. If the overall score equals `armyMean`, every troop receives its base score. If the overall score is below `armyMean`, every troop receives a score below its base score. If the overall score is above `armyMean`, every troop receives a score above its base score. Troops of the same type receive the same score, every individual score stays within `0..10` without clamping, and the average of the individual scores must exactly equal the overall challenge score.
+
+Let `p` be the true battle win probability for a `10` cavalry attacker with score `5` against a `10` cavalry defender with score `5`, using the final score-to-tilt and die-distribution functions. The score-to-tilt calibration must satisfy:
+
+- attacker score `0` against defender score `5` should win with probability `p / 2`
+- attacker score `10` against defender score `5` should win with probability `(1 + p) / 2`
+
+The challenge-distance calibration should then satisfy, with both sides sampling one challenge score before battle:
+
+- `10` cavalry vs `10` cavalry defines the baseline challenge matchup
+- `12` heavy should beat `10` cavalry by about `3` percentage points more than the `10` cavalry baseline
+- `8` elite should beat `10` cavalry by about `3` percentage points more than the `10` cavalry baseline
+
+The calibration process should be done in `scripts/calibrate-challenge.mjs` before the formulas are promoted into app code. Run `node scripts/calibrate-challenge.mjs --quick` for a smoke report, `node scripts/calibrate-challenge.mjs` for the exploratory search, and `node scripts/calibrate-challenge.mjs --accurate` to rerank candidates with higher simulation counts. It should simulate normal battles only: no leaders in the first fit, no Paths of the Dead ghosts, no Balrog events, and no other special-territory rules. Other than those exclusions, it should use the same per-unit dice sampling, score averaging, casualty, and attacker-win result rules as the game. The script prints ranked candidate functions for review; it does not update runtime constants or app behavior.
+
 ### Attack Setup
 
 Pressing `Attack` begins local attack setup.

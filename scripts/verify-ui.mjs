@@ -1,11 +1,13 @@
 import { chromium } from "playwright";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 const baseUrl = "http://127.0.0.1:5174/";
 const outputDir = new URL("../verification-output/", import.meta.url);
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
+const execFileAsync = promisify(execFile);
 const chromePaths = [
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
   "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
@@ -165,6 +167,7 @@ async function runSourceChecks() {
   const playerChromeSource = await readFile(new URL("../src/ui/PlayerChrome.tsx", import.meta.url), "utf8");
   const setupPanelsSource = await readFile(new URL("../src/ui/SetupPanels.tsx", import.meta.url), "utf8");
   const challengeTestPageSource = await readFile(new URL("../src/ui/ChallengeTestPage.tsx", import.meta.url), "utf8");
+  const challengeCalibrationSource = await readFile(new URL("../scripts/calibrate-challenge.mjs", import.meta.url), "utf8");
   await Promise.all([
     "../public/challenge/open-pigeon/target_board_final.jpg",
     "../public/challenge/open-pigeon/cursor.png",
@@ -469,6 +472,34 @@ async function runSourceChecks() {
       && !challengeTestPageSource.includes("function ChallengeTarget")
       && !challengeTestPageSource.includes("challenge-shot-layer"),
     "Challenge test page is a Three.js OpenPigeon-style scene instead of the old SVG target.",
+  );
+  assert(
+    challengeCalibrationSource.includes("const GAMMA_SHAPE = 3.25")
+      && challengeCalibrationSource.includes("const GAMMA_SCALE = 0.76")
+      && challengeCalibrationSource.includes("inverseBeta22Cdf")
+      && challengeCalibrationSource.includes("distanceMultiplierForTroops(baselineTroops, params).toFixed(3)")
+      && challengeCalibrationSource.includes('SPECIAL_RULES_DISABLED = ["leaders", "ghosts", "balrog", "paths-of-the-dead", "map-state", "sync"]')
+      && challengeCalibrationSource.includes("overallScore to individual troop scores")
+      && challengeCalibrationSource.includes("score >= armyMean")
+      && challengeCalibrationSource.includes("createScoredUnits")
+      && challengeCalibrationSource.includes("simulateBattle")
+      && challengeCalibrationSource.includes("Ranked candidates")
+      && !appSource.includes("calibrate-challenge")
+      && !gameStateSource.includes("calibrate-challenge")
+      && !combatSource.includes("calibrate-challenge"),
+    "Challenge calibration script is standalone, uses the agreed challenge math, excludes special rules, and is not wired into app runtime code.",
+  );
+  const challengeCalibrationSmoke = await execFileAsync(process.execPath, [fileURLToPath(new URL("../scripts/calibrate-challenge.mjs", import.meta.url)), "--quick"], {
+    cwd: projectRoot,
+    timeout: 30000,
+  });
+  assert(
+    challengeCalibrationSmoke.stdout.includes("Challenge calibration (quick)")
+      && challengeCalibrationSmoke.stdout.includes("Ranked candidates")
+      && /Fixed 10 cavalry score 5 vs 10 cavalry score 5 p: \d+\.\d%/.test(challengeCalibrationSmoke.stdout)
+      && !challengeCalibrationSmoke.stdout.includes("NaN")
+      && !challengeCalibrationSmoke.stdout.includes("Infinity"),
+    "Challenge calibration quick smoke run exits with finite ranked probabilities.",
   );
   assert(gameStateSource.includes("function commitAttack") && gameStateSource.includes("function rollBattle") && gameStateSource.includes("function retreatBattle") && gameStateSource.includes("completedAttacks"), "Attack state transitions live in game-state helpers.");
   assert(gameStateSource.includes("function canSelectAttackTargetTerritory") && appSource.includes("canSelectAttackTargetTerritory(game") && !appSource.includes("completedAttacks.includes(`${attackSetup.sourceTerritoryId}->${territoryId}`)"), "Attack target selection and hints use one completed-pair helper.");
