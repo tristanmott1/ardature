@@ -432,6 +432,13 @@ button:focus-visible,
   transform: translateY(-50%);
 }
 
+.challenge-distance-button {
+  position: absolute;
+  top: 50%;
+  left: max(10px, env(safe-area-inset-left));
+  transform: translateY(-50%);
+}
+
 .challenge-chart-overlay {
   position: fixed;
   inset: 0;
@@ -452,6 +459,44 @@ button:focus-visible,
   position: absolute;
   top: 10px;
   right: 10px;
+}
+
+.modal-panel.challenge-distance-modal {
+  position: relative;
+  width: min(360px, calc(100vw - 36px));
+  padding: 58px 22px 22px;
+}
+
+.challenge-distance-value {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  margin-bottom: 18px;
+}
+
+.challenge-distance-value span {
+  color: rgba(24, 24, 27, 0.64);
+  font-size: 0.78rem;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.challenge-distance-value strong {
+  font-size: 1.35rem;
+}
+
+.challenge-distance-slider {
+  width: 100%;
+  accent-color: #18181b;
+}
+
+.challenge-distance-range {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 9px;
+  color: rgba(24, 24, 27, 0.68);
+  font-size: 0.74rem;
+  font-weight: 760;
 }
 
 .challenge-chart {

@@ -1,5 +1,5 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
-import { BarChart3, RotateCcw, X } from "lucide-react";
+import { BarChart3, RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
@@ -18,6 +18,9 @@ const ARROW_TRAVEL_MS = 500;
 const TARGET_PLANE_SIZE = 1.8;
 const TARGET_Z = -26.398;
 export const TARGET_POSITION = new THREE.Vector3(0, 1.362, TARGET_Z);
+export const MIN_TARGET_DISTANCE_MULTIPLIER = 0.25;
+export const MAX_TARGET_DISTANCE_MULTIPLIER = 2;
+const TARGET_DISTANCE_STEP = 0.05;
 const TARGET_RADIUS = 0.75;
 const TARGET_SEGMENTS = 10;
 const GAMMA_SHAPE = 3.25;
@@ -82,6 +85,16 @@ type ArrowFlight = {
   startedAt: number;
   to: THREE.Vector3;
 };
+
+function targetPositionForDistance(distanceMultiplier: number) {
+  const multiplier = clamp(distanceMultiplier, MIN_TARGET_DISTANCE_MULTIPLIER, MAX_TARGET_DISTANCE_MULTIPLIER);
+
+  return new THREE.Vector3(
+    TARGET_POSITION.x,
+    TARGET_POSITION.y,
+    CAMERA_DEFAULT_POS.z + (TARGET_POSITION.z - CAMERA_DEFAULT_POS.z) * multiplier,
+  );
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -361,6 +374,9 @@ class ChallengeArcheryScene {
   private scene = new THREE.Scene();
   private scoreSum = 0;
   private stuckArrows: THREE.Object3D[] = [];
+  private targetDistanceMultiplier = 1;
+  private targetGroup: THREE.Group | null = null;
+  private pendingTargetDistanceMultiplier: number | null = null;
   private velocity: Point = { x: 0, y: 0 };
 
   constructor(private container: HTMLDivElement, private callbacks: ChallengeCallbacks) {
@@ -479,6 +495,45 @@ class ChallengeArcheryScene {
     this.spawnReadyArrow();
   }
 
+  setTargetDistanceMultiplier(distanceMultiplier: number) {
+    const nextDistance = clamp(distanceMultiplier, MIN_TARGET_DISTANCE_MULTIPLIER, MAX_TARGET_DISTANCE_MULTIPLIER);
+
+    if (Math.abs(nextDistance - this.targetDistanceMultiplier) < 0.001) {
+      return;
+    }
+
+    if (this.isAiming || this.arrowFlight) {
+      this.pendingTargetDistanceMultiplier = nextDistance;
+      return;
+    }
+
+    this.applyTargetDistanceMultiplier(nextDistance);
+  }
+
+  private applyTargetDistanceMultiplier(distanceMultiplier: number) {
+    this.targetDistanceMultiplier = distanceMultiplier;
+    this.pendingTargetDistanceMultiplier = null;
+    this.hideHighlight();
+    this.clearShotDebug();
+
+    this.stuckArrows.forEach((arrow) => this.scene.remove(arrow));
+    this.stuckArrows = [];
+    this.metrics.stuckArrows = 0;
+    this.callbacks.onMetrics(this.metricsSnapshot());
+
+    if (this.currentArrow) {
+      this.scene.remove(this.currentArrow);
+      this.currentArrow = null;
+    }
+
+    if (this.targetGroup) {
+      this.targetGroup.position.copy(this.currentTargetPosition());
+    }
+
+    this.resetCameraImmediately();
+    this.spawnReadyArrow();
+  }
+
   private async load() {
     const textureLoader = new THREE.TextureLoader();
     const gltfLoader = new GLTFLoader();
@@ -547,20 +602,25 @@ class ChallengeArcheryScene {
   }
 
   private buildTarget(targetTexture: THREE.Texture, woodTexture: THREE.Texture) {
+    const targetGroup = new THREE.Group();
+    targetGroup.name = "Challenge target rig";
+    targetGroup.position.copy(this.currentTargetPosition());
+    this.targetGroup = targetGroup;
+    this.scene.add(targetGroup);
+
     const targetMaterial = new THREE.MeshStandardMaterial({ map: targetTexture, roughness: 0.75, side: THREE.DoubleSide });
     const target = new THREE.Mesh(new THREE.PlaneGeometry(TARGET_PLANE_SIZE, TARGET_PLANE_SIZE), targetMaterial);
     target.name = "OpenPigeon target";
-    target.position.copy(TARGET_POSITION);
     target.receiveShadow = true;
-    this.scene.add(target);
+    targetGroup.add(target);
 
     const legMaterial = new THREE.MeshStandardMaterial({ map: woodTexture, roughness: 0.75 });
     const legGeometry = new THREE.BoxGeometry(0.109375, 1, 0.0849609);
     const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
-    leftLeg.position.set(-0.824727, TARGET_POSITION.y - 1.11989, TARGET_POSITION.z - 0.0496893);
+    leftLeg.position.set(-0.824727, -1.11989, -0.0496893);
     const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
-    rightLeg.position.set(0.811327, TARGET_POSITION.y - 1.11989, TARGET_POSITION.z - 0.0496893);
-    this.scene.add(leftLeg, rightLeg);
+    rightLeg.position.set(0.811327, -1.11989, -0.0496893);
+    targetGroup.add(leftLeg, rightLeg);
 
     const ringGeometry = new THREE.RingGeometry(0.001, SCORE_RING_RADII[0] * RING_SPACING, 72);
     const ringMaterial = new THREE.MeshBasicMaterial({
@@ -570,9 +630,9 @@ class ChallengeArcheryScene {
       transparent: true,
     });
     this.highlightRing = new THREE.Mesh(ringGeometry, ringMaterial);
-    this.highlightRing.position.set(TARGET_POSITION.x, TARGET_POSITION.y, TARGET_POSITION.z + 0.006);
+    this.highlightRing.position.set(0, 0, 0.006);
     this.highlightRing.visible = false;
-    this.scene.add(this.highlightRing);
+    targetGroup.add(this.highlightRing);
   }
 
   private prepareArrowTemplate() {
@@ -603,7 +663,7 @@ class ChallengeArcheryScene {
 
     const arrow = this.createArrow();
     arrow.position.copy(ARROW_SPAWN);
-    orientArrow(arrow, ARROW_SPAWN, TARGET_POSITION);
+    orientArrow(arrow, ARROW_SPAWN, this.currentTargetPosition());
     arrow.visible = false;
     this.currentArrow = arrow;
     this.scene.add(arrow);
@@ -647,10 +707,14 @@ class ChallengeArcheryScene {
     const baseShot = this.projectCursorToTarget();
     const windVector = this.windVector();
     const shotPosition = baseShot.clone().add(new THREE.Vector3(windVector.x, windVector.y, 0));
-    const missedTarget = shotPosition.x < -0.9 || shotPosition.x > 0.9 || shotPosition.y < 0.45 || shotPosition.y > 2.26;
+    const targetPosition = this.currentTargetPosition();
+    const missedTarget = shotPosition.x < targetPosition.x - 0.9 ||
+      shotPosition.x > targetPosition.x + 0.9 ||
+      shotPosition.y < targetPosition.y - 0.912 ||
+      shotPosition.y > targetPosition.y + 0.898;
 
     if (missedTarget) {
-      shotPosition.z = TARGET_Z + MISS_Z_OFFSET;
+      shotPosition.z = targetPosition.z + MISS_Z_OFFSET;
     }
 
     const arrow = this.currentArrow;
@@ -680,15 +744,15 @@ class ChallengeArcheryScene {
     this.raycaster.setFromCamera(pointer, this.camera);
     const origin = this.raycaster.ray.origin;
     const direction = this.raycaster.ray.direction;
-    const distance = (TARGET_Z - origin.z) / direction.z;
+    const distance = (this.currentTargetPosition().z - origin.z) / direction.z;
 
     return origin.clone().add(direction.clone().multiplyScalar(distance));
   }
 
   private windVector() {
     return {
-      x: Math.sin(this.currentWind.angle) * this.currentWind.power * RING_SPACING,
-      y: -Math.cos(this.currentWind.angle) * this.currentWind.power * RING_SPACING,
+      x: Math.sin(this.currentWind.angle) * this.currentWind.power * RING_SPACING * this.targetDistanceMultiplier,
+      y: -Math.cos(this.currentWind.angle) * this.currentWind.power * RING_SPACING * this.targetDistanceMultiplier,
     };
   }
 
@@ -698,13 +762,13 @@ class ChallengeArcheryScene {
     this.container.dataset.lastArrowTipZ = flight.arrow.position.z.toFixed(5);
 
     const hitOffsetRings = {
-      x: (flight.to.x - TARGET_POSITION.x) / RING_SPACING,
-      y: (flight.to.y - TARGET_POSITION.y) / RING_SPACING,
+      x: (flight.to.x - this.currentTargetPosition().x) / RING_SPACING,
+      y: (flight.to.y - this.currentTargetPosition().y) / RING_SPACING,
     };
     const distanceRings = Math.hypot(hitOffsetRings.x, hitOffsetRings.y);
     const score = scoreForDistance(distanceRings);
     const distributionBucket = shotDistributionBucket(score);
-    const distance = Math.hypot(flight.to.x - TARGET_POSITION.x, flight.to.y - TARGET_POSITION.y);
+    const distance = Math.hypot(flight.to.x - this.currentTargetPosition().x, flight.to.y - this.currentTargetPosition().y);
     this.metrics.attempts += 1;
     this.scoreSum += score;
     this.metrics.meanScore = (this.scoreSum / this.metrics.attempts).toFixed(1);
@@ -730,7 +794,14 @@ class ChallengeArcheryScene {
         return;
       }
 
-      this.resetCamera(() => this.spawnReadyArrow());
+      this.resetCamera(() => {
+        if (this.pendingTargetDistanceMultiplier !== null) {
+          this.applyTargetDistanceMultiplier(this.pendingTargetDistanceMultiplier);
+          return;
+        }
+
+        this.spawnReadyArrow();
+      });
     }, 1000);
   }
 
@@ -747,14 +818,12 @@ class ChallengeArcheryScene {
       return;
     }
 
-    this.scene.remove(this.highlightRing);
     const innerRadius = Math.max(segment === 1 ? 0 : SCORE_RING_RADII[segment - 2] * RING_SPACING, 0.001);
     const outerRadius = SCORE_RING_RADII[segment - 1] * RING_SPACING;
     this.highlightRing.geometry.dispose();
     this.highlightRing.geometry = new THREE.RingGeometry(innerRadius, outerRadius, 72);
-    this.highlightRing.position.set(TARGET_POSITION.x, TARGET_POSITION.y, TARGET_POSITION.z + 0.006);
+    this.highlightRing.position.set(0, 0, 0.006);
     this.highlightRing.visible = true;
-    this.scene.add(this.highlightRing);
   }
 
   private hideHighlight() {
@@ -764,8 +833,8 @@ class ChallengeArcheryScene {
   }
 
   private followArrow() {
-    const center = TARGET_POSITION;
-    const cameraPosition = new THREE.Vector3(center.x, center.y + CAMERA_FOLLOW_Y_OFFSET, TARGET_Z + CAMERA_FOLLOW_DISTANCE_Z);
+    const center = this.currentTargetPosition();
+    const cameraPosition = new THREE.Vector3(center.x, center.y + CAMERA_FOLLOW_Y_OFFSET, center.z + CAMERA_FOLLOW_DISTANCE_Z);
     this.tweenCamera(cameraPosition, CAMERA_FOLLOW_FOV, CAMERA_FOLLOW_LERP_MS);
   }
 
@@ -781,6 +850,7 @@ class ChallengeArcheryScene {
   }
 
   private resetCameraImmediately() {
+    this.cameraTween = null;
     this.camera.position.copy(CAMERA_DEFAULT_POS);
     this.camera.fov = CAMERA_DEFAULT_FOV;
     this.camera.updateProjectionMatrix();
@@ -819,7 +889,11 @@ class ChallengeArcheryScene {
   }
 
   private lookAtTarget() {
-    this.camera.lookAt(TARGET_POSITION.clone().sub(new THREE.Vector3(0, CAMERA_LOOK_AT_Y_OFFSET, 0)));
+    this.camera.lookAt(this.currentTargetPosition().sub(new THREE.Vector3(0, CAMERA_LOOK_AT_Y_OFFSET, 0)));
+  }
+
+  private currentTargetPosition() {
+    return targetPositionForDistance(this.targetDistanceMultiplier);
   }
 
   private start() {
@@ -1003,6 +1077,8 @@ class ChallengeArcheryScene {
 export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
   const sceneControllerRef = useRef<ChallengeArcheryScene | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const [distanceMultiplier, setDistanceMultiplier] = useState(1);
+  const [distanceOpen, setDistanceOpen] = useState(false);
   const [metrics, setMetrics] = useState<ChallengeMetrics>(() => createChallengeMetrics());
   const [plotOpen, setPlotOpen] = useState(false);
   const [wind, setWind] = useState<Wind>({ angle: 0, color: colorForWind(0), power: 0 });
@@ -1017,6 +1093,7 @@ export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
       onWind: setWind,
     });
     sceneControllerRef.current = controller;
+    controller.setTargetDistanceMultiplier(distanceMultiplier);
 
     return () => {
       controller.dispose();
@@ -1056,6 +1133,12 @@ export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
     sceneControllerRef.current?.restart();
   }
 
+  function updateDistanceMultiplier(value: number) {
+    const nextDistance = clamp(value, MIN_TARGET_DISTANCE_MULTIPLIER, MAX_TARGET_DISTANCE_MULTIPLIER);
+    setDistanceMultiplier(nextDistance);
+    sceneControllerRef.current?.setTargetDistanceMultiplier(nextDistance);
+  }
+
   return (
     <section className="challenge-test-page">
       <header className="challenge-test-topbar">
@@ -1069,6 +1152,7 @@ export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
       <div
         className="challenge-test-stage"
         data-stuck-arrows={metrics.stuckArrows}
+        data-target-distance={distanceMultiplier.toFixed(2)}
         ref={stageRef}
         aria-label="Challenge test area"
         onPointerDown={handlePointerDown}
@@ -1079,6 +1163,9 @@ export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
         <WindIndicator wind={wind} />
       </div>
       <footer className="challenge-test-scorebar">
+        <button className="icon-button challenge-distance-button" type="button" onClick={() => setDistanceOpen(true)} aria-label="Set challenge distance">
+          <SlidersHorizontal size={20} />
+        </button>
         <div className="challenge-score-item">
           <span>Attempts</span>
           <strong>{metrics.attempts}</strong>
@@ -1094,7 +1181,49 @@ export function ChallengeTestPage({ onExit }: { onExit: () => void }) {
       {plotOpen ? (
         <ShotDistributionDialog metrics={metrics} onClose={() => setPlotOpen(false)} />
       ) : null}
+      {distanceOpen ? (
+        <DistanceDialog distanceMultiplier={distanceMultiplier} onChange={updateDistanceMultiplier} onClose={() => setDistanceOpen(false)} />
+      ) : null}
     </section>
+  );
+}
+
+function DistanceDialog({
+  distanceMultiplier,
+  onChange,
+  onClose,
+}: {
+  distanceMultiplier: number;
+  onChange: (distanceMultiplier: number) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="challenge-chart-overlay">
+      <section className="modal-panel challenge-distance-modal" role="dialog" aria-label="Challenge distance">
+        <button className="icon-button challenge-chart-close" type="button" onClick={onClose} aria-label="Close challenge distance">
+          <X size={20} />
+        </button>
+        <div className="challenge-distance-value">
+          <span>Distance</span>
+          <strong>{distanceMultiplier.toFixed(2)}x</strong>
+        </div>
+        <input
+          aria-label="Challenge distance multiplier"
+          className="challenge-distance-slider"
+          max={MAX_TARGET_DISTANCE_MULTIPLIER}
+          min={MIN_TARGET_DISTANCE_MULTIPLIER}
+          onChange={(event) => onChange(Number(event.currentTarget.value))}
+          step={TARGET_DISTANCE_STEP}
+          type="range"
+          value={distanceMultiplier}
+        />
+        <div className="challenge-distance-range" aria-hidden="true">
+          <span>{MIN_TARGET_DISTANCE_MULTIPLIER.toFixed(2)}x</span>
+          <span>1.00x</span>
+          <span>{MAX_TARGET_DISTANCE_MULTIPLIER.toFixed(2)}x</span>
+        </div>
+      </section>
+    </div>
   );
 }
 

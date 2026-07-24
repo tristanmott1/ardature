@@ -623,6 +623,10 @@ The challenge-distance calibration should make `10` cavalry vs `10` cavalry defi
 
 Calibration should happen in `scripts/calibrate-challenge.mjs` before formulas are promoted into game code. Run `node scripts/calibrate-challenge.mjs --quick` for a smoke report, `node scripts/calibrate-challenge.mjs` for the exploratory search, and `node scripts/calibrate-challenge.mjs --accurate` to rerank candidates with higher simulation counts. The first fit uses normal battles only: no leaders, no Paths of the Dead ghosts, no Balrog events, and no other special-territory rules. Other than those exclusions, the script should match the game's per-unit dice sampling, score averaging, casualty, and attacker-win result rules. The script prints ranked candidate functions for review; it does not update runtime constants or app behavior.
 
+The challenge test page exposes a sandbox-only distance slider from `0.25x` to `2x` the standard target distance, in `0.05x` steps. Changing this slider moves the target rig and clears stuck arrows, but does not clear attempts, mean score, or empirical distribution buckets. Wind and player error stay constant relative to the screen, so farther targets make the same error cover more target-ring units.
+
+Score distributions by target-distance multiplier are plotted with `poetry run python scripts/plot_challenge_distance.py`. The plotter uses only the fitted gamma radius model and current target-ring score mapping. Since wind and player error stay constant relative to the screen, changing target distance multiplies the effective radius before scoring. Outputs are written to `verification-output/challenge-calibration/`.
+
 ### Authoritative Battle State
 
 Confirmed battle state is authoritative game state.

@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "ardature-calibration"
+version = "0.1.0"
+description = "Local calibration and plotting tools for Ardature."
+authors = ["Ardature"]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.13"
+matplotlib = "^3.10.0"
+numpy = "^2.3.0"
+scipy = "^1.16.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

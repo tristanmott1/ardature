@@ -76,8 +76,10 @@ The challenge test page ports the OpenPigeon archery scene into a self-contained
 - Releasing before the `500ms` draw zoom completes cancels the shot and does not increment attempts.
 - Once the draw completes, the progress textures appear around the cursor and fill linearly for `2500ms`.
 - A full progress ring auto-fires at `3000ms` total hold time.
-- For the fixed-distance sandbox, the target uses OpenPigeon's far target distance and wind is sampled from a harder `2.5..5.0` ring-unit range.
+- The bottom-left slider button opens a distance modal. The sandbox target distance can be adjusted from `0.25x` to `2x` the standard target distance in `0.05x` steps. Changing distance moves the target rig and clears stuck arrows, but it does not clear attempts, mean score, or the shot-distribution buckets.
+- At `1x`, the target uses OpenPigeon's far target distance and wind is sampled from a harder `2.5..5.0` ring-unit range.
 - The wind indicator points in the same screen-space direction that wind will displace the hit on the rendered target.
+- Wind remains constant relative to the screen as target distance changes, so farther targets make the same wind/player error cover more target-ring units.
 - The fired hit location is the cursor ray projected onto the target plane, plus wind displacement in target-ring units.
 - The camera matrix is refreshed before shot projection, and the imported arrow is wrapped so the visual arrow tip lands at the computed hit location.
 - The arrow appears for a `500ms` travel animation, camera follow, target highlight, and stuck-arrow behavior.
@@ -87,9 +89,9 @@ The challenge test page ports the OpenPigeon archery scene into a self-contained
 - Each shot maps radius to score as `score = 10 * Beta(2,2).inverseCDF(1 - GammaCDF(radius))`, so smaller radius is better. The current score-boundary radii are `0.3568`, `0.7784`, `1.1641`, `1.5597`, `1.9881`, `2.4733`, `3.0512`, `3.7895`, `4.8579`, and `7.0211` target-ring units.
 - A bottom-right plot button opens an empirical shot-distribution modal. Each fired shot is bucketed by score: `10` means score at least `9.5`, `9` means score at least `8.5`, continuing down to `1` for score at least `0.5`, and `<1` for score below `0.5`. Bars use rounded percentages for height and the y-axis, while the value above each bar is the raw shot count.
 
-Future battle challenge integration should keep target distance role-independent. Army mixture, not army size or attacker/defender role, chooses distance. Any all-cavalry battle force uses the current target distance, a half-heavy/half-elite mixture should match all cavalry, and role-specific battle effects belong in score-to-dice tilt rather than in target distance. Overall challenge scores are converted into fixed per-unit scores before dice rolls; same-type troops share a score, individual scores stay in `0..10`, and the starting unit-score average equals the overall challenge score. Score `5` must map to zero tilt and fair dice. Calibration lives in `scripts/calibrate-challenge.mjs` as a deterministic lab tool; it prints candidate functions for review and does not change app runtime constants.
+Future battle challenge integration should keep target distance role-independent. Army mixture, not army size or attacker/defender role, chooses distance. Any all-cavalry battle force uses the current target distance, a half-heavy/half-elite mixture should match all cavalry, and role-specific battle effects belong in score-to-dice tilt rather than in target distance. Overall challenge scores are converted into fixed per-unit scores before dice rolls; same-type troops share a score, individual scores stay in `0..10`, and the starting unit-score average equals the overall challenge score. Score `5` must map to zero tilt and fair dice. Calibration lives in `scripts/calibrate-challenge.mjs` as a deterministic lab tool; it prints candidate functions for review and does not change app runtime constants. Score-distribution plots by target distance live in `scripts/plot_challenge_distance.py` and write review artifacts to `verification-output/challenge-calibration/`.
 
-The restart button clears attempts, mean score, the shot-distribution buckets, stuck arrows, the active aim, any shot animation, camera state, and the current wind sample.
+The restart button clears attempts, mean score, the shot-distribution buckets, stuck arrows, the active aim, any shot animation, camera state, and the current wind sample. It leaves the selected distance multiplier unchanged so repeated calibration runs can stay at the same distance.
 
 ## Public Assets
 

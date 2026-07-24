@@ -117,6 +117,7 @@ async function runSourceChecks() {
   console.log("Checking sources");
   const appSource = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
   const packageJsonSource = await readFile(new URL("../package.json", import.meta.url), "utf8");
+  const pyprojectSource = await readFile(new URL("../pyproject.toml", import.meta.url), "utf8");
   const armyBuildModalSource = await readFile(new URL("../src/ui/ArmyBuildModal.tsx", import.meta.url), "utf8");
   const armyBuildSource = await readFile(new URL("../src/game/armyBuild.ts", import.meta.url), "utf8");
   const gameStateSource = await readFile(new URL("../src/game/gameState.ts", import.meta.url), "utf8");
@@ -168,6 +169,7 @@ async function runSourceChecks() {
   const setupPanelsSource = await readFile(new URL("../src/ui/SetupPanels.tsx", import.meta.url), "utf8");
   const challengeTestPageSource = await readFile(new URL("../src/ui/ChallengeTestPage.tsx", import.meta.url), "utf8");
   const challengeCalibrationSource = await readFile(new URL("../scripts/calibrate-challenge.mjs", import.meta.url), "utf8");
+  const challengeDistancePlotSource = await readFile(new URL("../scripts/plot_challenge_distance.py", import.meta.url), "utf8");
   await Promise.all([
     "../public/challenge/open-pigeon/target_board_final.jpg",
     "../public/challenge/open-pigeon/cursor.png",
@@ -446,6 +448,13 @@ async function runSourceChecks() {
       && challengeTestPageSource.includes("const AIM_PROGRESS_FILL_MS = 2500")
       && challengeTestPageSource.includes("const ARROW_TRAVEL_MS = 500")
       && challengeTestPageSource.includes("const TARGET_Z = -26.398")
+      && challengeTestPageSource.includes("export const MIN_TARGET_DISTANCE_MULTIPLIER = 0.25")
+      && challengeTestPageSource.includes("export const MAX_TARGET_DISTANCE_MULTIPLIER = 2")
+      && challengeTestPageSource.includes("setTargetDistanceMultiplier")
+      && challengeTestPageSource.includes("targetPositionForDistance")
+      && challengeTestPageSource.includes("this.targetDistanceMultiplier")
+      && challengeTestPageSource.includes("Challenge distance multiplier")
+      && challengeTestPageSource.includes("Set challenge distance")
       && challengeTestPageSource.includes("export const SCORE_RING_RADII")
       && challengeTestPageSource.includes("0.356837")
       && challengeTestPageSource.includes("7.021092")
@@ -500,6 +509,24 @@ async function runSourceChecks() {
       && !challengeCalibrationSmoke.stdout.includes("NaN")
       && !challengeCalibrationSmoke.stdout.includes("Infinity"),
     "Challenge calibration quick smoke run exits with finite ranked probabilities.",
+  );
+  assert(
+    pyprojectSource.includes('name = "ardature-calibration"')
+      && pyprojectSource.includes('python = ">=3.12,<3.13"')
+      && pyprojectSource.includes("matplotlib")
+      && pyprojectSource.includes("numpy")
+      && pyprojectSource.includes("scipy")
+      && challengeDistancePlotSource.includes("GAMMA_SHAPE = 3.25")
+      && challengeDistancePlotSource.includes("GAMMA_SCALE = 0.76")
+      && challengeDistancePlotSource.includes("BETA_ALPHA = 2")
+      && challengeDistancePlotSource.includes("beta_dist().cdf")
+      && challengeDistancePlotSource.includes("gamma_dist().ppf")
+      && challengeDistancePlotSource.includes("verification-output/challenge-calibration")
+      && challengeDistancePlotSource.includes("Distance multipliers")
+      && challengeDistancePlotSource.includes("score-pdfs.png")
+      && !challengeDistancePlotSource.includes("from src")
+      && !challengeDistancePlotSource.includes("import src"),
+    "Challenge distance plotting uses the Poetry calibration environment and screen-relative gamma-to-ring score math.",
   );
   assert(gameStateSource.includes("function commitAttack") && gameStateSource.includes("function rollBattle") && gameStateSource.includes("function retreatBattle") && gameStateSource.includes("completedAttacks"), "Attack state transitions live in game-state helpers.");
   assert(gameStateSource.includes("function canSelectAttackTargetTerritory") && appSource.includes("canSelectAttackTargetTerritory(game") && !appSource.includes("completedAttacks.includes(`${attackSetup.sourceTerritoryId}->${territoryId}`)"), "Attack target selection and hints use one completed-pair helper.");
@@ -1531,13 +1558,17 @@ async function runSetupPreferenceChecks(page) {
   assert(sceneHasPixels, "Challenge Three.js canvas renders nonblank pixels.");
   assert(await page.getByText("Attempts").isVisible() && await page.getByText("Mean Score").isVisible(), "Challenge test score labels are visible.");
   assert((await page.locator(".challenge-score-item strong").allTextContents()).join(",") === "0,0", "Challenge test score values start at zero.");
+  assert((await page.getByRole("button", { name: "Set challenge distance" }).count()) === 1, "Challenge score bar shows the distance control button.");
   assert((await page.getByRole("button", { name: "Show shot distribution" }).count()) === 1, "Challenge score bar shows the distribution plot button.");
   const scorebarLayout = await page.locator(".challenge-test-scorebar").evaluate((scorebar) => {
     const scoreItems = Array.from(scorebar.querySelectorAll(".challenge-score-item")).map((item) => item.getBoundingClientRect());
+    const distanceButton = scorebar.querySelector(".challenge-distance-button")?.getBoundingClientRect();
     const plotButton = scorebar.querySelector(".challenge-plot-button")?.getBoundingClientRect();
     const scorebarBox = scorebar.getBoundingClientRect();
 
     return {
+      attemptsLeft: scoreItems[0].left,
+      distanceRight: distanceButton?.right ?? 0,
       metricCenter: (scoreItems[0].left + scoreItems[0].right + scoreItems[1].left + scoreItems[1].right) / 4,
       plotLeft: plotButton?.left ?? 0,
       scorebarCenter: scorebarBox.left + scorebarBox.width / 2,
@@ -1545,6 +1576,7 @@ async function runSetupPreferenceChecks(page) {
     };
   });
   assert(Math.abs(scorebarLayout.metricCenter - scorebarLayout.scorebarCenter) < 1, "Challenge plot button does not move Attempts/Mean Score from the centered scorebar position.");
+  assert(scorebarLayout.distanceRight < scorebarLayout.attemptsLeft, "Challenge distance button sits to the left of the centered score values.");
   assert(scorebarLayout.plotLeft > scorebarLayout.meanScoreRight, "Challenge plot button sits to the right of the centered score values.");
   await capture(page, "01b-challenge-test-page-ready-mobile.png");
   await page.getByRole("button", { name: "Show shot distribution" }).click();
@@ -1554,6 +1586,33 @@ async function runSetupPreferenceChecks(page) {
   await capture(page, "01c-challenge-test-page-distribution-empty-mobile.png");
   await page.getByRole("button", { name: "Close shot distribution" }).click();
   assert((await page.getByRole("dialog", { name: "Shot distribution" }).count()) === 0, "Challenge distribution modal closes from the X button.");
+  await page.getByRole("button", { name: "Set challenge distance" }).click();
+  await page.getByRole("dialog", { name: "Challenge distance" }).waitFor();
+  const distanceSlider = page.getByRole("slider", { name: "Challenge distance multiplier" });
+  assert(
+    (await distanceSlider.getAttribute("min")) === "0.25"
+      && (await distanceSlider.getAttribute("max")) === "2"
+      && (await distanceSlider.getAttribute("step")) === "0.05",
+    "Challenge distance slider exposes the requested 0.25x to 2x range.",
+  );
+  await distanceSlider.evaluate((slider) => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    valueSetter?.call(slider, "1.5");
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    slider.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  assert(await page.getByRole("dialog", { name: "Challenge distance" }).getByText("1.50x").isVisible(), "Challenge distance modal shows the selected multiplier.");
+  assert((await page.locator(".challenge-test-stage").getAttribute("data-target-distance")) === "1.50", "Challenge scene receives the selected distance multiplier.");
+  await capture(page, "01ca-challenge-test-page-distance-mobile.png");
+  await distanceSlider.evaluate((slider) => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    valueSetter?.call(slider, "1");
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    slider.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  assert((await page.locator(".challenge-test-stage").getAttribute("data-target-distance")) === "1.00", "Challenge distance can be restored to the standard distance.");
+  await page.getByRole("button", { name: "Close challenge distance" }).click();
+  assert((await page.getByRole("dialog", { name: "Challenge distance" }).count()) === 0, "Challenge distance modal closes from the X button.");
 
   const challengeStage = page.locator(".challenge-test-stage");
   let challengeStageBox = await challengeStage.boundingBox();
